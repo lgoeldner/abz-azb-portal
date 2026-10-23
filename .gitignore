@@ -16,3 +16,4 @@ tmp/
 server/portal
 server/bin/
 .taste-skill/
+.claude/worktrees/

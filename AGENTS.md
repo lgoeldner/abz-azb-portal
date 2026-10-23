@@ -18,3 +18,10 @@ Give each worker file ownership, an API contract, and acceptance tests. Do not l
 - New permission, lifecycle, voting, or persistence behavior requires invariant-focused tests. Assert observable guarantees; avoid implementation-mirroring tests.
 - Verify migrations, backup and restore together. Never claim recovery is tested merely because a backup file exists.
 - Keep credentials, identity tokens, named ballots, and private submission contents out of logs.
+
+## Commits and completion
+
+- Split larger changes into sensible commits.
+- Commit everything that belongs in the repository and push at the end of the task. Do not ask whether to commit or push.
+- Proceed autonomously within the authorized task. Avoid unnecessary questions and permission prompts; use required approvals only when needed.
+- Do not be afraid to work on the running development system.
