@@ -6,16 +6,16 @@ import (
 	"strings"
 )
 
-func loadPoll(ctx context.Context, db DB, id, userID string, lock bool) (Poll, error) {
+func loadPoll(ctx context.Context, db DB, id string, u User, lock bool) (Poll, error) {
 	p := Poll{Format: "single_choice", Options: []PollOption{}}
 	if !validID(id) {
 		return p, missing()
 	}
-	q := "SELECT id::text,category_id::text,title,description,kind,status,allow_self_vote,version FROM polls WHERE id=$1"
+	q := "SELECT id::text,category_id::text,title,description,kind,status,allow_self_vote,version,created_at,opened_at FROM polls WHERE id=$1"
 	if lock {
 		q += " FOR UPDATE"
 	}
-	e := db.QueryRow(ctx, q, id).Scan(&p.ID, &p.CategoryID, &p.Title, &p.Description, &p.Kind, &p.Status, &p.AllowSelfVote, &p.Version)
+	e := db.QueryRow(ctx, q, id).Scan(&p.ID, &p.CategoryID, &p.Title, &p.Description, &p.Kind, &p.Status, &p.AllowSelfVote, &p.Version, &p.CreatedAt, &p.OpenedAt)
 	if e != nil {
 		return p, e
 	}
@@ -36,8 +36,16 @@ func loadPoll(ctx context.Context, db DB, id, userID string, lock bool) (Poll, e
 	if e != nil {
 		return p, e
 	}
-	e = db.QueryRow(ctx, "SELECT (SELECT option_id::text FROM ballots WHERE poll_id=$1 AND user_id=$2)", id, userID).Scan(&p.MyOptionID)
-	return p, e
+	e = db.QueryRow(ctx, "SELECT (SELECT option_id::text FROM ballots WHERE poll_id=$1 AND user_id=$2)", id, u.ID).Scan(&p.MyOptionID)
+	if e != nil || !editor(u) {
+		return p, e
+	}
+	var n int
+	if e = db.QueryRow(ctx, "SELECT count(*)::int FROM ballots WHERE poll_id=$1", id).Scan(&n); e != nil {
+		return p, e
+	}
+	p.BallotCount = &n
+	return p, nil
 }
 func (a *App) listPolls(w http.ResponseWriter, r *http.Request) error {
 	u := current(r)
@@ -61,7 +69,7 @@ func (a *App) listPolls(w http.ResponseWriter, r *http.Request) error {
 	}
 	out := []Poll{}
 	for _, id := range ids {
-		p, e := loadPoll(r.Context(), a.DB, id, u.ID, false)
+		p, e := loadPoll(r.Context(), a.DB, id, u, false)
 		if e != nil {
 			return e
 		}
@@ -145,7 +153,7 @@ func (a *App) writePoll(w http.ResponseWriter, r *http.Request) error {
 			return e
 		}
 	} else {
-		p, e := loadPoll(r.Context(), tx, id, u.ID, true)
+		p, e := loadPoll(r.Context(), tx, id, u, true)
 		if e != nil {
 			return e
 		}
@@ -184,7 +192,7 @@ func (a *App) writePoll(w http.ResponseWriter, r *http.Request) error {
 	if e = audit(r.Context(), tx, u, "poll.saved", id); e != nil {
 		return e
 	}
-	p, e := loadPoll(r.Context(), tx, id, u.ID, false)
+	p, e := loadPoll(r.Context(), tx, id, u, false)
 	if e != nil {
 		return e
 	}
@@ -218,7 +226,7 @@ func (a *App) statusPoll(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	defer tx.Rollback(r.Context())
-	p, e := loadPoll(r.Context(), tx, r.PathValue("id"), u.ID, true)
+	p, e := loadPoll(r.Context(), tx, r.PathValue("id"), u, true)
 	if e != nil {
 		return e
 	}
@@ -231,7 +239,7 @@ func (a *App) statusPoll(w http.ResponseWriter, r *http.Request) error {
 	if len(p.Options) < 2 {
 		return bad("Mindestens zwei Optionen erforderlich.")
 	}
-	if _, e = tx.Exec(r.Context(), "UPDATE polls SET status=$2,version=version+1 WHERE id=$1", p.ID, in.Status); e != nil {
+	if e = tx.QueryRow(r.Context(), "UPDATE polls SET status=$2,version=version+1,opened_at=CASE WHEN $2='open' THEN now() ELSE opened_at END WHERE id=$1 RETURNING opened_at", p.ID, in.Status).Scan(&p.OpenedAt); e != nil {
 		return e
 	}
 	if e = audit(r.Context(), tx, u, "poll.status."+in.Status, p.ID); e != nil {
@@ -261,7 +269,7 @@ func (a *App) vote(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	defer tx.Rollback(r.Context())
-	p, e := loadPoll(r.Context(), tx, r.PathValue("id"), u.ID, true)
+	p, e := loadPoll(r.Context(), tx, r.PathValue("id"), u, true)
 	if e != nil {
 		return e
 	}
@@ -310,7 +318,7 @@ func (a *App) results(w http.ResponseWriter, r *http.Request) error {
 		return forbidden()
 	}
 	id := r.PathValue("id")
-	if _, e := loadPoll(r.Context(), a.DB, id, u.ID, false); e != nil {
+	if _, e := loadPoll(r.Context(), a.DB, id, u, false); e != nil {
 		return e
 	}
 	rows, e := a.DB.Query(r.Context(), "SELECT o.id::text,o.label,count(b.user_id)::int FROM poll_options o LEFT JOIN ballots b ON b.option_id=o.id AND b.poll_id=o.poll_id WHERE o.poll_id=$1 GROUP BY o.id ORDER BY o.position", id)
@@ -338,7 +346,7 @@ func (a *App) ballotAudit(w http.ResponseWriter, r *http.Request) error {
 		return forbidden()
 	}
 	id := r.PathValue("id")
-	if _, e := loadPoll(r.Context(), a.DB, id, u.ID, false); e != nil {
+	if _, e := loadPoll(r.Context(), a.DB, id, u, false); e != nil {
 		return e
 	}
 	rows, e := a.DB.Query(r.Context(), "SELECT b.user_id::text,u.name,b.option_id::text,o.label,b.created_at FROM ballot_audit b JOIN users u ON u.id=b.user_id JOIN poll_options o ON o.id=b.option_id WHERE b.poll_id=$1 ORDER BY b.created_at,b.id", id)

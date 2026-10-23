@@ -73,6 +73,9 @@ type Poll struct {
 	Options       []PollOption `json:"options"`
 	MyOptionID    *string      `json:"my_option_id"`
 	Version       int          `json:"version"`
+	CreatedAt     time.Time    `json:"created_at"`
+	OpenedAt      *time.Time   `json:"opened_at"`
+	BallotCount   *int         `json:"ballot_count"`
 }
 type PollResult struct {
 	OptionID string `json:"option_id"`

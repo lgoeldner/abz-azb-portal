@@ -25,7 +25,7 @@ Submission { id, category_id, author_id, author_name, title, body, context, stat
 Revision { id, version, actor_name, title, body, context, status, created_at }
 Correction { id, submission_id, author_name, body, created_at, resolved: boolean }
 PollOption { id, label, user_id?: string }
-Poll { id, category_id, title, description, kind: 'person'|'proposal', format: 'single_choice', status: 'draft'|'open'|'closed', allow_self_vote: boolean, options: PollOption[], my_option_id: string|null, version: number }
+Poll { id, category_id, title, description, kind: 'person'|'proposal', format: 'single_choice', status: 'draft'|'open'|'closed', allow_self_vote: boolean, options: PollOption[], my_option_id: string|null, version: number, created_at, opened_at: string|null, ballot_count: number|null }
 PollResult { option_id, label, count: number }
 BallotAudit { user_id, user_name, option_id, option_label, created_at }
 AuditEvent { id, actor_name, action, entity_id, created_at }

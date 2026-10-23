@@ -1776,6 +1776,25 @@
           },
           "version": {
             "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "opened_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Set once when the poll moves from draft to open."
+          },
+          "ballot_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Number of current ballots. Editors only; null for students."
           }
         },
         "required": [
@@ -1789,7 +1808,10 @@
           "allow_self_vote",
           "options",
           "my_option_id",
-          "version"
+          "version",
+          "created_at",
+          "opened_at",
+          "ballot_count"
         ],
         "additionalProperties": false
       },

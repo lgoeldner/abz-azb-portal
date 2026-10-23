@@ -84,8 +84,14 @@ func SeedWithIssuer(ctx context.Context, pool *pgxpool.Pool, environment, issuer
 			labels = []string{"Mitternachtsblau", "Sonnengelb"}
 			people = []*string{nil, nil}
 		}
-		tag, e := tx.Exec(ctx, "INSERT INTO polls(id,category_id,title,description,kind,status,version) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO NOTHING", id, categoryID(1), title, description, kind, status, map[bool]int{true: 2, false: 1}[status == "open"])
+		// Stagger the timeline so the frontend shows a meaningful order.
+		createdDays, openedDays := []int{0, 20, 12, 3}[i], []int{0, 18, 9, 0}[i]
+		tag, e := tx.Exec(ctx, "INSERT INTO polls(id,category_id,title,description,kind,status,version,created_at,opened_at) VALUES($1,$2,$3,$4,$5,$6,$7,now()-$8*interval '1 day',CASE WHEN $6<>'draft' THEN now()-$9*interval '1 day' END) ON CONFLICT(id) DO NOTHING", id, categoryID(1), title, description, kind, status, map[bool]int{true: 2, false: 1}[status == "open"], createdDays, openedDays)
 		if e != nil {
+			return e
+		}
+		// Polls seeded before the timeline migration got opened_at=created_at; spread them out once.
+		if _, e = tx.Exec(ctx, "UPDATE polls SET created_at=now()-$2*interval '1 day',opened_at=now()-$3*interval '1 day' WHERE id=$1 AND status<>'draft' AND opened_at=created_at", id, createdDays, openedDays); e != nil {
 			return e
 		}
 		if tag.RowsAffected() > 0 {

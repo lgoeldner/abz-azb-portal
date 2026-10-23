@@ -519,6 +519,15 @@ export interface components {
             options: components["schemas"]["PollOption"][];
             my_option_id: string | null;
             version: number;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Set once when the poll moves from draft to open.
+             */
+            opened_at: string | null;
+            /** @description Number of current ballots. Editors only; null for students. */
+            ballot_count: number | null;
         };
         PollResult: {
             option_id: string;
