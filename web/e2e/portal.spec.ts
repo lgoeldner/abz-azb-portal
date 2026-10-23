@@ -2,7 +2,9 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function signInAs(page: Page, role: 'Jahrgang' | 'Redaktion' | 'Administration', name?: string) {
   await page.goto('/');
-  const access = page.locator('.dev-login a').filter({ hasText: name ?? role }).first();
+  await page.getByRole('link', { name: /Mit Schulkonto anmelden/ }).click();
+  const identity = name ?? (role === 'Jahrgang' ? 'Mia Weber' : role === 'Redaktion' ? 'Sam · Redaktion' : 'Alex · Administration');
+  const access = page.getByRole('button', { name: identity, exact: true });
   await expect(access, `Development login for ${role} is available (start a seeded development server)`).toBeVisible();
   await access.click();
   await expect(page.getByRole('link', { name: 'AbiZeitBetrug Startseite' })).toBeVisible();

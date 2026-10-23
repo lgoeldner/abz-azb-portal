@@ -1,4 +1,27 @@
 services:
+  auth-mock:
+    build:
+      context: .
+      dockerfile: auth-mock/Dockerfile
+    environment:
+      APP_ENV: development
+      ADDR: :9090
+      OIDC_ISSUER: http://localhost:9090
+      OIDC_CLIENT_ID: portal-dev
+      OIDC_CLIENT_SECRET: dev-only
+      AUTH_MOCK_USERS: /config/users.yaml
+      AUTH_MOCK_REDIRECT_URIS: http://localhost:5173/auth/callback,http://localhost:8080/auth/callback,http://127.0.0.1:8080/auth/callback
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./auth-mock/users.yaml:/config/users.yaml:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    networks: [internal, egress]
+
   db:
     environment:
       POSTGRES_PASSWORD: portal-dev
@@ -15,6 +38,10 @@ services:
       DATABASE_URL: postgres://portal:portal-dev@db:5432/portal?sslmode=disable
       PUBLIC_URL: http://localhost:8080
       AUTH_MODE: mock
+      OIDC_ISSUER: http://localhost:9090
+      OIDC_BACKCHANNEL_URL: http://auth-mock:9090
+      OIDC_CLIENT_ID: portal-dev
+      OIDC_CLIENT_SECRET: dev-only
       SESSION_SECRET: development-only-secret-change-for-production
       UPLOAD_DIR: /var/lib/portal/uploads
       STATIC_DIR: /app/static
@@ -23,3 +50,5 @@ services:
       - "127.0.0.1:8080:8080"
     volumes:
       - backup_status:/var/lib/portal/status:ro
+    depends_on:
+      auth-mock: { condition: service_healthy }

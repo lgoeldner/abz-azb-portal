@@ -3,7 +3,7 @@
   "info": {
     "title": "AbiZeitBetrug Portal API",
     "version": "1.0.0",
-    "description": "Private LMGU 2027 editorial portal. Session authentication and CSRF-protected mutations. All authorization enforced server-side."
+    "description": "Private LMGU 2027 editorial portal. External OIDC login establishes a server-side cookie session; JWTs stay on the backend. CSRF-protected mutations and all authorization enforced server-side. Authentication redirects and provider endpoints are outside this API."
   },
   "security": [
     {

@@ -5,7 +5,7 @@ This file is the integration boundary for the initial implementation. The lead o
 ## Runtime
 
 - Go module `abizeitbetrug/server`, executable `server/cmd/portal`, PostgreSQL via pgx. Listen `:8080` by default.
-- Runtime env: `APP_ENV=development|production`, `ADDR`, `DATABASE_URL`, `PUBLIC_URL`, `UPLOAD_DIR`, `STATIC_DIR`, `AUTH_MODE=mock|oidc`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `SESSION_SECRET`, `BOOTSTRAP_ADMIN_SUBJECT` (explicit issuer subject, never display name), `BACKUP_STATUS_FILE`.
+- Runtime env: `APP_ENV=development|production`, `ADDR`, `DATABASE_URL`, `PUBLIC_URL`, `UPLOAD_DIR`, `STATIC_DIR`, `AUTH_MODE=mock|oidc`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `SESSION_SECRET`, `BOOTSTRAP_ADMIN_SUBJECT` (explicit issuer subject, never display name), `BACKUP_STATUS_FILE`. `OIDC_BACKCHANNEL_URL` is an optional origin override only for development mock mode, allowing container requests to reach the provider while preserving its canonical issuer.
 - Production rejects mock auth and insecure/missing configuration. Go serves built frontend from STATIC_DIR, fallback index.html only outside API/auth routes.
 - `portal migrate` runs versioned migrations, `portal seed` inserts deterministic development fixtures only, `portal serve` starts HTTP (default). Fixtures include users and sample content/polls. No production data is seeded.
 - `/healthz` liveness; `/readyz` database readiness.
@@ -34,7 +34,8 @@ AuditEvent { id, actor_name, action, entity_id, created_at }
 Endpoints:
 
 - `GET /me` -> Me. `POST /auth/logout` (outside prefix) logs out with CSRF header, then client reloads login.
-- `GET /auth/mock/users` -> `{id,name,role}[]` development only. `GET /auth/login?user=<fixture-id>` initiates mock OIDC login; actual callback exercises signed token validation/state/nonce. Real OIDC uses `/auth/login` and `/auth/callback`. Mock provider endpoints are isolated under `/dev/oidc/`, never present in production.
+- `GET /auth/login` redirects to the external OIDC provider; `GET /auth/callback` exchanges a one-use authorization code with PKCE and verifies the signed ID token, issuer, audience, expiry and nonce before creating the session. Both auth modes use this same consumer flow. The portal exposes no identity-list or mock-provider routes.
+- Development only: the separate `auth-mock` service at `http://localhost:9090` reads `auth-mock/users.yaml` (`users: [{subject, name}]`). Its `/authorize` page lists every configured identity; `POST /authorize` selects one. Discovery, `/keys` and `/token` implement OIDC authorization-code flow with S256 PKCE and short-lived RS256 JWTs. Exact callback allowlists prevent open redirects. The provider has no database access or portal role claims. Seeded UUID subjects retain local fixture permissions; new subjects become pending local accounts. The provider refuses to run unless `APP_ENV=development` and is absent from production Compose.
 - `GET /categories` -> Category[]. Admin `POST /categories` `{name,description,kind}`; `PATCH /categories/{id}` same fields.
 - `GET /submissions?category_id=&status=&q=` -> Submission[]. Students automatically restricted to own; editors all. `POST /submissions` `{idempotency_key,category_id,title,body,context}` creates pending. `GET /submissions/{id}` -> Submission.
 - `PATCH /submissions/{id}` `{version,title,body,context,category_id}`. Author only while pending; category edit restrictions for managers. Revision and audit transaction.

@@ -4,19 +4,16 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/go-jose/go-jose/v4"
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/oauth2"
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -26,18 +23,29 @@ type loginState struct {
 	Verifier string `json:"verifier"`
 	Expires  int64  `json:"expires"`
 }
-type mockCode struct {
-	Subject, Nonce, Challenge, Redirect string
-	Expires                             time.Time
-}
 type authState struct {
 	oauth    oauth2.Config
 	verifier *oidc.IDTokenVerifier
-	key      *rsa.PrivateKey
 	secret   []byte
 	issuer   string
-	mu       sync.Mutex
-	codes    map[string]mockCode
+	client   *http.Client
+}
+
+// Rewrite only the canonical issuer origin; issuer and JWT claims stay canonical.
+type issuerTransport struct {
+	canonical, backchannel *url.URL
+	base                   http.RoundTripper
+}
+
+func (t issuerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.URL.Scheme == t.canonical.Scheme && r.URL.Host == t.canonical.Host {
+		r = r.Clone(r.Context())
+		u := *r.URL
+		u.Scheme, u.Host = t.backchannel.Scheme, t.backchannel.Host
+		r.URL = &u
+		r.Host = ""
+	}
+	return t.base.RoundTrip(r)
 }
 
 func randomToken() string {
@@ -49,32 +57,27 @@ func randomToken() string {
 }
 func (a *App) setupAuth(ctx context.Context) error {
 	c := a.Config
-	auth := &authState{secret: []byte(c.SessionSecret), codes: map[string]mockCode{}}
+	auth := &authState{secret: []byte(c.SessionSecret), client: &http.Client{Timeout: 15 * time.Second}}
 	if len(auth.secret) == 0 {
 		auth.secret = []byte(randomToken())
 	}
+	if c.BackchannelURL != "" {
+		canonical, _ := url.Parse(c.Issuer)
+		backchannel, _ := url.Parse(c.BackchannelURL)
+		auth.client.Transport = issuerTransport{canonical, backchannel, http.DefaultTransport}
+	}
 	a.auth = auth
 	auth.oauth = oauth2.Config{ClientID: c.ClientID, ClientSecret: c.ClientSecret, RedirectURL: strings.TrimRight(c.PublicURL, "/") + "/auth/callback", Scopes: []string{oidc.ScopeOpenID, "profile"}}
-	if c.AuthMode == "mock" {
-		key, e := rsa.GenerateKey(rand.Reader, 2048)
-		if e != nil {
-			return e
-		}
-		auth.key = key
-		auth.issuer = strings.TrimRight(c.PublicURL, "/") + "/dev/oidc"
-		auth.oauth.ClientID = "portal-development"
-		auth.oauth.ClientSecret = "development-only"
-		auth.oauth.Endpoint = oauth2.Endpoint{AuthURL: auth.issuer + "/authorize", TokenURL: auth.issuer + "/token", AuthStyle: oauth2.AuthStyleInParams}
-		auth.verifier = oidc.NewVerifier(auth.issuer, oidc.NewRemoteKeySet(ctx, auth.issuer+"/keys"), &oidc.Config{ClientID: auth.oauth.ClientID})
-		return nil
-	}
-	provider, e := oidc.NewProvider(ctx, c.Issuer)
+	ctx = oidc.ClientContext(ctx, auth.client)
+	discovery, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	provider, e := oidc.NewProvider(discovery, c.Issuer)
 	if e != nil {
 		return e
 	}
 	auth.issuer = c.Issuer
 	auth.oauth.Endpoint = provider.Endpoint()
-	auth.verifier = provider.Verifier(&oidc.Config{ClientID: c.ClientID})
+	auth.verifier = provider.VerifierContext(ctx, &oidc.Config{ClientID: c.ClientID})
 	return nil
 }
 func (a *App) cookie(w http.ResponseWriter, name, value string, age int) {
@@ -114,20 +117,7 @@ func (a *App) parseState(s string) (loginState, error) {
 func (a *App) login(w http.ResponseWriter, r *http.Request) error {
 	st := loginState{randomToken(), randomToken(), oauth2.GenerateVerifier(), time.Now().Add(5 * time.Minute).Unix()}
 	opts := []oauth2.AuthCodeOption{oidc.Nonce(st.Nonce), oauth2.S256ChallengeOption(st.Verifier)}
-	if a.Config.AuthMode == "mock" {
-		id := r.URL.Query().Get("user")
-		if !validID(id) {
-			return bad("Bitte eine Entwicklungsidentität auswählen.")
-		}
-		var exists bool
-		if e := a.DB.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM users WHERE id=$1 AND subject=$2)", id, a.auth.issuer+"\x1f"+id).Scan(&exists); e != nil {
-			return e
-		}
-		if !exists {
-			return missing()
-		}
-		opts = append(opts, oauth2.SetAuthURLParam("mock_user", id))
-	}
+
 	a.cookie(w, "portal_login", a.signState(st), 300)
 	w.Header().Set("Cache-Control", "no-store")
 	http.Redirect(w, r, a.auth.oauth.AuthCodeURL(st.State, opts...), http.StatusFound)
@@ -143,7 +133,7 @@ func (a *App) callback(w http.ResponseWriter, r *http.Request) error {
 	if e != nil || !hmac.Equal([]byte(st.State), []byte(r.URL.Query().Get("state"))) {
 		return fail(400, "oauth_state", "Ungültiger Anmeldevorgang.")
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(oidc.ClientContext(r.Context(), a.auth.client), 15*time.Second)
 	defer cancel()
 	token, e := a.auth.oauth.Exchange(ctx, r.URL.Query().Get("code"), oauth2.VerifierOption(st.Verifier))
 	if e != nil {
@@ -172,13 +162,11 @@ func (a *App) callback(w http.ResponseWriter, r *http.Request) error {
 	defer tx.Rollback(ctx)
 	e = tx.QueryRow(ctx, "SELECT id::text FROM users WHERE subject=$1", subject).Scan(&uid)
 	if errors.Is(e, pgx.ErrNoRows) {
-		if a.Config.AuthMode == "mock" {
-			return fail(401, "oauth_user", "Unbekannte Entwicklungsidentität.")
-		}
+
 		uid = ID()
 		role := "student"
 		admitted := false
-		if idToken.Subject == a.Config.BootstrapSubject && a.Config.BootstrapSubject != "" {
+		if a.Config.AuthMode == "oidc" && idToken.Subject == a.Config.BootstrapSubject && a.Config.BootstrapSubject != "" {
 			role = "admin"
 			admitted = true
 		}
@@ -222,107 +210,5 @@ func (a *App) logout(w http.ResponseWriter, r *http.Request) error {
 	}
 	a.cookie(w, "portal_session", "", -1)
 	jsonOut(w, 200, map[string]bool{"ok": true})
-	return nil
-}
-func (a *App) mockRoutes(m *http.ServeMux) {
-	m.HandleFunc("GET /auth/mock/users", a.endpoint(func(w http.ResponseWriter, r *http.Request) error {
-		rows, e := a.DB.Query(r.Context(), "SELECT id::text,name,role FROM users WHERE subject LIKE $1 ORDER BY role,name", a.auth.issuer+"\x1f%")
-		if e != nil {
-			return e
-		}
-		defer rows.Close()
-		out := []map[string]string{}
-		for rows.Next() {
-			var id, name, role string
-			if e = rows.Scan(&id, &name, &role); e != nil {
-				return e
-			}
-			out = append(out, map[string]string{"id": id, "name": name, "role": role})
-		}
-		if e = rows.Err(); e != nil {
-			return e
-		}
-		jsonOut(w, 200, out)
-		return nil
-	}))
-	m.HandleFunc("GET /dev/oidc/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
-		i := a.auth.issuer
-		jsonOut(w, 200, map[string]any{"issuer": i, "authorization_endpoint": i + "/authorize", "token_endpoint": i + "/token", "jwks_uri": i + "/keys", "response_types_supported": []string{"code"}, "subject_types_supported": []string{"public"}, "id_token_signing_alg_values_supported": []string{"RS256"}, "code_challenge_methods_supported": []string{"S256"}})
-	})
-	m.HandleFunc("GET /dev/oidc/keys", func(w http.ResponseWriter, r *http.Request) {
-		jsonOut(w, 200, jose.JSONWebKeySet{Keys: []jose.JSONWebKey{{Key: &a.auth.key.PublicKey, KeyID: "dev", Algorithm: "RS256", Use: "sig"}}})
-	})
-	m.HandleFunc("GET /dev/oidc/authorize", a.endpoint(a.mockAuthorize))
-	m.HandleFunc("POST /dev/oidc/token", a.endpoint(a.mockToken))
-}
-func (a *App) mockAuthorize(w http.ResponseWriter, r *http.Request) error {
-	q := r.URL.Query()
-	if q.Get("client_id") != a.auth.oauth.ClientID || q.Get("redirect_uri") != a.auth.oauth.RedirectURL || q.Get("response_type") != "code" || q.Get("code_challenge_method") != "S256" || q.Get("code_challenge") == "" || q.Get("nonce") == "" || q.Get("state") == "" {
-		return bad("Ungültige OAuth-Anfrage.")
-	}
-	id := q.Get("mock_user")
-	if !validID(id) {
-		return bad("Ungültige Identität.")
-	}
-	var exists bool
-	if e := a.DB.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM users WHERE id=$1 AND subject=$2)", id, a.auth.issuer+"\x1f"+id).Scan(&exists); e != nil {
-		return e
-	}
-	if !exists {
-		return missing()
-	}
-	code := randomToken()
-	a.auth.mu.Lock()
-	for k, c := range a.auth.codes {
-		if time.Now().After(c.Expires) {
-			delete(a.auth.codes, k)
-		}
-	}
-	a.auth.codes[code] = mockCode{id, q.Get("nonce"), q.Get("code_challenge"), q.Get("redirect_uri"), time.Now().Add(time.Minute)}
-	a.auth.mu.Unlock()
-	u, _ := url.Parse(q.Get("redirect_uri"))
-	params := u.Query()
-	params.Set("state", q.Get("state"))
-	params.Set("code", code)
-	u.RawQuery = params.Encode()
-	http.Redirect(w, r, u.String(), 302)
-	return nil
-}
-func (a *App) mockToken(w http.ResponseWriter, r *http.Request) error {
-	r.Body = http.MaxBytesReader(w, r.Body, 8192)
-	if e := r.ParseForm(); e != nil {
-		return bad("Ungültige Token-Anfrage.")
-	}
-	if r.Form.Get("client_id") != a.auth.oauth.ClientID || r.Form.Get("client_secret") != a.auth.oauth.ClientSecret || r.Form.Get("grant_type") != "authorization_code" {
-		return fail(401, "invalid_client", "Invalid client")
-	}
-	a.auth.mu.Lock()
-	code, ok := a.auth.codes[r.Form.Get("code")]
-	delete(a.auth.codes, r.Form.Get("code"))
-	a.auth.mu.Unlock()
-	h := sha256.Sum256([]byte(r.Form.Get("code_verifier")))
-	if !ok || time.Now().After(code.Expires) || code.Redirect != r.Form.Get("redirect_uri") || base64.RawURLEncoding.EncodeToString(h[:]) != code.Challenge {
-		return fail(400, "invalid_grant", "Invalid grant")
-	}
-	var name string
-	if e := a.DB.QueryRow(r.Context(), "SELECT name FROM users WHERE id=$1", code.Subject).Scan(&name); e != nil {
-		return e
-	}
-	now := time.Now()
-	claims, _ := json.Marshal(map[string]any{"iss": a.auth.issuer, "sub": code.Subject, "aud": a.auth.oauth.ClientID, "exp": now.Add(5 * time.Minute).Unix(), "iat": now.Unix(), "nonce": code.Nonce, "name": name})
-	signer, e := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: jose.JSONWebKey{Key: a.auth.key, KeyID: "dev"}}, (&jose.SignerOptions{}).WithType("JWT"))
-	if e != nil {
-		return e
-	}
-	signed, e := signer.Sign(claims)
-	if e != nil {
-		return e
-	}
-	jwt, e := signed.CompactSerialize()
-	if e != nil {
-		return e
-	}
-	w.Header().Set("Cache-Control", "no-store")
-	jsonOut(w, 200, map[string]any{"access_token": randomToken(), "token_type": "Bearer", "expires_in": 300, "id_token": jwt})
 	return nil
 }

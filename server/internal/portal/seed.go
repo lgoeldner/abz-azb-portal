@@ -17,7 +17,7 @@ const PendingID = "00000000-0000-4000-8000-000000000006"
 
 func categoryID(i int) string { return fmt.Sprintf("10000000-0000-4000-8000-%012d", i) }
 func Seed(ctx context.Context, pool *pgxpool.Pool, environment string) error {
-	return SeedWithIssuer(ctx, pool, environment, "http://localhost:8080/dev/oidc")
+	return SeedWithIssuer(ctx, pool, environment, "http://localhost:9090")
 }
 func SeedWithIssuer(ctx context.Context, pool *pgxpool.Pool, environment, issuer string) error {
 	if environment != "development" {
@@ -40,7 +40,7 @@ func SeedWithIssuer(ctx context.Context, pool *pgxpool.Pool, environment, issuer
 	}
 	users := []User{{AdminID, "Alex · Administration", "admin", true, true, []string{}}, {ManagerID, "Sam · Redaktion", "manager", true, true, []string{categoryID(1), categoryID(4)}}, {MiaID, "Mia Weber", "student", true, true, []string{}}, {LeonID, "Leon Fischer", "student", true, true, []string{}}, {GuestID, "Kim · Gast", "student", true, false, []string{}}, {PendingID, "Pat · Freigabe ausstehend", "student", false, false, []string{}}}
 	for _, u := range users {
-		if _, e = tx.Exec(ctx, "INSERT INTO users(id,subject,name,role,admitted,cohort_member,category_ids) VALUES($1,$2,$3,$4,$5,$6,$7::uuid[]) ON CONFLICT(id) DO UPDATE SET subject=EXCLUDED.subject WHERE users.subject LIKE 'mock:%' OR strpos(users.subject, '/dev/oidc'||chr(31))>0", u.ID, issuer+"\x1f"+u.ID, u.Name, u.Role, u.Admitted, u.CohortMember, u.CategoryIDs); e != nil {
+		if _, e = tx.Exec(ctx, "INSERT INTO users(id,subject,name,role,admitted,cohort_member,category_ids) VALUES($1,$2,$3,$4,$5,$6,$7::uuid[]) ON CONFLICT(id) DO UPDATE SET subject=EXCLUDED.subject WHERE users.subject LIKE 'mock:%' OR users.subject ~ ('^https?://[^/]+/dev/oidc'||chr(31)||'[^'||chr(31)||']+$')", u.ID, issuer+"\x1f"+u.ID, u.Name, u.Role, u.Admitted, u.CohortMember, u.CategoryIDs); e != nil {
 			return e
 		}
 	}

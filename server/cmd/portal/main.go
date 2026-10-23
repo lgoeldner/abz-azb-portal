@@ -42,7 +42,7 @@ func run() error {
 	case "migrate":
 		return portal.Migrate(ctx, pool)
 	case "seed":
-		return portal.SeedWithIssuer(ctx, pool, c.Env, c.PublicURL+"/dev/oidc")
+		return portal.SeedWithIssuer(ctx, pool, c.Env, c.Issuer)
 	case "serve":
 	default:
 		return errors.New("usage: portal [serve|migrate|seed]")

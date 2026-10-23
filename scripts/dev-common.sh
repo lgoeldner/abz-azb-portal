@@ -7,13 +7,17 @@ cd "$ROOT_DIR"
 export APP_ENV=development
 export ADDR=127.0.0.1:8080
 export AUTH_MODE=mock
+export OIDC_ISSUER=http://localhost:9090
+export OIDC_CLIENT_ID=portal-dev
+export OIDC_CLIENT_SECRET=dev-only
+unset OIDC_BACKCHANNEL_URL
 export PUBLIC_URL=http://localhost:5173
 export DATABASE_URL='postgres://portal:portal-dev@localhost:5432/portal?sslmode=disable'
 export UPLOAD_DIR="$ROOT_DIR/server/data/uploads"
 export SESSION_SECRET=development-only-secret-change-for-production
 
-start_dev_database() {
-  docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml up -d --wait db
+start_dev_services() {
+  docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml up -d --build --wait db auth-mock
 }
 
 prepare_dev_database() {

@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"abizeitbetrug/server/internal/authmock"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -10,9 +11,7 @@ import (
 	"image/jpeg"
 	"io"
 	"mime/multipart"
-	"net"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -141,10 +140,11 @@ func authenticatedRequest(t *testing.T, app *App, pool *pgxpool.Pool, userID, me
 func TestPostgresAuthorizationLifecycleAndBallots(t *testing.T) {
 	pool := integrationPool(t)
 	ctx := context.Background()
-	if err := SeedWithIssuer(ctx, pool, "development", "http://localhost:8080/dev/oidc"); err != nil {
+	provider := mockProvider(t, "", "http://localhost:8080", []authmock.User{{Subject: MiaID, Name: "Mia"}})
+	if err := SeedWithIssuer(ctx, pool, "development", provider.URL); err != nil {
 		t.Fatal(err)
 	}
-	c := Config{Env: "development", DatabaseURL: "postgres://unused", PublicURL: "http://localhost:8080", UploadDir: t.TempDir(), StaticDir: t.TempDir(), AuthMode: "mock", SessionSecret: strings.Repeat("s", 32)}
+	c := Config{Env: "development", DatabaseURL: "postgres://unused", PublicURL: "http://localhost:8080", UploadDir: t.TempDir(), StaticDir: t.TempDir(), AuthMode: "mock", Issuer: provider.URL, ClientID: "portal-dev", ClientSecret: "dev-only", SessionSecret: strings.Repeat("s", 32)}
 	app, err := New(ctx, c, pool)
 	if err != nil {
 		t.Fatal(err)
@@ -376,69 +376,5 @@ func TestPostgresAuthorizationLifecycleAndBallots(t *testing.T) {
 	}
 	if subject != app.auth.issuer+"\x1f"+MiaID {
 		t.Fatalf("subject is not issuer-namespaced: %q", subject)
-	}
-}
-
-func TestMockOIDCLoginValidatesStateNonceAndPKCE(t *testing.T) {
-	pool := integrationPool(t)
-	ctx := context.Background()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	publicURL := "http://" + listener.Addr().String()
-	if err := SeedWithIssuer(ctx, pool, "development", "http://localhost:8080/dev/oidc"); err != nil {
-		listener.Close()
-		t.Fatal(err)
-	}
-	if err := SeedWithIssuer(ctx, pool, "development", publicURL+"/dev/oidc"); err != nil {
-		listener.Close()
-		t.Fatal(err)
-	}
-	c := Config{Env: "development", DatabaseURL: "postgres://unused", PublicURL: publicURL, UploadDir: t.TempDir(), StaticDir: t.TempDir(), AuthMode: "mock", SessionSecret: strings.Repeat("s", 32)}
-	app, err := New(ctx, c, pool)
-	if err != nil {
-		listener.Close()
-		t.Fatal(err)
-	}
-	server := httptest.NewUnstartedServer(app)
-	server.Listener = listener
-	server.Start()
-	defer server.Close()
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, Timeout: 10 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if len(via) > 10 {
-			return fmt.Errorf("too many auth redirects")
-		}
-		return nil
-	}}
-	response, err := client.Get(server.URL + "/auth/login?user=" + MiaID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	response.Body.Close()
-	if response.Request.URL.Path != "/" {
-		t.Fatalf("login did not complete callback; final path=%s status=%d", response.Request.URL.Path, response.StatusCode)
-	}
-	me, err := client.Get(server.URL + "/api/v1/me")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer me.Body.Close()
-	if me.StatusCode != http.StatusOK {
-		t.Fatalf("authenticated /me status=%d", me.StatusCode)
-	}
-	var payload struct {
-		User User   `json:"user"`
-		CSRF string `json:"csrf_token"`
-	}
-	if err := json.NewDecoder(me.Body).Decode(&payload); err != nil {
-		t.Fatal(err)
-	}
-	if payload.User.ID != MiaID || payload.CSRF == "" {
-		t.Fatalf("unexpected authenticated identity: %+v", payload.User)
 	}
 }

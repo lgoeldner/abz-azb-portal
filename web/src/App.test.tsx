@@ -7,6 +7,16 @@ import { App } from './App';
 const user = { id: 'student-1', name: 'Mia Beispiel', role: 'student', admitted: true, cohort_member: true, category_ids: [] };
 const category = { id: 'memory', name: 'Erinnerungen', description: 'Was bleibt', kind: 'memory' };
 
+it('starts provider login without fetching identities from the portal', async () => {
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL) => Response.json({ error: { code: 'unauthorized', message: 'Bitte anmelden.' } }, { status: 401 }));
+  vi.stubGlobal('fetch', fetchMock);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><MemoryRouter><App/></MemoryRouter></QueryClientProvider>);
+
+  expect(await screen.findByRole('link', { name: /Mit Schulkonto anmelden/ })).toHaveAttribute('href', '/auth/login');
+  expect(fetchMock.mock.calls.every(call => String(call[0]) === '/api/v1/me')).toBe(true);
+});
+
 describe('contribution submission', () => {
   it('keeps entered fields visible when the server rejects a stale submission', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

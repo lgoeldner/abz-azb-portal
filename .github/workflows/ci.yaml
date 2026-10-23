@@ -48,6 +48,11 @@ jobs:
           DATABASE_URL: postgres://portal:portal_test@localhost:5432/portal_test?sslmode=disable
           PUBLIC_URL: http://127.0.0.1:8080
           AUTH_MODE: mock
+          OIDC_ISSUER: http://localhost:9090
+          OIDC_CLIENT_ID: portal-dev
+          OIDC_CLIENT_SECRET: dev-only
+          AUTH_MOCK_USERS: ../auth-mock/users.yaml
+          AUTH_MOCK_REDIRECT_URIS: http://127.0.0.1:8080/auth/callback
           SESSION_SECRET: ci-only-secret-at-least-32-bytes-long
           UPLOAD_DIR: /tmp/portal-uploads
           STATIC_DIR: ../web/dist
@@ -58,6 +63,13 @@ jobs:
           go build -o /tmp/portal ./cmd/portal
           /tmp/portal migrate
           /tmp/portal seed
+          go build -o /tmp/auth-mock ./cmd/auth-mock
+          ADDR=:9090 /tmp/auth-mock >/tmp/auth-mock.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:9090/healthz; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://localhost:9090/healthz
           /tmp/portal serve >/tmp/portal.log 2>&1 &
           for attempt in $(seq 1 30); do
             curl --fail --silent http://127.0.0.1:8080/readyz && exit 0

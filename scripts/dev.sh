@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/dev-common.sh"
-start_dev_database
+start_dev_services
 prepare_dev_database
 
 children=()

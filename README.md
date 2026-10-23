@@ -13,13 +13,23 @@ make doctor
 make dev
 ```
 
-Open [localhost:5173](http://localhost:5173). The Go API runs at `localhost:8080`; Vite proxies API, authentication, and mock OIDC routes to it. The development login provides seeded student, manager, admin, and pending accounts. These are fake identities; development must never hold real school data on a publicly accessible host.
+Open [localhost:5173](http://localhost:5173). The Go API runs at `localhost:8080`; Vite proxies API and authentication routes to it. The login button redirects to the separate mock provider at [localhost:9090](http://localhost:9090), which lists all identities from `auth-mock/users.yaml` and returns signed JWTs through the OIDC authorization-code flow. These are fake identities; development must never hold real school data on a publicly accessible host.
 
-The workflow starts PostgreSQL with `docker compose` on the current Docker context, then runs the Go API and Vite on the host. It migrates and seeds the development database. `make down` stops the PostgreSQL container without deleting collected data. Docker volumes are persistent; never use `down -v` on a database you need. Set `DOCKER_CONTEXT` to target a different engine.
+The workflow starts PostgreSQL and the `auth-mock` container with `docker compose` on the current Docker context, then runs the Go API and Vite on the host. It migrates and seeds the development database. `make down` stops the development containers without deleting collected data. Docker volumes are persistent; never use `down -v` on a database you need. Set `DOCKER_CONTEXT` to target a different engine.
 
-You can also start either host service separately. `make 'dev:backend'` starts PostgreSQL, migrates and seeds the development database, then starts Go. `make 'dev:frontend'` installs web dependencies with `npm ci` when needed and starts Vite. The frontend target expects the API to be running in another terminal.
+You can also start either host service separately. `make 'dev:backend'` starts PostgreSQL and the mock provider, migrates and seeds the development database, then starts Go. `make 'dev:frontend'` installs web dependencies with `npm ci` when needed and starts Vite. The frontend target expects the API to be running in another terminal.
 
 `make doctor` checks the Docker engine, Docker Compose, Go, Node/npm, and `.env.dev`, and gives setup guidance for missing prerequisites. Local development uses `PUBLIC_URL=http://localhost:5173`. Production builds and deployment continue to use Docker Compose on Linux.
+
+Edit `auth-mock/users.yaml` to add or rename fake identities, then restart the provider:
+
+```sh
+docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml restart auth-mock
+```
+
+Each entry has a stable `subject` and a `name`. The supplied UUID subjects match the seeded portal accounts (including student, editor, administrator, guest and pending accounts). New subjects create pending student accounts; roles and admission remain under portal administration. JWTs are exchanged by the Go backend and never stored in browser storage. The provider starts only with `APP_ENV=development` and publishes its port on loopback.
+
+For the full container stack, run `docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml up --build` and open [localhost:8080](http://localhost:8080). Its development-only `OIDC_BACKCHANNEL_URL` routes server requests to the container while retaining `http://localhost:9090` as the verified issuer and browser-facing provider URL.
 
 ## Workflows
 

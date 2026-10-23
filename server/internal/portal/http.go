@@ -214,9 +214,6 @@ func (a *App) routes() {
 	m.HandleFunc("GET /auth/login", a.endpoint(a.login))
 	m.HandleFunc("GET /auth/callback", a.endpoint(a.callback))
 	m.Handle("POST /auth/logout", a.protected(a.endpoint(a.logout)))
-	if a.Config.AuthMode == "mock" {
-		a.mockRoutes(m)
-	}
 	api := http.NewServeMux()
 	bind := func(pattern string, fn endpoint) { api.HandleFunc(pattern, a.endpoint(fn)) }
 	bind("GET /api/v1/me", func(w http.ResponseWriter, r *http.Request) error {

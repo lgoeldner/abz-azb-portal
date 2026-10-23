@@ -150,7 +150,6 @@ for (const role of ['student', 'manager', 'admin'] as const) {
 
 test('login error state stays readable on a narrow screen', async ({ page }) => {
   await page.route('**/api/v1/me', route => route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":{"code":"unauthorized","message":"Bitte anmelden."}}' }));
-  await page.route('**/auth/mock/users', route => route.fulfill({ status: 404, body: '' }));
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Schön, dass du da bist.' })).toBeVisible();
