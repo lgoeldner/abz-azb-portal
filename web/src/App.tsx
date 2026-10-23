@@ -11,9 +11,9 @@ export function App() {
   if (me.error) return me.error instanceof ApiError && me.error.status === 401 ? <Login/> : <main className="grid min-h-screen place-items-center p-6"><Failure error={me.error} retry={() => me.refetch()}/></main>;
   if (!me.data.user.admitted) return (
     <main className="grid min-h-screen place-items-center p-6">
-      <section className="flex w-full max-w-md flex-col items-start gap-5 rounded-ui border border-line bg-white p-6 sm:p-8">
+      <section className="flex w-full max-w-md flex-col items-start gap-5 rounded-ui bg-white p-6 sm:p-8">
         <Brand/>
-        <h1 className="text-2xl font-semibold tracking-tight">Dein Platz ist reserviert.</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight">Dein Platz ist reserviert.</h1>
         <p className="text-[15px] text-muted">Die Administration muss deinen Zugang noch freigeben. Melde dich beim Abizeitungsteam.</p>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
           <button type="button" className={btn.secondary} onClick={() => me.refetch()}>Freigabe prüfen</button>
@@ -35,11 +35,21 @@ const statusOrder = { open: 0, draft: 1, closed: 2 } as const;
 // The sidebar switch and the home page must agree on the view, so Layout owns the single hook instance.
 const ViewContext = createContext<[View, (view: View) => void]>(['schueler', () => {}]);
 
-function Mark({ className = 'size-7' }: { className?: string }) {
-  return <span aria-hidden="true" className={`relative inline-block flex-none rounded-full border-2 border-ink ${className}`}><span className="absolute bottom-1/2 left-1/2 h-[34%] w-0.5 -translate-x-1/2 rounded-full bg-ink"/><span className="absolute left-1/2 top-1/2 h-0.5 w-[28%] -translate-y-1/2 rounded-full bg-ink"/></span>;
+function Mark({ className = 'size-8' }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 40 40" className={`flex-none ${className}`}>
+      <g transform="rotate(-7 20 20)">
+        <path d="M5 4h30a2 2 0 0 1 2 2v28a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" className="fill-ink"/>
+        <path d="M37 6v11H26a2 2 0 0 1-2-2V4h11a2 2 0 0 1 2 2z" className="fill-accent"/>
+        <path d="M24 4v11a2 2 0 0 0 2 2h11" fill="none" strokeWidth="1.5" className="stroke-paper"/>
+        <text x="4.5" y="31" fontSize="21" fontWeight="800" letterSpacing="-1.5" className="fill-pop" style={{ fontFamily: 'inherit' }}>27</text>
+        <rect x="6" y="9" width="13" height="2.4" rx="1.2" className="fill-paper"/>
+      </g>
+    </svg>
+  );
 }
 function Brand({ large = false }: { large?: boolean }) {
-  return <span className="inline-flex items-center gap-2.5"><Mark className={large ? 'size-9' : 'size-7'}/><span className={`font-semibold tracking-tight ${large ? 'text-xl' : 'text-[17px]'}`}>AbiZeitBetrug.</span></span>;
+  return <span className="inline-flex items-center gap-2.5"><Mark className={large ? 'size-12' : 'size-8'}/><span className={`font-extrabold tracking-tighter ${large ? 'text-3xl' : 'text-xl'}`}>AbiZeit<span className="text-accent">Betrug</span>.</span></span>;
 }
 function Logout() {
   const action = useAction();
@@ -52,15 +62,15 @@ function Login() {
       <section className="flex flex-col justify-between gap-12 p-6 sm:p-10 lg:p-14">
         <Brand large/>
         <div>
-          <span aria-hidden="true" className="block select-none text-[min(40vw,15rem)] font-bold leading-[.8] tracking-tighter text-pill">27</span>
-          <h1 className="mt-8 text-4xl font-semibold tracking-tight sm:text-5xl">Die beste Zeit.<br/><span className="text-muted">Zum Festhalten.</span></h1>
+          <span aria-hidden="true" className="block select-none -rotate-6 text-[min(40vw,15rem)] font-extrabold leading-[.8] tracking-tighter text-pop">27</span>
+          <h1 className="mt-8 text-5xl font-extrabold leading-[1.02] tracking-tighter sm:text-7xl">Die beste Zeit.<br/><span className="text-muted">Zum Festhalten.</span></h1>
           <p className="mt-4 max-w-md text-[17px] text-muted">13 Jahre Schule. Unzählige Geschichten.<br/>Hier entsteht unsere Abizeitung.</p>
         </div>
         <p className="text-sm text-muted">LMGU 2027 · Unser Jahrgang, unsere Geschichten.</p>
       </section>
       <section className="flex items-center bg-chrome p-6 sm:p-10 lg:p-14">
-        <div className="w-full max-w-md rounded-ui border border-line bg-white p-6 sm:p-8">
-          <h2 className="text-2xl font-semibold tracking-tight">Schön, dass du da bist.</h2>
+        <div className="w-full max-w-md rounded-ui bg-white p-6 sm:p-8">
+          <h2 className="text-3xl font-extrabold tracking-tight">Schön, dass du da bist.</h2>
           <p className="mt-3 text-[15px] text-muted">Melde dich an, um Erinnerungen einzureichen und bei unseren Abstimmungen mitzumachen.</p>
           <a className={`${btn.primary} mt-6 w-full`} href="/auth/login">Mit Schulkonto anmelden <Arrow/></a>
           <p className="mt-5 text-sm text-muted">Privater Bereich für unseren Jahrgang. Beiträge und Bilder sind nur für berechtigte Personen zugänglich.</p>
@@ -71,8 +81,8 @@ function Login() {
 }
 
 // ---------- layout + sidebar ----------
-const navItem = 'flex min-h-9 items-center justify-between gap-3 rounded-ui px-2.5 py-1.5 text-[15px] max-[650px]:min-h-11';
-const groupLabel = 'px-2.5 text-[13px] text-muted';
+const navItem = 'flex min-h-10 items-center justify-between gap-3 rounded-full px-3.5 py-1.5 text-[15px] transition-transform active:scale-[.98] max-[650px]:min-h-11';
+const groupLabel = 'px-3.5 text-sm font-bold text-ink';
 
 function Layout() {
   const { user } = useSession();
@@ -80,28 +90,28 @@ function Layout() {
   const [menu, setMenu] = useState(false);
   return (
     <ViewContext.Provider value={view}>
-      <a className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-ui focus:bg-white focus:px-3 focus:py-2 focus:text-sm" href="#inhalt">Zum Inhalt</a>
-      <header className="fixed inset-x-0 top-0 z-30 flex h-12 items-center gap-3 border-b border-line bg-chrome px-2 min-[651px]:hidden">
-        <button type="button" className="grid size-10 place-items-center rounded-ui text-xl hover:bg-pill" aria-label={menu ? 'Menü schließen' : 'Menü öffnen'} aria-expanded={menu} onClick={() => setMenu(!menu)}><span aria-hidden="true">☰</span></button>
+      <a className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-full focus:bg-white focus:px-3 focus:py-2 focus:text-sm" href="#inhalt">Zum Inhalt</a>
+      <header className="fixed inset-x-0 top-0 z-30 flex h-12 items-center gap-3 bg-chrome px-2 min-[651px]:hidden">
+        <button type="button" className="grid size-10 place-items-center rounded-full text-xl hover:bg-pill" aria-label={menu ? 'Menü schließen' : 'Menü öffnen'} aria-expanded={menu} onClick={() => setMenu(!menu)}><span aria-hidden="true">☰</span></button>
         <Brand/>
       </header>
       {menu && <button type="button" tabIndex={-1} aria-hidden="true" className="fixed inset-0 z-30 bg-ink/30 min-[651px]:hidden" onClick={() => setMenu(false)}/>}
-      <aside aria-label="Seitenleiste" className={`fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col gap-6 overflow-y-auto border-r border-line bg-chrome px-3 py-5 max-[650px]:top-12 max-[650px]:w-[min(86vw,320px)] max-[650px]:transition-transform ${menu ? '' : 'max-[650px]:invisible max-[650px]:-translate-x-full'}`}>
-        <Link to="/" className="rounded-ui px-2.5" aria-label="AbiZeitBetrug Startseite" onClick={() => setMenu(false)}><Brand/></Link>
-        <nav aria-label="Hauptnavigation" className="flex flex-col gap-6" onClick={e => { if ((e.target as Element).closest('a')) setMenu(false); }}>
+      <aside aria-label="Seitenleiste" className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col bg-chrome max-[650px]:top-12 max-[650px]:w-[min(86vw,320px)] max-[650px]:transition-transform ${menu ? '' : 'max-[650px]:invisible max-[650px]:-translate-x-full'}`}>
+        <Link to="/" className="flex-none rounded-full px-5 pb-4 pt-5 max-[650px]:hidden" aria-label="AbiZeitBetrug Startseite" onClick={() => setMenu(false)}><Brand/></Link>
+        <nav aria-label="Hauptnavigation" className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-3 py-2 max-[650px]:pt-4" onClick={e => { if ((e.target as Element).closest('a')) setMenu(false); }}>
           <NavItem to="/">Überblick</NavItem>
           {view[0] === 'redaktion' && editorial(user) ? <EditorNav/> : <StudentNav/>}
         </nav>
-        <div className="mt-auto flex flex-col gap-3">
+        <div className="flex flex-none flex-col gap-3 bg-pill px-3 py-4">
           {editorial(user) && <ViewSwitch onSwitch={() => setMenu(false)}/>}
           <div className="flex items-center gap-3 px-1">
-            <span className="grid size-9 flex-none place-items-center rounded-full bg-pill text-[13px] font-semibold" aria-hidden="true">{user.name.split(' ').map(n => n[0]).slice(0, 2).join('')}</span>
+            <span className="grid size-9 flex-none place-items-center rounded-full bg-pop text-[13px] font-bold" aria-hidden="true">{user.name.split(' ').map(n => n[0]).slice(0, 2).join('')}</span>
             <div className="min-w-0 leading-tight"><strong className="block truncate text-[15px] font-semibold">{user.name}</strong><small className="text-[13px] text-muted">{roleName(user.role)}</small></div>
           </div>
-          <div className="px-2.5"><Logout/></div>
+          <div className="px-3.5"><Logout/></div>
         </div>
       </aside>
-      <div className="flex min-h-screen flex-col bg-paper max-[650px]:pt-12 min-[651px]:pl-[248px]">
+      <div className="flex min-h-screen flex-col bg-paper max-[650px]:pt-12 min-[651px]:pl-[260px]">
         <main id="inhalt" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-8 sm:py-10"><Outlet/></main>
         <footer className="px-4 pb-6 text-[13px] text-muted sm:px-8">AbiZeitBetrug. · Privater Jahrgangsbereich LMGU 2027</footer>
       </div>
@@ -113,9 +123,9 @@ function ViewSwitch({ onSwitch }: { onSwitch: () => void }) {
   const [view, setView] = useContext(ViewContext);
   const navigate = useNavigate();
   const choose = (next: View) => { setView(next); onSwitch(); navigate('/'); };
-  const seg = (active: boolean) => `min-h-9 flex-1 rounded-ui px-3 text-sm ${active ? 'bg-white font-semibold text-ink' : 'text-muted hover:text-ink'}`;
+  const seg = (active: boolean) => `min-h-10 flex-1 rounded-full px-3 text-sm transition-transform active:scale-95 ${active ? 'bg-ink font-bold text-pop' : 'font-semibold text-ink hover:bg-white/60'}`;
   return (
-    <div className="flex gap-0.5 rounded-ui bg-pill p-0.5">
+    <div className="flex gap-0.5 rounded-full bg-white/70 p-1">
       <button type="button" className={seg(view === 'schueler')} aria-pressed={view === 'schueler'} onClick={() => choose('schueler')}>Schüler</button>
       <button type="button" className={seg(view === 'redaktion')} aria-pressed={view === 'redaktion'} onClick={() => choose('redaktion')}>Redaktion</button>
     </div>
@@ -125,22 +135,22 @@ function ViewSwitch({ onSwitch }: { onSwitch: () => void }) {
 function NavItem({ to, children }: { to: string; children: ReactNode }) {
   const location = useLocation();
   const active = location.pathname + location.search === to;
-  return <Link to={to} aria-current={active ? 'page' : undefined} className={`${navItem} ${active ? 'bg-pill font-semibold' : 'hover:bg-pill/60'}`}>{children}</Link>;
+  return <Link to={to} aria-current={active ? 'page' : undefined} className={`${navItem} ${active ? 'bg-ink font-bold text-pop' : 'hover:bg-pill'}`}>{children}</Link>;
 }
 function NavRow({ to, title, sub, end }: { to: string; title: string; sub?: string; end?: string }) {
   const location = useLocation();
   const active = location.pathname + location.search === to;
   return (
-    <Link to={to} aria-current={active ? 'page' : undefined} className={`${navItem} ${active ? 'bg-pill' : 'hover:bg-pill/60'}`}>
-      <span className="min-w-0"><span className={`block truncate ${active ? 'font-semibold' : ''}`}>{title}</span>{sub && <small className="block truncate text-[13px] text-muted">{sub}</small>}</span>
-      {end && <span className="flex-none text-[13px] tabular-nums text-muted">{end}</span>}
+    <Link to={to} aria-current={active ? 'page' : undefined} className={`${navItem} ${active ? 'bg-ink text-white' : 'hover:bg-pill'}`}>
+      <span className="min-w-0"><span className={`block truncate ${active ? 'font-bold text-pop' : ''}`}>{title}</span>{sub && <small className={`block truncate text-[13px] ${active ? 'text-white/80' : 'text-muted'}`}>{sub}</small>}</span>
+      {end && <span className={`flex-none text-[13px] tabular-nums ${active ? 'text-white/80' : 'text-muted'}`}>{end}</span>}
     </Link>
   );
 }
 function NavGroup({ id, label, children }: { id: string; label: string; children: ReactNode }) {
   return <div role="group" aria-labelledby={id} className="flex flex-col gap-1"><p id={id} className={groupLabel}>{label}</p>{children}</div>;
 }
-const quiet = 'px-2.5 text-[13px] text-muted';
+const quiet = 'px-3.5 text-[13px] text-muted';
 
 function StudentNav() {
   const { user } = useSession();
@@ -153,7 +163,7 @@ function StudentNav() {
   return <>
     <NavGroup id="nav-offen" label="Offen">
       {polls.isPending ? <p className={quiet}>Einen Moment …</p> : polls.error ? <p className={quiet}>Abstimmungen nicht erreichbar.</p> : todo.length === 0 ? <p className={quiet}>Gerade ist nichts offen.</p> : (
-        <ol aria-labelledby="nav-offen" className="ml-3 flex flex-col border-l border-line">
+        <ol aria-labelledby="nav-offen" className="ml-3 flex flex-col border-l-2 border-pill">
           {todo.map(p => <li key={p.id} className="relative pl-3"><span aria-hidden="true" className="absolute left-0 top-[17px] size-2 -translate-x-1/2 rounded-full bg-accent"/><NavRow to={`/abstimmungen/${p.id}`} title={p.title} sub={since(p.opened_at)}/></li>)}
         </ol>
       )}
@@ -166,7 +176,7 @@ function StudentNav() {
     </NavGroup>
     <div className="flex flex-col gap-1">
       <details className="group">
-        <summary className={`${navItem} cursor-pointer list-none text-muted hover:bg-pill/60 [&::-webkit-details-marker]:hidden`}>Erledigt ({done.length})<span aria-hidden="true" className="text-xs group-open:rotate-90">›</span></summary>
+        <summary className={`${navItem} cursor-pointer list-none text-muted hover:bg-pill [&::-webkit-details-marker]:hidden`}>Erledigt ({done.length})<span aria-hidden="true" className="text-xs group-open:rotate-90">›</span></summary>
         <div className="mt-1 flex flex-col gap-1">
           {done.length === 0 ? <p className={quiet}>Noch nichts erledigt.</p> : done.map(p => <NavRow key={p.id} to={`/abstimmungen/${p.id}`} title={p.title} sub={p.my_option_id ? '✓ abgestimmt' : 'beendet'}/>)}
         </div>
@@ -237,8 +247,8 @@ function StudentHome() {
         {polls.isPending ? <Loading/> : polls.error ? <Failure error={polls.error} retry={() => polls.refetch()}/> : todo.length === 0 ? <Empty>Gerade ist nichts offen. Sobald die Redaktion eine Abstimmung öffnet, steht sie hier.</Empty> : (
           <ul className="grid gap-4 md:grid-cols-2">
             {todo.map((p, i) => (
-              <li key={p.id} className="flex flex-col rounded-ui border border-line bg-white p-5">
-                <h3 className="text-lg font-semibold leading-snug">{p.title}</h3>
+              <li key={p.id} className="flex flex-col rounded-ui bg-white p-5">
+                <h3 className="text-xl font-extrabold leading-snug">{p.title}</h3>
                 {p.description && <p className="mt-2 text-[15px] text-muted">{p.description}</p>}
                 <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-5">
                   <span className="text-[13px] text-muted">{[kindLabel(p.kind), plural(p.options.length, 'Option', 'Optionen'), since(p.opened_at)].filter(Boolean).join(' · ')}</span>
@@ -260,8 +270,8 @@ function StudentHome() {
               const n = own.filter(s => s.category_id === c.id).length;
               return (
                 <li key={c.id}>
-                  <Link to={`/beitraege/neu?kategorie=${c.id}`} className="flex h-full flex-col rounded-ui border border-line bg-white p-5 transition-colors hover:bg-paper">
-                    <span className="flex items-start justify-between gap-3"><strong className="text-lg font-semibold leading-snug">{c.name}</strong><Arrow/></span>
+                  <Link to={`/beitraege/neu?kategorie=${c.id}`} className="flex h-full flex-col rounded-ui bg-white p-5 transition-transform hover:-translate-y-1 hover:bg-pop/40 active:scale-[.99]">
+                    <span className="flex items-start justify-between gap-3"><strong className="text-xl font-extrabold leading-snug">{c.name}</strong><Arrow/></span>
                     {c.description && <span className="mt-2 text-[15px] text-muted">{c.description}</span>}
                     <span className="mt-auto pt-4 text-[13px] text-muted">{n ? `${n} eingereicht` : 'Noch nichts eingereicht'}</span>
                   </Link>
@@ -281,10 +291,10 @@ function StudentHome() {
     </section>
 
     {done.length > 0 && (
-      <details className="mt-10 rounded-ui border border-line bg-white">
+      <details className="mt-10 rounded-ui bg-white">
         <summary className="cursor-pointer px-5 py-4 text-[15px] font-semibold">Erledigte Abstimmungen ({done.length})</summary>
         <ul className="divide-y divide-line border-t border-line">
-          {done.map(p => <li key={p.id}><Link to={`/abstimmungen/${p.id}`} className="flex items-center justify-between gap-4 px-5 py-3 text-[15px] hover:bg-paper"><span className="min-w-0">{p.title}</span><span className="flex-none text-[13px] text-muted">{p.my_option_id ? '✓ abgestimmt' : 'beendet'}</span></Link></li>)}
+          {done.map(p => <li key={p.id}><Link to={`/abstimmungen/${p.id}`} className="flex items-center justify-between gap-4 px-5 py-3 text-[15px] hover:bg-pop/30"><span className="min-w-0">{p.title}</span><span className="flex-none text-[13px] text-muted">{p.my_option_id ? '✓ abgestimmt' : 'beendet'}</span></Link></li>)}
         </ul>
       </details>
     )}
@@ -297,17 +307,17 @@ function StudentHome() {
 function ThickRow({ to, title, badge, meta, count, unit, extra }: { to: string; title: string; badge?: ReactNode; meta: string; count: number; unit: [string, string]; extra?: string }) {
   return (
     <li>
-      <Link to={to} className="flex min-h-28 items-start justify-between gap-6 bg-white p-5 transition-colors hover:bg-paper">
+      <Link to={to} className="flex min-h-28 items-start justify-between gap-6 bg-white p-5 transition-colors hover:bg-pop/30">
         <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1"><strong className="text-[17px] font-semibold leading-snug">{title}</strong>{badge}</span>
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1"><strong className="text-lg font-extrabold leading-snug">{title}</strong>{badge}</span>
           <small className="mt-1 block text-[13px] text-muted">{meta}</small>
         </span>
-        <span className="flex-none text-right"><strong className="block text-2xl font-semibold tabular-nums leading-none">{count}</strong><span className="mt-1 block text-[13px] text-muted">{unit[count === 1 ? 0 : 1]}</span>{extra && <span className="block text-[13px] tabular-nums text-muted">{extra}</span>}</span>
+        <span className="flex-none text-right"><strong className="block text-3xl font-extrabold tabular-nums leading-none">{count}</strong><span className="mt-1 block text-[13px] text-muted">{unit[count === 1 ? 0 : 1]}</span>{extra && <span className="block text-[13px] tabular-nums text-muted">{extra}</span>}</span>
       </Link>
     </li>
   );
 }
-const rows = 'mt-4 divide-y divide-line overflow-hidden rounded-ui border border-line bg-white';
+const rows = 'mt-4 divide-y divide-line overflow-hidden rounded-ui bg-white';
 
 function EditorHome() {
   const polls = useData<Poll[]>('/polls');
