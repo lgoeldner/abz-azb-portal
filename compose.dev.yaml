@@ -1,0 +1,25 @@
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: portal-dev
+    ports:
+      - "127.0.0.1:5432:5432"
+    networks: [internal, egress]
+
+  portal:
+    build: .
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["portal migrate && portal seed && exec portal serve"]
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgres://portal:portal-dev@db:5432/portal?sslmode=disable
+      PUBLIC_URL: http://localhost:8080
+      AUTH_MODE: mock
+      SESSION_SECRET: development-only-secret-change-for-production
+      UPLOAD_DIR: /var/lib/portal/uploads
+      STATIC_DIR: /app/static
+      BACKUP_STATUS_FILE: /var/lib/portal/status/status.json
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - backup_status:/var/lib/portal/status:ro

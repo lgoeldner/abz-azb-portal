@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: portal_test
+          POSTGRES_USER: portal
+          POSTGRES_PASSWORD: portal_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U portal -d portal_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: server/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Go tests and vet
+        env:
+          TEST_DATABASE_URL: postgres://portal:portal_test@localhost:5432/portal_test?sslmode=disable
+        run: cd server && go test -race ./... && go vet ./...
+      - name: Frontend tests, types and production build
+        run: cd web && npm ci && npm run typecheck && npm test -- --run && npm run build
+      - name: Start migrated and seeded app
+        env:
+          APP_ENV: development
+          ADDR: :8080
+          DATABASE_URL: postgres://portal:portal_test@localhost:5432/portal_test?sslmode=disable
+          PUBLIC_URL: http://127.0.0.1:8080
+          AUTH_MODE: mock
+          SESSION_SECRET: ci-only-secret-at-least-32-bytes-long
+          UPLOAD_DIR: /tmp/portal-uploads
+          STATIC_DIR: ../web/dist
+          BACKUP_STATUS_FILE: /tmp/portal-backup-status.json
+        run: |
+          mkdir -p /tmp/portal-uploads
+          cd server
+          go build -o /tmp/portal ./cmd/portal
+          /tmp/portal migrate
+          /tmp/portal seed
+          /tmp/portal serve >/tmp/portal.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            curl --fail --silent http://127.0.0.1:8080/readyz && exit 0
+            sleep 1
+          done
+          cat /tmp/portal.log
+          exit 1
+      - name: Playwright core journeys
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:8080
+        run: cd web && npx playwright install --with-deps chromium && npm run test:e2e
+      - name: Ops shell and restore safety checks
+        run: |
+          bash -n ops/backup.sh ops/restore.sh ops/test-backup-lock.sh ops/test-restore-safety.sh scripts/test-recovery.sh
+          bash ops/test-backup-lock.sh
+          bash ops/test-restore-safety.sh
+      - name: API contract
+        run: node scripts/check-contract.mjs
+
+  recovery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Disposable container backup and restore drill
+        env:
+          DOCKER_CONTEXT: default
+        run: bash scripts/test-recovery.sh

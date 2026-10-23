@@ -1,0 +1,104 @@
+name: abizeitung-portal
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-portal}
+      POSTGRES_USER: ${POSTGRES_USER:-portal}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [internal]
+
+  portal:
+    build: .
+    image: abizeitung-portal:${APP_VERSION:-local}
+    restart: unless-stopped
+    command: ["serve"]
+    environment:
+      APP_ENV: production
+      ADDR: :8080
+      DATABASE_URL: postgres://${POSTGRES_USER:-portal}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-portal}?sslmode=disable
+      PUBLIC_URL: ${PUBLIC_URL:?Set PUBLIC_URL to the HTTPS site URL}
+      AUTH_MODE: oidc
+      OIDC_ISSUER: ${OIDC_ISSUER:?Set OIDC_ISSUER}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?Set OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?Set OIDC_CLIENT_SECRET}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET}
+      BOOTSTRAP_ADMIN_SUBJECT: ${BOOTSTRAP_ADMIN_SUBJECT:?Set the OIDC subject for the first admin}
+      UPLOAD_DIR: /var/lib/portal/uploads
+      STATIC_DIR: /app/static
+      BACKUP_STATUS_FILE: /var/lib/portal/status/status.json
+    volumes:
+      - uploads:/var/lib/portal/uploads
+      - backup_status:/var/lib/portal/status:ro
+    depends_on:
+      db: { condition: service_healthy }
+    expose: ["8080"]
+    networks: [internal, egress]
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    profiles: [production]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:?Set PUBLIC_HOST to the public DNS name}
+    volumes:
+      - ./ops/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [portal]
+    networks: [internal, egress]
+
+  backup:
+    build:
+      context: .
+      dockerfile: ops/Backup.Dockerfile
+    image: abizeitung-portal-backup:${APP_VERSION:-local}
+    restart: unless-stopped
+    profiles: [production]
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: ${POSTGRES_DB:-portal}
+      PGUSER: ${POSTGRES_USER:-portal}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      RESTIC_REPOSITORY: ${RESTIC_REPOSITORY:?Set an independent S3 or REST repository}
+      RESTIC_PASSWORD: ${RESTIC_PASSWORD:?Set RESTIC_PASSWORD}
+      APP_VERSION: ${APP_VERSION:-local}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-eu-central-1}
+      BACKUP_HEARTBEAT_URL: ${BACKUP_HEARTBEAT_URL:?Set an external heartbeat URL}
+      BACKUP_STATUS_FILE: /status/status.json
+      UPLOAD_DIR: /uploads
+      PGSSLMODE: ${BACKUP_PGSSLMODE:-disable}
+    volumes:
+      - uploads:/uploads:ro
+      - backup_status:/status
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [internal, egress]
+
+volumes:
+  postgres_data:
+  uploads:
+  backup_status:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
+    internal: true
+  egress:
