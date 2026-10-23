@@ -18,7 +18,7 @@ func timelineApp(t *testing.T) (*App, *pgxpool.Pool) {
 	t.Helper()
 	pool := integrationPool(t)
 	ctx := context.Background()
-	provider := mockProvider(t, "", "http://localhost:8080", []authmock.User{{Subject: MiaID, Name: "Mia"}})
+	provider := mockProvider(t, "", "http://localhost:8080", []authmock.User{{Subject: FixtureSubject(MiaID), Name: "Mia", DisplaySlug: "mia_weber"}})
 	if err := SeedWithIssuer(ctx, pool, "development", provider.URL); err != nil {
 		t.Fatal(err)
 	}

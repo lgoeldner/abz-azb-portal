@@ -40,7 +40,7 @@ func TestExternalOIDCTrustAndEnrollment(t *testing.T) {
 			publicURL := "http://" + server.Listener.Addr().String()
 			// Backchannel must cover discovery, token and JWKS without changing issuer claims.
 			canonical := "http://provider.invalid:9090"
-			provider := mockProvider(t, canonical, publicURL, []authmock.User{{Subject: MiaID, Name: "Mia"}, {Subject: "new-yaml-subject", Name: "New member"}})
+			provider := mockProvider(t, canonical, publicURL, []authmock.User{{Subject: FixtureSubject(MiaID), Name: "Mia", DisplaySlug: "mia_weber"}, {Subject: "new-yaml-subject", Name: "New member", DisplaySlug: "new_member"}})
 			handler := provider.Config.Handler
 			// Re-sign deliberately invalid claims using a separately trusted fixture key.
 			// The signature case publishes this key but signs with the original provider key.
@@ -123,7 +123,7 @@ func TestExternalOIDCTrustAndEnrollment(t *testing.T) {
 				t.Fatalf("picker status %d", res.StatusCode)
 			}
 			form := authorization.Query()
-			subject := MiaID
+			subject := FixtureSubject(MiaID)
 			if scenario == "unknown" {
 				subject = "new-yaml-subject"
 			}
@@ -262,7 +262,7 @@ func TestSeedMigratesOnlyLegacyFixtureSubjects(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT subject,role,name,admitted FROM users WHERE id=$1", MiaID).Scan(&subject, &role, &name, &admitted); err != nil {
 		t.Fatal(err)
 	}
-	if subject != "http://localhost:9090\x1f"+MiaID || role != "manager" || admitted || name != "Edited locally" {
+	if subject != "http://localhost:9090\x1f"+FixtureSubject(MiaID) || role != "manager" || admitted || name != "Edited locally" {
 		t.Fatal("legacy migration replaced local state")
 	}
 	if err := pool.QueryRow(ctx, "SELECT subject FROM users WHERE id=$1", LeonID).Scan(&subject); err != nil {
@@ -281,7 +281,7 @@ func TestSeedMigratesOnlyLegacyFixtureSubjects(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT subject FROM users WHERE id=$1", ManagerID).Scan(&subject); err != nil {
 		t.Fatal(err)
 	}
-	if subject != "http://localhost:9090\x1f"+ManagerID {
+	if subject != "http://localhost:9090\x1f"+FixtureSubject(ManagerID) {
 		t.Fatal("legacy embedded issuer was not migrated")
 	}
 }

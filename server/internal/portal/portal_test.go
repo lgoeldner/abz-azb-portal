@@ -140,7 +140,7 @@ func authenticatedRequest(t *testing.T, app *App, pool *pgxpool.Pool, userID, me
 func TestPostgresAuthorizationLifecycleAndBallots(t *testing.T) {
 	pool := integrationPool(t)
 	ctx := context.Background()
-	provider := mockProvider(t, "", "http://localhost:8080", []authmock.User{{Subject: MiaID, Name: "Mia"}})
+	provider := mockProvider(t, "", "http://localhost:8080", []authmock.User{{Subject: FixtureSubject(MiaID), Name: "Mia", DisplaySlug: "mia_weber"}})
 	if err := SeedWithIssuer(ctx, pool, "development", provider.URL); err != nil {
 		t.Fatal(err)
 	}
@@ -374,7 +374,7 @@ func TestPostgresAuthorizationLifecycleAndBallots(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT subject FROM users WHERE id=$1", MiaID).Scan(&subject); err != nil {
 		t.Fatal(err)
 	}
-	if subject != app.auth.issuer+"\x1f"+MiaID {
+	if subject != app.auth.issuer+"\x1f"+FixtureSubject(MiaID) {
 		t.Fatalf("subject is not issuer-namespaced: %q", subject)
 	}
 }

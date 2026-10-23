@@ -95,7 +95,7 @@ func (p *provider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src "+pickerStyleHash+"; frame-ancestors 'none'; base-uri 'none'")
 	p.mux.ServeHTTP(w, r)
 }
 
@@ -119,11 +119,44 @@ func (p *provider) keys(w http.ResponseWriter, _ *http.Request) {
 	jsonResponse(w, 200, jose.JSONWebKeySet{Keys: []jose.JSONWebKey{{Key: &p.key.PublicKey, KeyID: "development", Algorithm: "RS256", Use: "sig"}}})
 }
 
-var picker = template.Must(template.New("picker").Parse(`<!doctype html>
+const pickerCSS = `
+:root{color-scheme:light dark;--paper:#f5f6ec;--card:#fff;--ink:#15181f;--muted:#5d6270;--line:#d6dac0;--pop:#c8f23c;--accent:#d81e44}
+@media (prefers-color-scheme:dark){:root{--paper:#15181f;--card:#1f242e;--ink:#f5f6ec;--muted:#a3a99a;--line:#363c4a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 "Avenir Next","Segoe UI",system-ui,sans-serif}
+main{max-width:720px;margin:0 auto;padding:32px 16px 48px}
+h1{margin:0 0 8px;font-size:clamp(1.6rem,6vw,2.2rem);font-weight:800;letter-spacing:-.025em;line-height:1.15}
+.hint{margin:0 0 24px;color:var(--muted)}
+.badge{display:inline-block;margin-bottom:12px;padding:2px 12px;border-radius:999px;background:var(--pop);color:#15181f;font-size:.8rem;font-weight:700}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,210px),1fr));gap:12px}
+.card{display:flex;align-items:center;gap:12px;width:100%;padding:14px;border:2px solid var(--line);border-radius:16px;background:var(--card);color:inherit;font:inherit;text-align:left;cursor:pointer;transition:transform .12s,border-color .12s,box-shadow .12s}
+.card:hover{border-color:var(--ink);transform:translateY(-2px);box-shadow:0 4px 0 var(--ink)}
+.card:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.avatar{flex:none;display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:var(--pop);color:#15181f;font-weight:800;font-size:1.2rem}
+.text{min-width:0}
+.name{display:block;font-weight:700;overflow-wrap:anywhere}
+.slug{display:block;color:var(--muted);font-size:.8rem;overflow-wrap:anywhere}
+@media (prefers-reduced-motion:reduce){.card{transition:none}.card:hover{transform:none}}
+`
+
+var pickerStyleHash = func() string {
+	sum := sha256.Sum256([]byte(pickerCSS))
+	return "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+}()
+
+var picker = template.Must(template.New("picker").Funcs(template.FuncMap{
+	"initial": func(name string) string {
+		for _, r := range name {
+			return strings.ToUpper(string(r))
+		}
+		return "?"
+	},
+}).Parse(`<!doctype html>
 <html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Entwicklungsanmeldung</title>
-<main><h1>Entwicklungsanmeldung</h1><p>Testidentität auswählen. Nur für die lokale Entwicklung.</p>
+<style>` + pickerCSS + `</style>
+<main><span class="badge">Nur Entwicklung</span><h1>Entwicklungsanmeldung</h1><p class="hint">Testidentität auswählen. Dies ist ein lokaler Mock-Anbieter ohne echte Konten.</p>
 <form method="post" action="/authorize">{{range $key, $values := .Params}}{{range $values}}<input type="hidden" name="{{$key}}" value="{{.}}">{{end}}{{end}}
-{{range .Users}}<p><button type="submit" name="subject" value="{{.Subject}}">{{.Name}}</button></p>{{end}}</form></main></html>`))
+<div class="grid">{{range .Users}}<button class="card" type="submit" name="subject" value="{{.Subject}}"><span class="avatar" aria-hidden="true">{{initial .Name}}</span><span class="text"><span class="name">{{.Name}}</span><span class="slug">{{.DisplaySlug}}</span></span></button>{{end}}</div></form></main></html>`))
 
 func (p *provider) authorize(w http.ResponseWriter, r *http.Request) {
 	params := r.URL.Query()

@@ -29,7 +29,7 @@ Edit `deployables/auth-mock/users.yaml` to add or rename fake identities, then r
 docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml restart auth-mock
 ```
 
-Each entry has a stable `subject` and a `name`. The supplied UUID subjects match the seeded portal accounts (including student, editor, administrator, guest and pending accounts). New subjects create pending student accounts; roles and admission remain under portal administration. JWTs are exchanged by the Go backend and never stored in browser storage. The provider starts only with `APP_ENV=development` and publishes its port on loopback.
+Each entry has a `name` and a unique `display_slug` (`[a-z0-9_]`, max 64). The OIDC subject is generated from the slug (UUIDv5, fixed namespace), so it stays stable across restarts and renames; typing a `subject:` key is rejected. The supplied slugs match the seeded portal accounts (including student, editor, administrator, guest and pending accounts). New slugs create pending student accounts; roles and admission remain under portal administration. JWTs are exchanged by the Go backend and never stored in browser storage. The provider starts only with `APP_ENV=development` and publishes its port on loopback.
 
 The `portal` container at [https://localhost](https://localhost) is the full container stack. Its development-only `OIDC_BACKCHANNEL_URL` routes server requests to the container while retaining `http://localhost:9090` as the verified issuer and browser-facing provider URL.
 

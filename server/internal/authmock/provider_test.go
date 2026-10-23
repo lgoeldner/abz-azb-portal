@@ -20,7 +20,7 @@ import (
 func testProvider(t *testing.T) (*provider, *httptest.Server, Config) {
 	t.Helper()
 	server := httptest.NewUnstartedServer(nil)
-	config := Config{Environment: "development", Issuer: "http://" + server.Listener.Addr().String(), ClientID: "portal-dev", ClientSecret: "dev-only", RedirectURIs: []string{"http://localhost:8080/auth/callback"}, Users: []User{{Subject: "student-one", Name: "Mia Weber"}, {Subject: "student-two", Name: "Leon Fischer"}}}
+	config := Config{Environment: "development", Issuer: "http://" + server.Listener.Addr().String(), ClientID: "portal-dev", ClientSecret: "dev-only", RedirectURIs: []string{"http://localhost:8080/auth/callback"}, Users: []User{{Subject: SubjectForSlug("mia_weber"), Name: "Mia Weber", DisplaySlug: "mia_weber"}, {Subject: SubjectForSlug("leon_fischer"), Name: "Leon Fischer", DisplaySlug: "leon_fischer"}}}
 	handler, err := New(config)
 	if err != nil {
 		t.Fatal(err)
@@ -84,9 +84,15 @@ func TestOIDCDiscoveryIdentityPickerAndSignedTokens(t *testing.T) {
 		t.Fatalf("picker: %d", page.Code)
 	}
 	for _, user := range config.Users {
-		if !strings.Contains(page.Body.String(), ">"+user.Name+"</button>") {
+		body := page.Body.String()
+		if !strings.Contains(body, `<button class="card" type="submit" name="subject" value="`+user.Subject+`"`) || !strings.Contains(body, user.Name) || !strings.Contains(body, user.DisplaySlug) {
 			t.Fatalf("missing identity %s", user.Name)
 		}
+	}
+	// Inline style is allowed by hash only; scripts and other sources stay blocked.
+	csp := page.Header().Get("Content-Security-Policy")
+	if !strings.Contains(csp, "style-src "+pickerStyleHash) || strings.Contains(csp, "unsafe-inline") || strings.Contains(csp, "script-src") || !strings.Contains(csp, "default-src 'none'") {
+		t.Fatalf("unexpected CSP %q", csp)
 	}
 	if strings.Contains(page.Body.String(), "role") {
 		t.Fatal("picker exposes role data")
@@ -225,10 +231,44 @@ func TestLoadUsersStrictConfigurationAndFixtures(t *testing.T) {
 		t.Fatalf("fixture identities: %d %v", len(users), err)
 	}
 	for _, input := range []string{
-		"users: []", "users: [", "users:\n - subject: a\n   name: Test\n   role: admin", "users:\n - subject: a\n   name: Test\n - subject: a\n   name: Duplicate", "users:\n - subject: a\n   name: ''", "users:\n - subject: ''\n   name: Test", "users:\n - subject: a\n   name: Test\n---\nusers: []", "users: []\nunknown: true", "users: []\nusers: []",
+		"users: []", "users: [",
+		"users:\n - subject: a\n   name: Test\n   display_slug: a", // legacy typed subject
+		"users:\n - name: Test\n   display_slug: a\n   role: admin",
+		"users:\n - name: Test\n   display_slug: a\n - name: Duplicate\n   display_slug: a",
+		"users:\n - name: Test", "users:\n - name: Test\n   display_slug: ''",
+		"users:\n - name: Test\n   display_slug: Upper", "users:\n - name: Test\n   display_slug: has-dash",
+		"users:\n - name: Test\n   display_slug: " + strings.Repeat("a", 65),
+		"users:\n - name: ''\n   display_slug: a",
+		"users:\n - name: Test\n   display_slug: a\n---\nusers: []", "users: []\nunknown: true", "users: []\nusers: []",
 	} {
 		if _, err := LoadUsers(strings.NewReader(input)); err == nil {
 			t.Fatalf("invalid identity YAML accepted: %q", input)
 		}
+	}
+}
+
+func TestSubjectsAreStableAndDistinctPerSlug(t *testing.T) {
+	const input = "users:\n - name: A\n   display_slug: marius_funke\n - name: B\n   display_slug: alex_admin\n"
+	first, err := LoadUsers(strings.NewReader(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := LoadUsers(strings.NewReader(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first[0].Subject != second[0].Subject || first[1].Subject != second[1].Subject {
+		t.Fatal("subject changed between loads")
+	}
+	if first[0].Subject == first[1].Subject || first[0].Subject == "" {
+		t.Fatal("different slugs share a subject")
+	}
+	// Renaming a user must not change the subject; the slug alone identifies it.
+	renamed, err := LoadUsers(strings.NewReader("users:\n - name: Renamed\n   display_slug: marius_funke\n"))
+	if err != nil || renamed[0].Subject != first[0].Subject {
+		t.Fatal("subject depends on display name")
+	}
+	if got := first[0].Subject; len(got) != 36 || got[14] != '5' || !strings.ContainsRune("89ab", rune(got[19])) {
+		t.Fatalf("not a UUIDv5: %q", got)
 	}
 }

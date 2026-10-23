@@ -2,8 +2,11 @@ package authmock
 
 import (
 	"bytes"
+	"crypto/sha1"
 	"errors"
+	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"unicode"
 
@@ -12,8 +15,26 @@ import (
 
 // User contains identity data only. Portal permissions remain in its database.
 type User struct {
-	Subject string `yaml:"subject"`
-	Name    string `yaml:"name"`
+	// Subject is derived from DisplaySlug by LoadUsers and never read from YAML.
+	Subject     string `yaml:"-"`
+	Name        string `yaml:"name"`
+	DisplaySlug string `yaml:"display_slug"`
+}
+
+// subjectNamespace is the fixed UUIDv5 namespace for mock identities.
+var subjectNamespace = [16]byte{0x6b, 0x1d, 0x3c, 0x0a, 0x7e, 0x42, 0x4f, 0x8b, 0x9a, 0x51, 0xc3, 0x2d, 0x84, 0xe7, 0x10, 0xaf}
+
+var slugPattern = regexp.MustCompile(`^[a-z0-9_]{1,64}$`)
+
+// SubjectForSlug returns the stable RFC 4122 UUIDv5 (SHA-1) of slug within subjectNamespace.
+func SubjectForSlug(slug string) string {
+	h := sha1.New()
+	h.Write(subjectNamespace[:])
+	h.Write([]byte(slug))
+	b := h.Sum(nil)[:16]
+	b[6] = b[6]&0x0f | 0x50
+	b[8] = b[8]&0x3f | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
 // LoadUsers accepts one strict YAML document with a users sequence.
@@ -37,6 +58,9 @@ func LoadUsers(r io.Reader) ([]User, error) {
 	if err := validateUsers(document.Users); err != nil {
 		return nil, err
 	}
+	for i := range document.Users {
+		document.Users[i].Subject = SubjectForSlug(document.Users[i].DisplaySlug)
+	}
 	return document.Users, nil
 }
 
@@ -46,10 +70,10 @@ func validateUsers(users []User) error {
 	}
 	seen := make(map[string]bool, len(users))
 	for _, user := range users {
-		if !validText(user.Subject, 255) || !validText(user.Name, 255) || seen[user.Subject] {
-			return errors.New("identities require unique subjects and nonempty names without control characters")
+		if !slugPattern.MatchString(user.DisplaySlug) || !validText(user.Name, 255) || seen[user.DisplaySlug] {
+			return errors.New("identities require unique display_slug ([a-z0-9_], 1-64) and nonempty names without control characters")
 		}
-		seen[user.Subject] = true
+		seen[user.DisplaySlug] = true
 	}
 	return nil
 }
