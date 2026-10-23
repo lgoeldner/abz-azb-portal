@@ -1,0 +1,13 @@
+users:
+  - subject: "00000000-0000-4000-8000-000000000001"
+    name: "Alex · Administration"
+  - subject: "00000000-0000-4000-8000-000000000002"
+    name: "Sam · Redaktion"
+  - subject: "00000000-0000-4000-8000-000000000003"
+    name: "Mia Weber"
+  - subject: "00000000-0000-4000-8000-000000000004"
+    name: "Leon Fischer"
+  - subject: "00000000-0000-4000-8000-000000000005"
+    name: "Kim · Gast"
+  - subject: "00000000-0000-4000-8000-000000000006"
+    name: "Pat · Freigabe ausstehend"
