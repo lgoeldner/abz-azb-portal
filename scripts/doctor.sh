@@ -23,7 +23,7 @@ if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
 else bad 'Node.js or npm is missing' 'Install Node.js 24 with npm and put both commands on PATH.'; fi
 
 if [[ -f .env.dev ]]; then ok 'Local development configuration .env.dev exists';
-else bad 'Local development configuration .env.dev is missing' 'Restore the checked-in .env.dev file; it contains development-only values.'; fi
+else bad 'Local development configuration .env.dev is missing' 'Run `make env` to copy .env.dev.dist, then review the development-only values.'; fi
 
 if command -v docker >/dev/null 2>&1 && [[ -f .env.dev ]] && docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml config --quiet >/dev/null 2>&1; then
   ok 'Development Compose configuration is valid'

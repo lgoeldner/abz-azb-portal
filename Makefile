@@ -1,10 +1,15 @@
 COMPOSE := docker compose
 DEV_COMPOSE := docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml
 
-.PHONY: doctor dev dev\:frontend dev\:backend down check backup restore migrate
+.PHONY: env doctor dev dev\:frontend dev\:backend down check backup restore migrate
 
 dev:
 	bash scripts/dev.sh
+
+env:
+	bash scripts/env.sh
+
+doctor dev dev\:frontend dev\:backend down: env
 
 doctor:
 	bash scripts/doctor.sh
