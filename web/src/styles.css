@@ -17,6 +17,7 @@ input[type=file]{width:100%;min-width:0;font-size:.75rem;}
 .form-actions{flex-wrap:wrap;}
 .tabs{overflow-x:auto;overscroll-behavior-x:contain;}
 .table-scroll{max-width:100%;overscroll-behavior-x:contain;}
+.table-scroll{position:relative;}
 .sidebar{overflow-y:auto;overscroll-behavior:contain;}
 .account>div{min-width:0;overflow-wrap:anywhere;}
 .admin-status{flex-wrap:wrap;}
@@ -36,7 +37,7 @@ input[type=file]{width:100%;min-width:0;font-size:.75rem;}
   .detail-layout>aside{display:block;}
   .hero{grid-template-columns:minmax(0,1fr);}
   .hero-copy{container-type:inline-size;}
-  .hero h2{font-size:clamp(1.75rem,12cqw,3.4rem);white-space:nowrap;}
+  .hero h2{font-size:clamp(1.75rem,12cqw,3.4rem);}
   .hero-art{min-height:270px;}
 }
 @media(max-width:650px){

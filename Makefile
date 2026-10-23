@@ -1,5 +1,5 @@
 COMPOSE := docker compose
-ORBSTACK_COMPOSE := docker --context orbstack compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml
+DEV_COMPOSE := docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml
 
 .PHONY: doctor dev dev\:frontend dev\:backend down check backup restore migrate
 
@@ -16,7 +16,7 @@ dev\:backend:
 	bash scripts/dev-backend.sh
 
 down:
-	$(ORBSTACK_COMPOSE) down
+	$(DEV_COMPOSE) down
 
 check:
 	bash -n scripts/*.sh ops/*.sh

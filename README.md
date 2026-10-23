@@ -6,7 +6,7 @@ A private, German-language collection and editorial portal for the Abizeitung. J
 
 ## Run locally
 
-Install and start OrbStack, then run:
+Install and start a Docker engine (OrbStack, Docker Desktop, Colima, ...), then run:
 
 ```sh
 make doctor
@@ -15,11 +15,11 @@ make dev
 
 Open [localhost:5173](http://localhost:5173). The Go API runs at `localhost:8080`; Vite proxies API, authentication, and mock OIDC routes to it. The development login provides seeded student, manager, admin, and pending accounts. These are fake identities; development must never hold real school data on a publicly accessible host.
 
-The workflow starts PostgreSQL through OrbStack's `orbstack` Docker context, then runs the Go API and Vite on the host. It migrates and seeds the development database. `make down` stops the PostgreSQL container without deleting collected data. Docker volumes are persistent; never use `down -v` on a database you need. The current Docker context is left unchanged, so Docker Desktop is never selected implicitly.
+The workflow starts PostgreSQL with `docker compose` on the current Docker context, then runs the Go API and Vite on the host. It migrates and seeds the development database. `make down` stops the PostgreSQL container without deleting collected data. Docker volumes are persistent; never use `down -v` on a database you need. Set `DOCKER_CONTEXT` to target a different engine.
 
-You can also start either host service separately. `make 'dev:backend'` starts OrbStack PostgreSQL, migrates and seeds the development database, then starts Go. `make 'dev:frontend'` installs web dependencies with `npm ci` when needed and starts Vite. The frontend target expects the API to be running in another terminal.
+You can also start either host service separately. `make 'dev:backend'` starts PostgreSQL, migrates and seeds the development database, then starts Go. `make 'dev:frontend'` installs web dependencies with `npm ci` when needed and starts Vite. The frontend target expects the API to be running in another terminal.
 
-`make doctor` checks OrbStack, Docker Compose through the explicit `orbstack` context, Go, Node/npm, and `.env.dev`, and gives setup guidance for missing prerequisites. Local development uses `PUBLIC_URL=http://localhost:5173`. Production builds and deployment continue to use Docker Compose on Linux; OrbStack is not a production dependency.
+`make doctor` checks the Docker engine, Docker Compose, Go, Node/npm, and `.env.dev`, and gives setup guidance for missing prerequisites. Local development uses `PUBLIC_URL=http://localhost:5173`. Production builds and deployment continue to use Docker Compose on Linux.
 
 ## Workflows
 
@@ -56,7 +56,7 @@ cd web
 npm run test:e2e
 ```
 
-To exercise backup and restore end to end against disposable containers, run `DOCKER_CONTEXT=orbstack bash scripts/test-recovery.sh`. The script builds the portal and backup images, creates temporary database, upload, and repository volumes, verifies restored contents, then removes the resources it created.
+To exercise backup and restore end to end against disposable containers, run `bash scripts/test-recovery.sh`. The script builds the portal and backup images, creates temporary database, upload, and repository volumes, verifies restored contents, then removes the resources it created.
 
 Tests focus on ownership, category permissions, accepted-content immutability, idempotent retries, concurrent voting, private files, real OIDC mock flow, and backup/restore safety. CI also builds the production artifacts and runs browser journeys.
 

@@ -13,7 +13,7 @@ export UPLOAD_DIR="$ROOT_DIR/server/data/uploads"
 export SESSION_SECRET=development-only-secret-change-for-production
 
 start_dev_database() {
-  docker --context orbstack compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml up -d --wait db
+  docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml up -d --wait db
 }
 
 prepare_dev_database() {

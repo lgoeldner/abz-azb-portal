@@ -13,6 +13,7 @@ const poll = {
   kind: 'proposal', format: 'single_choice', status: 'open', allow_self_vote: false, my_option_id: null, version: 1,
   options: [{ id: 'choice-1', label: 'Option ' + 'O'.repeat(100) }, { id: 'choice-2', label: 'Zweite Option' }],
 };
+const widths = [320, 390, 640, 650, 651, 768, 850, 851, 1024, 1150, 1151, 1440, 1920];
 
 async function useFixtures(page: Page, role: 'student' | 'manager' | 'admin') {
   const user = { id: 'person-1', name: longName, role, admitted: true, cohort_member: true, category_ids: [category.id] };
@@ -39,11 +40,12 @@ async function useFixtures(page: Page, role: 'student' | 'manager' | 'admin') {
 
 test('overview, contribution detail and poll layouts stay within every viewport', async ({ page }) => {
   await useFixtures(page, 'student');
-  for (const width of [320, 390, 640, 768, 1024, 1440, 1920]) {
+  for (const width of widths) {
     await page.setViewportSize({ width, height: 800 });
     for (const [path, heading] of [['/', 'Mach sie unvergesslich.'], ['/beitraege/long-story', submission.title], ['/abstimmungen/long-poll', poll.title]] as const) {
       await page.goto(path);
       await expect(page.getByRole('heading', { name: heading })).toBeVisible();
+      if (path === '/') await expect.poll(() => page.locator('.hero h2').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     }
     await page.goto('/beitraege/long-story');
@@ -52,11 +54,15 @@ test('overview, contribution detail and poll layouts stay within every viewport'
     await page.locator('input[type=file]').setInputFiles({ name: 'Foto '.concat('N'.repeat(100), '.jpg'), mimeType: 'image/jpeg', buffer: Buffer.from('fixture') });
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto('/');
+  await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth && document.querySelector('.hero h2')!.scrollWidth <= document.querySelector('.hero h2')!.clientWidth)).toBe(true);
 });
 
 test('editor can open the poll form without horizontal page overflow', async ({ page }) => {
   await useFixtures(page, 'manager');
-  for (const width of [320, 390, 640, 768, 1024, 1440, 1920]) {
+  for (const width of widths) {
     await page.setViewportSize({ width, height: 800 });
     await page.goto('/abstimmungen');
     await page.getByRole('button', { name: /Neue Abstimmung/ }).click();
@@ -68,7 +74,7 @@ test('editor can open the poll form without horizontal page overflow', async ({ 
 for (const role of ['manager', 'admin'] as const) {
   test(`${role} poll results fit every viewport`, async ({ page }) => {
     await useFixtures(page, role);
-    for (const width of [320, 390, 640, 768, 1024, 1440, 1920]) {
+    for (const width of widths) {
       await page.setViewportSize({ width, height: 800 });
       await page.goto('/abstimmungen/long-poll');
       await expect(page.locator('.result').first()).toBeVisible();
@@ -110,13 +116,21 @@ for (const role of ['student', 'manager', 'admin'] as const) {
     await useFixtures(page, role);
     const path = role === 'student' ? '/beitraege' : role === 'manager' ? '/redaktion' : '/admin';
 
-    for (const width of [320, 390, 640, 768, 1024, 1440, 1920]) {
+    for (const width of widths) {
       await page.setViewportSize({ width, height: 800 });
       await page.goto(path);
       await expect(page.locator('h1')).toBeVisible();
       if (role === 'admin') await expect(page.locator('.table-scroll tbody tr').first()).toBeVisible();
       else await expect(page.locator('.submission-row').first()).toBeVisible();
-      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      const layout = await page.evaluate(() => ({
+        viewport: window.innerWidth,
+        document: document.documentElement.scrollWidth,
+        offenders: [...document.querySelectorAll<HTMLElement>('body *')]
+          .filter(element => element.getBoundingClientRect().right > window.innerWidth + 1)
+          .slice(0, 5)
+          .map(element => ({ tag: element.tagName, className: element.className, text: element.innerText.slice(0, 40), right: Math.round(element.getBoundingClientRect().right) })),
+      }));
+      expect(layout.document, `document overflow: ${JSON.stringify(layout.offenders)}`).toBeLessThanOrEqual(width);
       if (width <= 650) {
         await page.getByRole('button', { name: 'Menü öffnen' }).click();
         await expect(page.getByRole('navigation', { name: 'Hauptnavigation' })).toBeVisible();

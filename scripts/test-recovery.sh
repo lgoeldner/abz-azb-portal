@@ -4,16 +4,11 @@ set -Eeuo pipefail
 # A real, local-only backup/restore drill. All names are unique and cleanup is
 # limited to resources created by this invocation.
 root=$(cd "$(dirname "$0")/.." && pwd)
-context=${DOCKER_CONTEXT:-orbstack}
-if [[ -n "$context" ]]; then
-  docker_cmd=(docker --context "$context")
-else
-  docker_cmd=(docker)
-fi
-dc() { "${docker_cmd[@]}" "$@"; }
+# Uses the current Docker context; set DOCKER_CONTEXT to pick another.
+dc() { docker "$@"; }
 
 if ! dc info >/dev/null 2>&1; then
-  echo "Docker engine context '$context' is unavailable" >&2
+  echo "Docker engine is unavailable (context: $(docker context show 2>/dev/null))" >&2
   exit 2
 fi
 
