@@ -81,7 +81,7 @@ function Login() {
 }
 
 // ---------- layout + sidebar ----------
-const navItem = 'flex min-h-10 items-center justify-between gap-3 rounded-full px-3.5 py-1.5 text-[15px] transition-transform active:scale-[.98] max-[650px]:min-h-11';
+const navItem = 'flex min-h-10 items-center justify-between gap-3 rounded-full px-3.5 py-1.5 text-[15px] transition-transform active:scale-[.98] max-[651px]:min-h-11';
 const groupLabel = 'px-3.5 text-sm font-bold text-ink';
 
 function Layout() {
@@ -96,9 +96,9 @@ function Layout() {
         <Brand/>
       </header>
       {menu && <button type="button" tabIndex={-1} aria-hidden="true" className="fixed inset-0 z-30 bg-ink/30 min-[651px]:hidden" onClick={() => setMenu(false)}/>}
-      <aside aria-label="Seitenleiste" className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col bg-chrome max-[650px]:top-12 max-[650px]:w-[min(86vw,320px)] max-[650px]:transition-transform ${menu ? '' : 'max-[650px]:invisible max-[650px]:-translate-x-full'}`}>
-        <Link to="/" className="flex-none rounded-full px-5 pb-4 pt-5 max-[650px]:hidden" aria-label="AbiZeitBetrug Startseite" onClick={() => setMenu(false)}><Brand/></Link>
-        <nav aria-label="Hauptnavigation" className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-3 py-2 max-[650px]:pt-4" onClick={e => { if ((e.target as Element).closest('a')) setMenu(false); }}>
+      <aside aria-label="Seitenleiste" className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col bg-chrome max-[651px]:top-12 max-[651px]:w-[min(86vw,320px)] max-[651px]:transition-transform ${menu ? '' : 'max-[651px]:invisible max-[651px]:-translate-x-full'}`}>
+        <Link to="/" className="flex-none rounded-full px-5 pb-4 pt-5 max-[651px]:hidden" aria-label="AbiZeitBetrug Startseite" onClick={() => setMenu(false)}><Brand/></Link>
+        <nav aria-label="Hauptnavigation" className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-3 py-2 max-[651px]:pt-4" onClick={e => { if ((e.target as Element).closest('a')) setMenu(false); }}>
           <NavItem to="/">Überblick</NavItem>
           {view[0] === 'redaktion' && editorial(user) ? <EditorNav/> : <StudentNav/>}
         </nav>
@@ -111,7 +111,7 @@ function Layout() {
           <div className="px-3.5"><Logout/></div>
         </div>
       </aside>
-      <div className="flex min-h-screen flex-col bg-paper max-[650px]:pt-12 min-[651px]:pl-[260px]">
+      <div className="flex min-h-screen flex-col bg-paper max-[651px]:pt-12 min-[651px]:pl-[260px]">
         <main id="inhalt" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-8 sm:py-10"><Outlet/></main>
         <footer className="px-4 pb-6 text-[13px] text-muted sm:px-8">AbiZeitBetrug. · Privater Jahrgangsbereich LMGU 2027</footer>
       </div>

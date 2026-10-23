@@ -1,5 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  await page.route('https://fonts.googleapis.com/**', route => route.abort());
+});
+
 const longName = 'Mia ' + 'N'.repeat(100) + ' Beispiel aus der Q13';
 const category = { id: 'memory', name: 'Erinnerungen an die letzte gemeinsame Abifahrt', description: 'Eine besonders lange Rubrikbeschreibung, die auf schmalen Bildschirmen sauber umbrechen muss.', kind: 'memory' };
 const submission = {
@@ -102,7 +106,7 @@ test('pending and request error states remain readable on mobile', async ({ page
   });
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto('/beitraege');
-  await expect(page.getByText('Einen Moment …')).toBeVisible();
+  await expect(page.getByRole('main').getByRole('status')).toContainText('Einen Moment …');
   release();
   await expect(page.getByRole('heading', { name: 'Meine Beiträge' })).toBeVisible();
   await page.unroute('**/api/v1/submissions');
@@ -123,6 +127,7 @@ for (const role of ['student', 'manager', 'admin'] as const) {
       await expect(page.locator('h1')).toBeVisible();
       if (role === 'admin') await expect(page.getByRole('row').nth(1)).toBeVisible();
       else await expect(page.getByRole('link', { name: /Die außergewöhnlich lange Geschichte/ }).first()).toBeVisible();
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
       const layout = await page.evaluate(() => ({
         viewport: window.innerWidth,
         document: document.documentElement.scrollWidth,
