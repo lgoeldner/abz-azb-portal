@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-root=$(cd "$(dirname "$0")/.." && pwd)
+root=$(cd "$(dirname "$0")/../.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 mkdir "$tmp/bin"
@@ -47,16 +47,16 @@ expect_refusal() {
   fi
 }
 
-expect_refusal 'missing acknowledgement' env -u RESTORE_ACK bash "$root/ops/restore.sh"
-expect_refusal 'incorrect acknowledgement' env RESTORE_ACK=wrong bash "$root/ops/restore.sh"
+expect_refusal 'missing acknowledgement' env -u RESTORE_ACK bash "$root/deployables/backup/restore.sh"
+expect_refusal 'incorrect acknowledgement' env RESTORE_ACK=wrong bash "$root/deployables/backup/restore.sh"
 export RESTORE_ACK=I_CONFIRM_DISPOSABLE_RESTORE
 mkdir "$RESTORE_UPLOAD_DIR"
 touch "$RESTORE_UPLOAD_DIR/existing"
-expect_refusal 'non-empty upload destination' bash "$root/ops/restore.sh"
+expect_refusal 'non-empty upload destination' bash "$root/deployables/backup/restore.sh"
 rm -f "$CALL_LOG"
 rm -rf "$RESTORE_UPLOAD_DIR"
 mkdir "$RESTORE_UPLOAD_DIR"
-if bash "$root/ops/restore.sh" >/dev/null 2>&1; then
+if bash "$root/deployables/backup/restore.sh" >/dev/null 2>&1; then
   echo 'Expected restore refusal: non-empty database' >&2
   exit 1
 fi

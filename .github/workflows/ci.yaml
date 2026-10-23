@@ -51,7 +51,7 @@ jobs:
           OIDC_ISSUER: http://localhost:9090
           OIDC_CLIENT_ID: portal-dev
           OIDC_CLIENT_SECRET: dev-only
-          AUTH_MOCK_USERS: ../auth-mock/users.yaml
+          AUTH_MOCK_USERS: ../deployables/auth-mock/users.yaml
           AUTH_MOCK_REDIRECT_URIS: http://127.0.0.1:8080/auth/callback
           SESSION_SECRET: ci-only-secret-at-least-32-bytes-long
           UPLOAD_DIR: /tmp/portal-uploads
@@ -83,9 +83,9 @@ jobs:
         run: cd web && npx playwright install --with-deps chromium && npm run test:e2e
       - name: Ops shell and restore safety checks
         run: |
-          bash -n ops/backup.sh ops/restore.sh ops/test-backup-lock.sh ops/test-restore-safety.sh scripts/test-recovery.sh
-          bash ops/test-backup-lock.sh
-          bash ops/test-restore-safety.sh
+          bash -n deployables/backup/backup.sh deployables/backup/restore.sh deployables/backup/test-backup-lock.sh deployables/backup/test-restore-safety.sh scripts/test-recovery.sh
+          bash deployables/backup/test-backup-lock.sh
+          bash deployables/backup/test-restore-safety.sh
       - name: API contract
         run: node scripts/check-contract.mjs
 

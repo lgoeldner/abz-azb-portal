@@ -2,7 +2,7 @@ services:
   auth-mock:
     build:
       context: .
-      dockerfile: auth-mock/Dockerfile
+      dockerfile: deployables/auth-mock/Dockerfile
     environment:
       APP_ENV: development
       ADDR: :9090
@@ -14,7 +14,7 @@ services:
     ports:
       - "127.0.0.1:9090:9090"
     volumes:
-      - ./auth-mock/users.yaml:/config/users.yaml:ro
+      - ./deployables/auth-mock/users.yaml:/config/users.yaml:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/healthz"]
       interval: 2s
@@ -30,7 +30,9 @@ services:
     networks: [internal, egress]
 
   portal:
-    build: .
+    build:
+      context: .
+      dockerfile: deployables/portal/Dockerfile
     entrypoint: ["/bin/sh", "-c"]
     command: ["portal migrate && portal seed && exec portal serve"]
     environment:

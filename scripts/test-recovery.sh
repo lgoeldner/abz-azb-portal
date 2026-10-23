@@ -38,11 +38,11 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 if [[ -z "${PORTAL_IMAGE:-}" ]]; then
-  dc build -t "$portal_image" -f "$root/Dockerfile" "$root"
+  dc build -t "$portal_image" -f "$root/deployables/portal/Dockerfile" "$root"
   remove_portal_image=1
 fi
 if [[ -z "${BACKUP_IMAGE:-}" ]]; then
-  dc build -t "$backup_image" -f "$root/ops/Backup.Dockerfile" "$root"
+  dc build -t "$backup_image" -f "$root/deployables/backup/Dockerfile" "$root"
   remove_backup_image=1
 fi
 

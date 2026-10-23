@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-root=$(cd "$(dirname "$0")/.." && pwd)
+root=$(cd "$(dirname "$0")/../.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/bin" "$tmp/uploads" "$tmp/repository" "$tmp/status"
@@ -49,16 +49,16 @@ export BACKUP_HEARTBEAT_URL=file:///etc/hostname BACKUP_ONCE=1
 export UPLOAD_DIR="$tmp/uploads" BACKUP_STATUS_FILE="$tmp/status/status.json"
 export FAIL_ONCE_MARKER="$tmp/restic-failed-once"
 
-if bash "$root/ops/backup.sh" >/dev/null 2>&1; then
+if bash "$root/deployables/backup/backup.sh" >/dev/null 2>&1; then
   echo 'Expected the first disposable backup attempt to fail' >&2
   exit 1
 fi
-bash "$root/ops/backup.sh" >/dev/null
+bash "$root/deployables/backup/backup.sh" >/dev/null
 if [[ ! -s "$BACKUP_STATUS_FILE" ]]; then
   echo 'Retry after failed backup did not publish success status' >&2
   exit 1
 fi
 # The lock file remains to avoid inode races; a subsequent success proves that
 # flock was released when the failed attempt returned.
-bash "$root/ops/backup.sh" >/dev/null
+bash "$root/deployables/backup/backup.sh" >/dev/null
 echo 'backup lock release and retry checks passed'

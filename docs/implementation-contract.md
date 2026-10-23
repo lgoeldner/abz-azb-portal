@@ -35,7 +35,7 @@ Endpoints:
 
 - `GET /me` -> Me. `POST /auth/logout` (outside prefix) logs out with CSRF header, then client reloads login.
 - `GET /auth/login` redirects to the external OIDC provider; `GET /auth/callback` exchanges a one-use authorization code with PKCE and verifies the signed ID token, issuer, audience, expiry and nonce before creating the session. Both auth modes use this same consumer flow. The portal exposes no identity-list or mock-provider routes.
-- Development only: the separate `auth-mock` service at `http://localhost:9090` reads `auth-mock/users.yaml` (`users: [{subject, name}]`). Its `/authorize` page lists every configured identity; `POST /authorize` selects one. Discovery, `/keys` and `/token` implement OIDC authorization-code flow with S256 PKCE and short-lived RS256 JWTs. Exact callback allowlists prevent open redirects. The provider has no database access or portal role claims. Seeded UUID subjects retain local fixture permissions; new subjects become pending local accounts. The provider refuses to run unless `APP_ENV=development` and is absent from production Compose.
+- Development only: the separate `auth-mock` service at `http://localhost:9090` reads `deployables/auth-mock/users.yaml` (`users: [{subject, name}]`). Its `/authorize` page lists every configured identity; `POST /authorize` selects one. Discovery, `/keys` and `/token` implement OIDC authorization-code flow with S256 PKCE and short-lived RS256 JWTs. Exact callback allowlists prevent open redirects. The provider has no database access or portal role claims. Seeded UUID subjects retain local fixture permissions; new subjects become pending local accounts. The provider refuses to run unless `APP_ENV=development` and is absent from production Compose.
 - `GET /categories` -> Category[]. Admin `POST /categories` `{name,description,kind}`; `PATCH /categories/{id}` same fields.
 - `GET /submissions?category_id=&status=&q=` -> Submission[]. Students automatically restricted to own; editors all. `POST /submissions` `{idempotency_key,category_id,title,body,context}` creates pending. `GET /submissions/{id}` -> Submission.
 - `PATCH /submissions/{id}` `{version,title,body,context,category_id}`. Author only while pending; category edit restrictions for managers. Revision and audit transaction.
@@ -54,7 +54,7 @@ Endpoints:
 
 ## Ownership and quality
 
-- Backend agent owns server/, migrations, backend tests. UI agent owns web/. Ops agent owns ops/, Dockerfile, compose files, Makefile, .github/workflows/.
+- Backend agent owns server/, migrations, backend tests. UI agent owns web/. Ops agent owns ops/, deployables/, compose files, Makefile, .github/workflows/.
 - Root owns docs/, README, .gitignore, integration fixes. Shared changes coordinated before edits.
 - Every data read enforces role/ownership, including files, revision history, exports and poll data. Managers read all submissions but mutate only granted categories. Student pending edits preserve history. No audit or system log stores credentials.
 - Production never enables mock login. Mock seed identities are deterministic. Admin privileges remain local to the application.

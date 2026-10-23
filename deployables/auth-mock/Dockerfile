@@ -9,7 +9,7 @@ FROM alpine:3.22
 RUN apk add --no-cache ca-certificates \
     && addgroup -S -g 10002 authmock && adduser -S -D -H -u 10002 -G authmock authmock
 COPY --from=build /out/auth-mock /usr/local/bin/auth-mock
-COPY auth-mock/users.yaml /config/users.yaml
+COPY deployables/auth-mock/users.yaml /config/users.yaml
 USER authmock
 ENV ADDR=:9090 AUTH_MOCK_USERS=/config/users.yaml
 EXPOSE 9090

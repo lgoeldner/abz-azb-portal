@@ -19,9 +19,9 @@ down:
 	$(DEV_COMPOSE) down
 
 check:
-	bash -n scripts/*.sh ops/*.sh
-	bash ops/test-backup-lock.sh
-	bash ops/test-restore-safety.sh
+	bash -n scripts/*.sh deployables/backup/*.sh
+	bash deployables/backup/test-backup-lock.sh
+	bash deployables/backup/test-restore-safety.sh
 	cd server && go test -race ./... && go vet ./...
 	cd web && npm ci && npm run typecheck && npm test -- --run && npm run build
 	node scripts/check-contract.mjs

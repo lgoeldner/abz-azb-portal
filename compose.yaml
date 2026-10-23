@@ -18,7 +18,9 @@ services:
     networks: [internal]
 
   portal:
-    build: .
+    build:
+      context: .
+      dockerfile: deployables/portal/Dockerfile
     image: abizeitung-portal:${APP_VERSION:-local}
     restart: unless-stopped
     command: ["serve"]
@@ -55,7 +57,7 @@ services:
     environment:
       PUBLIC_HOST: ${PUBLIC_HOST:?Set PUBLIC_HOST to the public DNS name}
     volumes:
-      - ./ops/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./deployables/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on: [portal]
@@ -64,7 +66,7 @@ services:
   backup:
     build:
       context: .
-      dockerfile: ops/Backup.Dockerfile
+      dockerfile: deployables/backup/Dockerfile
     image: abizeitung-portal-backup:${APP_VERSION:-local}
     restart: unless-stopped
     profiles: [production]

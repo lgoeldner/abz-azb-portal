@@ -13,7 +13,7 @@ make doctor
 make dev
 ```
 
-Open [localhost:5173](http://localhost:5173). The Go API runs at `localhost:8080`; Vite proxies API and authentication routes to it. The login button redirects to the separate mock provider at [localhost:9090](http://localhost:9090), which lists all identities from `auth-mock/users.yaml` and returns signed JWTs through the OIDC authorization-code flow. These are fake identities; development must never hold real school data on a publicly accessible host.
+Open [localhost:5173](http://localhost:5173). The Go API runs at `localhost:8080`; Vite proxies API and authentication routes to it. The login button redirects to the separate mock provider at [localhost:9090](http://localhost:9090), which lists all identities from `deployables/auth-mock/users.yaml` and returns signed JWTs through the OIDC authorization-code flow. These are fake identities; development must never hold real school data on a publicly accessible host.
 
 The workflow starts PostgreSQL and the `auth-mock` container with `docker compose` on the current Docker context, then runs the Go API and Vite on the host. It migrates and seeds the development database. `make down` stops the development containers without deleting collected data. Docker volumes are persistent; never use `down -v` on a database you need. Set `DOCKER_CONTEXT` to target a different engine.
 
@@ -21,7 +21,7 @@ You can also start either host service separately. `make 'dev:backend'` starts P
 
 `make doctor` checks the Docker engine, Docker Compose, Go, Node/npm, and `.env.dev`, and gives setup guidance for missing prerequisites. Local development uses `PUBLIC_URL=http://localhost:5173`. Production builds and deployment continue to use Docker Compose on Linux.
 
-Edit `auth-mock/users.yaml` to add or rename fake identities, then restart the provider:
+Edit `deployables/auth-mock/users.yaml` to add or rename fake identities, then restart the provider:
 
 ```sh
 docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml restart auth-mock
