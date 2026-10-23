@@ -11,6 +11,7 @@ const submission = {
 const poll = {
   id: 'long-poll', category_id: category.id, title: 'Abstimmung ' + 'P'.repeat(100), description: 'Beschreibung '.repeat(20),
   kind: 'proposal', format: 'single_choice', status: 'open', allow_self_vote: false, my_option_id: null, version: 1,
+  created_at: '2026-10-20T12:00:00Z', opened_at: '2026-10-21T12:00:00Z', ballot_count: null as number | null,
   options: [{ id: 'choice-1', label: 'Option ' + 'O'.repeat(100) }, { id: 'choice-2', label: 'Zweite Option' }],
 };
 const widths = [320, 390, 640, 650, 651, 768, 850, 851, 1024, 1150, 1151, 1440, 1920];
@@ -27,7 +28,7 @@ async function useFixtures(page: Page, role: 'student' | 'manager' | 'admin') {
     else if (path === '/submissions/long-story') data = submission;
     else if (path === '/submissions/long-story/revisions') data = [{ id: 'revision-1', version: 1, actor_name: longName, title: submission.title, body: submission.body, context: submission.context, status: 'pending', created_at: submission.updated_at }];
     else if (path === '/submissions/long-story/corrections') data = [];
-    else if (path === '/polls') data = [poll];
+    else if (path === '/polls') data = [role === 'student' ? poll : { ...poll, ballot_count: 3 }];
     else if (path === '/polls/long-poll/results') data = [{ option_id: 'choice-1', label: poll.options[0].label, count: 2 }, { option_id: 'choice-2', label: 'Zweite Option', count: 1 }];
     else if (path === '/polls/long-poll/audit') data = [];
     else if (path === '/roster') data = [];
@@ -42,10 +43,10 @@ test('overview, contribution detail and poll layouts stay within every viewport'
   await useFixtures(page, 'student');
   for (const width of widths) {
     await page.setViewportSize({ width, height: 800 });
-    for (const [path, heading] of [['/', 'Mach sie unvergesslich.'], ['/beitraege/long-story', submission.title], ['/abstimmungen/long-poll', poll.title]] as const) {
+    for (const [path, heading] of [['/', /^Hey Mia\./], ['/beitraege/long-story', submission.title], ['/abstimmungen/long-poll', poll.title]] as const) {
       await page.goto(path);
       await expect(page.getByRole('heading', { name: heading })).toBeVisible();
-      if (path === '/') await expect.poll(() => page.locator('.hero h2').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+      if (path === '/') await expect.poll(() => page.getByRole('heading', { level: 1 }).evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     }
     await page.goto('/beitraege/long-story');
@@ -57,7 +58,7 @@ test('overview, contribution detail and poll layouts stay within every viewport'
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto('/');
   await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth && document.querySelector('.hero h2')!.scrollWidth <= document.querySelector('.hero h2')!.clientWidth)).toBe(true);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth && document.querySelector('h1')!.scrollWidth <= document.querySelector('h1')!.clientWidth)).toBe(true);
 });
 
 test('editor can open the poll form without horizontal page overflow', async ({ page }) => {
@@ -77,7 +78,7 @@ for (const role of ['manager', 'admin'] as const) {
     for (const width of widths) {
       await page.setViewportSize({ width, height: 800 });
       await page.goto('/abstimmungen/long-poll');
-      await expect(page.locator('.result').first()).toBeVisible();
+      await expect(page.getByText('Zweite Option').first()).toBeVisible();
       const layout = await page.evaluate(() => ({
         viewport: window.innerWidth,
         document: document.documentElement.scrollWidth,
@@ -120,8 +121,8 @@ for (const role of ['student', 'manager', 'admin'] as const) {
       await page.setViewportSize({ width, height: 800 });
       await page.goto(path);
       await expect(page.locator('h1')).toBeVisible();
-      if (role === 'admin') await expect(page.locator('.table-scroll tbody tr').first()).toBeVisible();
-      else await expect(page.locator('.submission-row').first()).toBeVisible();
+      if (role === 'admin') await expect(page.getByRole('row').nth(1)).toBeVisible();
+      else await expect(page.getByRole('link', { name: /Die außergewöhnlich lange Geschichte/ }).first()).toBeVisible();
       const layout = await page.evaluate(() => ({
         viewport: window.innerWidth,
         document: document.documentElement.scrollWidth,
@@ -141,9 +142,10 @@ for (const role of ['student', 'manager', 'admin'] as const) {
     await page.setViewportSize({ width: 640, height: 360 });
     await page.goto(path);
     await page.getByRole('button', { name: 'Menü öffnen' }).click();
-    await expect(page.getByRole('link', { name: 'Meine Beiträge' })).toBeVisible();
-    await page.locator('.sidebar').evaluate(element => { element.scrollTop = element.scrollHeight; });
-    await expect(page.locator('.sidebar .logout')).toBeInViewport();
+    const aside = page.getByRole('complementary', { name: 'Seitenleiste' });
+    await expect(aside.getByRole('link', { name: 'Überblick' })).toBeVisible();
+    await aside.evaluate(element => { element.scrollTop = element.scrollHeight; });
+    await expect(aside.getByRole('button', { name: /Abmelden/ })).toBeInViewport();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 }

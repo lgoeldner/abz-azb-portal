@@ -10,25 +10,34 @@ async function signInAs(page: Page, role: 'Jahrgang' | 'Redaktion' | 'Administra
   await expect(page.getByRole('link', { name: 'AbiZeitBetrug Startseite' })).toBeVisible();
 }
 
+// Students reach polls from the sidebar: open ones under "Offen", answered or finished ones under "Erledigt".
+async function openFirstPoll(page: Page) {
+  const aside = page.getByRole('complementary', { name: 'Seitenleiste' });
+  const open = aside.getByRole('list', { name: 'Offen' }).getByRole('link');
+  if (await open.count()) await open.first().click();
+  else {
+    await aside.getByText(/^Erledigt/).click();
+    await aside.getByRole('link', { name: /abgestimmt|beendet/ }).first().click();
+  }
+}
+
 test('student signs in, submits a contribution, and can access polls', async ({ page }) => {
   await signInAs(page, 'Jahrgang', 'Mia Weber');
-  await page.getByRole('link', { name: 'Meine Beiträge' }).click();
-  await page.getByRole('link', { name: /Neuer Beitrag/ }).click();
+  await page.getByRole('complementary', { name: 'Seitenleiste' }).getByRole('link', { name: /^Ideen/ }).click();
   await page.getByPlaceholder('Gib deiner Erinnerung einen Namen').fill(`E2E Erinnerung ${Date.now()}`);
   await page.getByPlaceholder('Was ist passiert? Welcher Spruch darf nicht fehlen?').fill('Eine Geschichte aus dem Testlauf.');
   await page.getByRole('button', { name: /Beitrag einreichen/ }).click();
   await expect(page.getByRole('heading', { name: /E2E Erinnerung/ })).toBeVisible();
-  await expect(page.locator('.page-head .badge').filter({ hasText: 'In Prüfung' })).toBeVisible();
-  await page.getByRole('link', { name: 'Abstimmungen' }).click();
-  await expect(page.getByRole('heading', { name: 'Der Jahrgang entscheidet.' })).toBeVisible();
+  await expect(page.getByText('In Prüfung').first()).toBeVisible();
+  await page.getByRole('complementary', { name: 'Seitenleiste' }).getByRole('link', { name: 'Meine Beiträge' }).click();
+  await expect(page.getByRole('link', { name: /E2E Erinnerung/ }).first()).toBeVisible();
+  await openFirstPoll(page);
+  await expect(page).toHaveURL(/\/abstimmungen\/[^/]+$/);
 });
 
 test('student casts a ballot in the seeded open poll', async ({ page }) => {
   await signInAs(page, 'Jahrgang', 'Mia Weber');
-  await page.getByRole('link', { name: 'Abstimmungen' }).click();
-  const openPoll = page.locator('.poll-card').filter({ hasText: 'Offen' }).first();
-  await expect(openPoll, 'the seeded development data includes an open poll').toBeVisible();
-  await openPoll.click();
+  await openFirstPoll(page);
   const option = page.locator('input[name="ballot"]:enabled').first();
   await expect(option, 'the seeded poll has an eligible option').toBeVisible();
   await option.check();
@@ -39,8 +48,7 @@ test('student casts a ballot in the seeded open poll', async ({ page }) => {
 test('editor reviews and accepts an assigned contribution, exports it, and sees poll results', async ({ page }) => {
   await signInAs(page, 'Jahrgang', 'Mia Weber');
   const title = `E2E Redaktion ${Date.now()}`;
-  await page.getByRole('link', { name: /Deinen Beitrag einreichen/ }).click();
-  await page.getByLabel('Rubrik').selectOption({ label: 'Ideen' });
+  await page.getByRole('complementary', { name: 'Seitenleiste' }).getByRole('link', { name: /^Ideen/ }).click();
   await page.getByPlaceholder('Gib deiner Erinnerung einen Namen').fill(title);
   await page.getByPlaceholder('Was ist passiert? Welcher Spruch darf nicht fehlen?').fill('Ein Beitrag für den Prüfablauf.');
   await page.getByRole('button', { name: /Beitrag einreichen/ }).click();
@@ -48,24 +56,25 @@ test('editor reviews and accepts an assigned contribution, exports it, and sees 
 
   await page.context().clearCookies();
   await signInAs(page, 'Redaktion');
-  await page.getByRole('link', { name: 'Redaktion', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Aus Geschichten wird Zeitung.' })).toBeVisible();
+  await page.getByRole('complementary', { name: 'Seitenleiste' }).getByRole('link', { name: 'Alle Beiträge' }).click();
+  await expect(page).toHaveURL(/\/redaktion$/);
   await page.getByPlaceholder('Titel, Text, Name …').fill(title);
-  const review = page.locator('.submission-row').filter({ hasText: title });
+  const review = page.getByRole('link', { name: new RegExp(title) });
   await expect(review, 'the submitted contribution is visible to the editor').toBeVisible();
   await review.click();
   await expect(page.getByRole('heading', { name: title })).toBeVisible();
   await page.getByRole('button', { name: /Für die Zeitung annehmen/ }).click();
-  await expect(page.locator('.page-head .badge').filter({ hasText: 'Angenommen' })).toBeVisible();
-  await page.getByRole('link', { name: 'Redaktion', exact: true }).click();
+  await expect(page.getByText('Angenommen').first()).toBeVisible();
+  await page.getByRole('complementary', { name: 'Seitenleiste' }).getByRole('link', { name: 'Alle Beiträge' }).click();
   await page.getByLabel('Rubrik').last().selectOption({ label: 'Ideen' });
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('link', { name: /ZIP herunterladen/ }).click();
   await expect(downloadPromise).resolves.toBeTruthy();
 
-  await page.getByRole('link', { name: 'Abstimmungen' }).click();
-  await page.getByRole('link', { name: /Unser Abimotto/ }).click();
-  await expect(page.getByText('NUR FÜR DIE REDAKTION')).toBeVisible();
+  await page.getByRole('complementary', { name: 'Seitenleiste' }).getByRole('link', { name: /Unser Abimotto/ }).click();
+  await expect(page.getByRole('heading', { name: /Unser Abimotto/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Gesamtergebnisse' })).toBeVisible();
+  await expect(page.getByText(/Nur für die Redaktion · \d+ abgegebene Stimme/)).toBeVisible();
 });
 
 test('admin opens access management and activity log on mobile', async ({ page }) => {

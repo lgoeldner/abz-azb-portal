@@ -1,162 +1,342 @@
-import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, NavLink, Navigate, Outlet, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, ApiError, canEdit, date, editorial, json, setCsrf, statusLabels, type Attachment, type AuditEvent, type BallotAudit, type Category, type Correction, type Me, type Poll, type PollResult, type Revision, type Submission, type SystemStatus, type User } from './api';
-const Session = createContext<Me>(null!);
-const useSession = () => useContext(Session);
-function photoValidationError(files: File[]) {
-  if (files.length > 10) return 'Bitte wähle höchstens 10 Bilder aus.';
-  if (files.some(file => file.size > 20 * 1024 * 1024)) return 'Jedes Bild darf höchstens 20 MiB groß sein.';
-  const extensions: Record<string, string[]> = { 'image/jpeg': ['jpg', 'jpeg'], 'image/png': ['png'], 'image/webp': ['webp'] };
-  if (files.some(file => {
-    const extension = file.name.split('.').pop()?.toLowerCase();
-    const supported = extensions[file.type];
-    return !supported || !extension || !supported.includes(extension);
-  })) return 'Bitte wähle nur JPEG-, PNG- oder WebP-Bilder aus.';
-  return '';
-}
-function useData<T>(path: string, enabled = true) { return useQuery({ queryKey: [path], queryFn: () => api<T>(path), enabled }); }
-function useAction() {
-  const client = useQueryClient(); const [busy, setBusy] = useState(false); const [error, setError] = useState<Error|null>(null); const [success, setSuccess] = useState('');
-  async function run(fn: () => Promise<unknown>, message = '') { setBusy(true); setError(null); setSuccess(''); try { await fn(); await client.invalidateQueries(); setSuccess(message); } catch (e) { setError(e as Error); } finally { setBusy(false); } }
-  return { busy, error, success, run, feedback: <>{error && <Failure error={error}/>} {success && <p className="notice success" role="status">{success}</p>}</> };
-}
-function Failure({ error, retry }: { error: Error; retry?: () => void }) { return <div className="notice error" role="alert"><strong>{error instanceof ApiError && error.status === 409 ? 'Eine neuere Version liegt vor.' : 'Das hat noch nicht geklappt.'}</strong><p>{error instanceof ApiError && error.status === 409 ? 'Deine Eingaben bleiben erhalten. Lade die aktuelle Version, prüfe die Änderungen und versuche es erneut.' : error.message}</p>{error instanceof ApiError && error.status === 401 ? <a href="/auth/login">Erneut anmelden →</a> : retry && <button type="button" className="text-button" onClick={retry}>Erneut versuchen</button>}</div>; }
-function Loading() { return <div className="loading" role="status"><span className="spinner"/> Einen Moment …</div>; }
-function Empty({ children }: { children: ReactNode }) { return <div className="empty"><span aria-hidden="true">↗</span><p>{children}</p></div>; }
-function Badge({ status }: { status: keyof typeof statusLabels }) { return <span className={`badge ${status}`}><span/>{statusLabels[status]}</span>; }
-function Arrow() { return <span aria-hidden="true">↗</span>; }
-function PageHead({ eyebrow, title, children, action }: { eyebrow: string; title: string; children?: ReactNode; action?: ReactNode }) { return <header className="page-head"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1>{children && <p className="lead">{children}</p>}</div>{action}</header>; }
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { api, ApiError, editorial, json, setCsrf, type Category, type Me, type Poll, type Submission } from './api';
+import { Arrow, Badge, Empty, Failure, Loading, PageHead, Session, SubmissionList, btn, heading, notice, roleName, since, useAction, useData, useSession, useView, type View } from './ui';
+import { Admin, ContributionDetail, Contributions, Editorial, NewContribution, NotFound, PollDetail, Polls } from './pages';
+
 export function App() {
   const me = useData<Me>('/me');
   useEffect(() => { if (me.data) setCsrf(me.data.csrf_token); }, [me.data]);
-  if (me.isPending) return <main className="boot"><Loading/></main>;
-  if (me.error) return me.error instanceof ApiError && me.error.status === 401 ? <Login/> : <main className="boot"><Failure error={me.error} retry={() => me.refetch()}/></main>;
-  if (!me.data.user.admitted) return <main className="boot"><Brand/><h1>Dein Platz ist reserviert.</h1><p>Die Administration muss deinen Zugang noch freigeben. Melde dich beim Abizeitungsteam.</p><Logout/><button className="secondary" onClick={() => me.refetch()}>Freigabe prüfen</button></main>;
+  if (me.isPending) return <main className="grid min-h-screen place-items-center p-6"><Loading/></main>;
+  if (me.error) return me.error instanceof ApiError && me.error.status === 401 ? <Login/> : <main className="grid min-h-screen place-items-center p-6"><Failure error={me.error} retry={() => me.refetch()}/></main>;
+  if (!me.data.user.admitted) return (
+    <main className="grid min-h-screen place-items-center p-6">
+      <section className="flex w-full max-w-md flex-col items-start gap-5 rounded-ui border border-line bg-white p-6 sm:p-8">
+        <Brand/>
+        <h1 className="text-2xl font-semibold tracking-tight">Dein Platz ist reserviert.</h1>
+        <p className="text-[15px] text-muted">Die Administration muss deinen Zugang noch freigeben. Melde dich beim Abizeitungsteam.</p>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          <button type="button" className={btn.secondary} onClick={() => me.refetch()}>Freigabe prüfen</button>
+          <Logout/>
+        </div>
+      </section>
+    </main>
+  );
   return <Session.Provider value={me.data}><Routes><Route element={<Layout/>}><Route index element={<Overview/>}/><Route path="beitraege" element={<Contributions/>}/><Route path="beitraege/neu" element={<NewContribution/>}/><Route path="beitraege/:id" element={<ContributionDetail/>}/><Route path="abstimmungen" element={<Polls/>}/><Route path="abstimmungen/:id" element={<PollDetail/>}/><Route path="redaktion" element={<RoleGuard><Editorial/></RoleGuard>}/><Route path="admin" element={<RoleGuard admin><Admin/></RoleGuard>}/><Route path="*" element={<NotFound/>}/></Route></Routes></Session.Provider>;
 }
-function Brand() { return <span className="brand"><span className="brand-symbol" aria-hidden="true"><span/></span><span>AbiZeit<span className="brand-last">Betrug.</span><small>LMGU · JAHRGANG 2027</small></span></span>; }
-function Logout() { const action = useAction(); return <>{action.feedback}<button className="logout" disabled={action.busy} onClick={() => action.run(async () => { await api('/auth/logout', json('POST')); window.location.assign('/'); })}>Abmelden <span aria-hidden="true">↗</span></button></>; }
-function Login() {
-  return <main className="login"><section className="login-copy"><Brand/><div><p className="eyebrow">UNSERE KÖNIGSDISZIPLIN</p><h1>Die beste Zeit.<br/><span>Zum Festhalten.</span></h1><p>13 Jahre Schule. Unzählige Geschichten.<br/>Hier entsteht unsere Abizeitung.</p></div><span className="edition">LMGU 2027 <span>·</span> UNSER JAHRGANG, UNSERE GESCHICHTEN.</span></section><section className="login-card"><span className="kicker">DEIN JAHRGANG WARTET</span><h2>Schön, dass du da bist.</h2><p>Melde dich an, um Erinnerungen einzureichen und bei unseren Abstimmungen mitzumachen.</p><a className="button primary" href="/auth/login">Mit Schulkonto anmelden <Arrow/></a><p className="privacy-note">Privater Bereich für unseren Jahrgang. Beiträge und Bilder sind nur für berechtigte Personen zugänglich.</p></section></main>;
+
+// ---------- small helpers ----------
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const time = (value: string | null | undefined) => (value ? new Date(value).getTime() : 0);
+const newestOpened = (a: Poll, b: Poll) => time(b.opened_at ?? b.created_at) - time(a.opened_at ?? a.created_at);
+const kindLabel = (kind: Poll['kind']) => (kind === 'person' ? 'Personenwahl' : 'Vorschlag');
+const statusOrder = { open: 0, draft: 1, closed: 2 } as const;
+
+// The sidebar switch and the home page must agree on the view, so Layout owns the single hook instance.
+const ViewContext = createContext<[View, (view: View) => void]>(['schueler', () => {}]);
+
+function Mark({ className = 'size-7' }: { className?: string }) {
+  return <span aria-hidden="true" className={`relative inline-block flex-none rounded-full border-2 border-ink ${className}`}><span className="absolute bottom-1/2 left-1/2 h-[34%] w-0.5 -translate-x-1/2 rounded-full bg-ink"/><span className="absolute left-1/2 top-1/2 h-0.5 w-[28%] -translate-y-1/2 rounded-full bg-ink"/></span>;
 }
-const roleName = (role: User['role']) => ({ student: 'Jahrgang', manager: 'Redaktion', admin: 'Administration' })[role];
-function Layout() { const { user } = useSession(); const [menu, setMenu] = useState(false); return <><a className="skip-link" href="#inhalt">Zum Inhalt</a><div className="app-layout"><aside className={`sidebar ${menu ? 'mobile-open' : ''}`}><Link to="/" className="brand-link" aria-label="AbiZeitBetrug Startseite" onClick={() => setMenu(false)}><Brand/></Link><p className="nav-label">DEIN PORTAL</p><nav aria-label="Hauptnavigation" onClick={() => setMenu(false)}><NavLink to="/" end><span aria-hidden="true">◫</span> Überblick</NavLink><NavLink to="/beitraege"><span aria-hidden="true">▤</span> Meine Beiträge</NavLink><NavLink to="/abstimmungen"><span aria-hidden="true">◉</span> Abstimmungen</NavLink>{editorial(user) && <><p className="nav-label">HINTER DEN KULISSEN</p><NavLink to="/redaktion"><span aria-hidden="true">✳</span> Redaktion</NavLink></>}{user.role === 'admin' && <NavLink to="/admin"><span aria-hidden="true">⚙</span> Verwaltung</NavLink>}</nav><div className="sidebar-bottom"><div className="year-card"><span className="mini-watch" aria-hidden="true">◷</span><p>Bis zum letzten<br/><strong>Seitenwechsel.</strong></p><small>ABITUR · JUNI 2027</small></div><div className="account"><span className="avatar">{user.name.split(' ').map(n => n[0]).slice(0,2).join('')}</span><div><strong>{user.name}</strong><small>{roleName(user.role)}</small></div></div><Logout/></div></aside><div className="main-wrap"><header className="topbar"><button className="menu-toggle" aria-label="Menü öffnen" aria-expanded={menu} onClick={() => setMenu(!menu)}>☰</button><span>Unser Jahrgang. <strong>Unsere Geschichten.</strong></span><span className="private"><span/> Privater Jahrgangsbereich</span></header><main id="inhalt" className="content"><Outlet/></main><footer className="footer"><span>AbiZeitBetrug. · LMGU 2027</span><span>Mit Erinnerungen gefüllt. Mit ♥ gemacht.</span></footer></div></div></>; }
-function RoleGuard({ children, admin = false }: { children: ReactNode; admin?: boolean }) { const { user } = useSession(); return (admin ? user.role === 'admin' : editorial(user)) ? children : <Navigate to="/" replace/>; }
-function Overview() {
-  const { user } = useSession(); const submissions = useData<Submission[]>('/submissions'); const polls = useData<Poll[]>('/polls'); const categories = useData<Category[]>('/categories');
-  const own = submissions.data?.filter(s => s.author_id === user.id) ?? []; const open = polls.data?.filter(p => p.status === 'open') ?? []; const first = user.name.split(' ')[0];
-  return <><PageHead eyebrow="DAS IST UNSERE ZEIT" title={`Hey ${first}. Mach sie unvergesslich.`}>Eine Erinnerung, ein Spruch, ein Foto: Deine Geschichte gehört dazu.</PageHead><section className="hero"><div className="hero-copy"><p className="eyebrow">ABIZEITUNG 2027 · LMGU</p><h2>Unsere<br/>Königs<span>disziplin.</span></h2><p>Zeit vertrödeln konnten wir schon immer.<br/>Jetzt machen wir etwas Bleibendes daraus.</p><Link className="button primary" to="/beitraege/neu">Deinen Beitrag einreichen <Arrow/></Link></div><div className="hero-art" aria-hidden="true"><span className="orbit orbit-one"/><span className="orbit orbit-two"/><span className="art-label">ZEIT FÜR<br/>ERINNERUNGEN</span><div className="watch-top"/><div className="watch-knob"/><div className="watch"><div className="watch-face"><i className="tick t1"/><i className="tick t2"/><i className="tick t3"/><i className="tick t4"/><span className="watch-number">27</span><div className="hand hour"/><div className="hand minute"/><div className="hand second"/><div className="watch-center"/><small>ABI / 2027</small></div></div><span className="art-star">✳</span></div></section><div className="stats-grid"><Stat number={own.length} label="Deine Geschichten" detail="Jeder Beitrag zählt."/><Stat number={own.filter(s => s.status === 'accepted').length} label="Bereit für die Zeitung" detail="Von der Redaktion angenommen."/><Stat number={open.length} label="Offene Abstimmungen" detail="Deine Stimme macht den Unterschied."/></div><section className="section"><div className="section-head"><div><p className="eyebrow">WAS BLEIBEN SOLL</p><h2>Platz für alles, was uns ausmacht.</h2></div><Link className="text-link" to="/beitraege/neu">Alle Rubriken <Arrow/></Link></div>{categories.isPending ? <Loading/> : categories.error ? <Failure error={categories.error} retry={() => categories.refetch()}/> : <div className="category-grid">{categories.data?.map((c, i) => <Link key={c.id} className="category-card" to={`/beitraege/neu?kategorie=${c.id}`}><div className="card-top"><span className={`category-icon icon-${c.kind}`}>{({ idea: '✦', quote: '“', memory: '↺', photo: '▧' })[c.kind]}</span><span className="card-index">0{i+1} <Arrow/></span></div><h3>{c.name}</h3><p>{c.description}</p><span className="category-cta">Etwas beitragen <Arrow/></span></Link>)}</div>}</section><section className="section recent"><div className="section-head"><div><p className="eyebrow">DEINE SPUREN</p><h2>Zuletzt eingereicht</h2></div><Link className="text-link" to="/beitraege">Alle Beiträge <Arrow/></Link></div>{submissions.isPending ? <Loading/> : submissions.error ? <Failure error={submissions.error} retry={() => submissions.refetch()}/> : own.length ? <SubmissionList items={own.slice(0,3)} categories={categories.data ?? []}/> : <Empty>Die erste Geschichte wartet auf dich. <Link to="/beitraege/neu">Jetzt einen Beitrag einreichen →</Link></Empty>}</section><div className="privacy-strip"><span aria-hidden="true">⌁</span><p><strong>Unsere Erinnerungen bleiben im Jahrgang.</strong> Nur du und berechtigte Mitglieder der Redaktion können deine Beiträge sehen.</p></div></>;
+function Brand({ large = false }: { large?: boolean }) {
+  return <span className="inline-flex items-center gap-2.5"><Mark className={large ? 'size-9' : 'size-7'}/><span className={`font-semibold tracking-tight ${large ? 'text-xl' : 'text-[17px]'}`}>AbiZeitBetrug.</span></span>;
 }
-function Stat({ number, label, detail }: { number: number; label: string; detail: string }) { return <article className="stat"><strong>{String(number).padStart(2,'0')}</strong><div><h3>{label}</h3><p>{detail}</p></div></article>; }
-function SubmissionList({ items, categories, showAuthor = false }: { items: Submission[]; categories: Category[]; showAuthor?: boolean }) { return <div className="submission-list">{items.map(s => <Link to={`/beitraege/${s.id}`} className="submission-row" key={s.id}><span className="submission-icon">{s.attachments?.length ? '▧' : '▤'}</span><div className="submission-title"><strong>{s.title}</strong><small>{categories.find(c => c.id === s.category_id)?.name ?? 'Beitrag'} · {showAuthor ? `${s.author_name} · ` : ''}{date(s.updated_at)}</small></div><Badge status={s.status}/><Arrow/></Link>)}</div>; }
-function Contributions() { const { user } = useSession(); const categories = useData<Category[]>('/categories'); const submissions = useData<Submission[]>('/submissions'); const [status,setStatus] = useState(''); const [search,setSearch] = useState(''); const own = submissions.data?.filter(s => s.author_id === user.id && (!status || s.status === status) && `${s.title} ${s.body}`.toLowerCase().includes(search.toLowerCase())) ?? []; return <><PageHead eyebrow="DEINE SPUREN IM JAHRGANG" title="Meine Beiträge" action={<Link className="button primary" to="/beitraege/neu">Neuer Beitrag <span>＋</span></Link>}>Alles, was du beigesteuert hast. Von der ersten Idee bis zur fertigen Seite.</PageHead><div className="filterbar"><label className="search-label"><span>Suchen</span><input type="search" placeholder="Geschichte finden …" value={search} onChange={e => setSearch(e.target.value)}/></label><label><span>Status</span><select value={status} onChange={e => setStatus(e.target.value)}><option value="">Alle Status</option>{(['pending','accepted','rejected','withdrawn'] as const).map(s => <option key={s} value={s}>{statusLabels[s]}</option>)}</select></label></div>{submissions.isPending ? <Loading/> : submissions.error ? <Failure error={submissions.error} retry={() => submissions.refetch()}/> : own.length ? <SubmissionList items={own} categories={categories.data ?? []}/> : <Empty>Hier ist noch Platz für Erinnerungen. <Link to="/beitraege/neu">Beitrag einreichen →</Link></Empty>}</>; }
-function NewContribution() {
-  const categories = useData<Category[]>('/categories');
-  const [params] = useSearchParams();
-  const navigate = useNavigate();
+function Logout() {
   const action = useAction();
-  const key = useRef(crypto.randomUUID());
-  const [saved, setSaved] = useState<Submission | null>(null);
-  const [files, setFiles] = useState<File[]>([]);
+  return <>{action.feedback}<button type="button" className={btn.text} disabled={action.busy} onClick={() => action.run(async () => { await api('/auth/logout', json('POST')); window.location.assign('/'); })}>Abmelden <Arrow/></button></>;
+}
 
-  async function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const data = new FormData(e.currentTarget);
-    await action.run(async () => {
-      const invalidFiles = photoValidationError(files);
-      if (invalidFiles) throw new Error(invalidFiles);
+function Login() {
+  return (
+    <main className="grid min-h-screen bg-paper md:grid-cols-[1.15fr_1fr]">
+      <section className="flex flex-col justify-between gap-12 p-6 sm:p-10 lg:p-14">
+        <Brand large/>
+        <div>
+          <span aria-hidden="true" className="block select-none text-[min(40vw,15rem)] font-bold leading-[.8] tracking-tighter text-pill">27</span>
+          <h1 className="mt-8 text-4xl font-semibold tracking-tight sm:text-5xl">Die beste Zeit.<br/><span className="text-muted">Zum Festhalten.</span></h1>
+          <p className="mt-4 max-w-md text-[17px] text-muted">13 Jahre Schule. Unzählige Geschichten.<br/>Hier entsteht unsere Abizeitung.</p>
+        </div>
+        <p className="text-sm text-muted">LMGU 2027 · Unser Jahrgang, unsere Geschichten.</p>
+      </section>
+      <section className="flex items-center bg-chrome p-6 sm:p-10 lg:p-14">
+        <div className="w-full max-w-md rounded-ui border border-line bg-white p-6 sm:p-8">
+          <h2 className="text-2xl font-semibold tracking-tight">Schön, dass du da bist.</h2>
+          <p className="mt-3 text-[15px] text-muted">Melde dich an, um Erinnerungen einzureichen und bei unseren Abstimmungen mitzumachen.</p>
+          <a className={`${btn.primary} mt-6 w-full`} href="/auth/login">Mit Schulkonto anmelden <Arrow/></a>
+          <p className="mt-5 text-sm text-muted">Privater Bereich für unseren Jahrgang. Beiträge und Bilder sind nur für berechtigte Personen zugänglich.</p>
+        </div>
+      </section>
+    </main>
+  );
+}
 
-      let current = saved ?? await api<Submission>('/submissions', json('POST', {
-        idempotency_key: key.current,
-        category_id: data.get('category_id'),
-        title: data.get('title'),
-        body: data.get('body'),
-        context: data.get('context'),
-      }));
-      setSaved(current);
-      let remaining = [...files];
-      for (const file of files) {
-        const upload = new FormData();
-        upload.set('file', file);
-        upload.set('version', String(current.version));
-        current = await api<Submission>(`/submissions/${current.id}/attachments`, { method: 'POST', body: upload });
-        setSaved(current);
-        remaining = remaining.slice(1);
-        setFiles(remaining);
-      }
-      navigate(`/beitraege/${current.id}`);
-    });
-  }
+// ---------- layout + sidebar ----------
+const navItem = 'flex min-h-9 items-center justify-between gap-3 rounded-ui px-2.5 py-1.5 text-[15px] max-[650px]:min-h-11';
+const groupLabel = 'px-2.5 text-[13px] text-muted';
 
-  return <>
-    <Link className="back-link" to="/beitraege">← Meine Beiträge</Link>
-    <PageHead eyebrow="EINE GESCHICHTE MEHR" title="Was sollen wir festhalten?">
-      Dein Beitrag wird erst nach der Prüfung durch die Redaktion für die Zeitung übernommen.
-    </PageHead>
-    {categories.isPending ? <Loading/> : categories.error ? <Failure error={categories.error} retry={() => categories.refetch()}/> : !categories.data?.length ? <Empty>Das Team richtet die Rubriken gerade ein.</Empty> :
-      <div className="form-layout">
-        <form className="panel form-panel" onSubmit={submit}>
-          <fieldset disabled={action.busy || !!saved}>
-            <label>Rubrik<select name="category_id" defaultValue={params.get('kategorie') ?? categories.data[0]?.id} required>{categories.data.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
-            <label>Titel<input name="title" placeholder="Gib deiner Erinnerung einen Namen" maxLength={200} required/></label>
-            <label>Dein Beitrag<textarea name="body" rows={7} placeholder="Was ist passiert? Welcher Spruch darf nicht fehlen?" maxLength={20000}/></label>
-            <label>Kontext & Hinweise <small>optional</small><textarea name="context" rows={3} placeholder="Wer, wann, wo? Was soll die Redaktion dazu wissen?" maxLength={5000}/></label>
-          </fieldset>
-          <label>Fotos <small>JPEG, PNG oder WebP · höchstens 10 Bilder · je 20 MiB · höchstens 24 Megapixel</small>
-            <input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={action.busy} onChange={e => setFiles(Array.from(e.target.files ?? []))}/>
-          </label>
-          {files.length > 0 && <p className="muted">{files.length} Datei(en) zum Hochladen: {files.map(f => f.name).join(', ')}</p>}
-          {saved && <p className="notice">Der Text ist bereits gespeichert. Noch ausstehende Fotos kannst du erneut hochladen. <Link to={`/beitraege/${saved.id}`}>Zum gespeicherten Beitrag</Link></p>}
-          {action.feedback}
-          {saved && action.error && files.length > 0 && <button type="button" className="secondary" onClick={() => navigate(`/beitraege/${saved.id}`)}>Ohne weitere Fotos fortfahren</button>}
-          <div className="form-actions">
-            <Link to="/beitraege" className="text-link">Abbrechen</Link>
-            <button className="primary" disabled={action.busy}>{action.busy ? 'Wird gespeichert …' : saved ? 'Fotos erneut hochladen' : 'Beitrag einreichen'} <Arrow/></button>
+function Layout() {
+  const { user } = useSession();
+  const view = useView();
+  const [menu, setMenu] = useState(false);
+  return (
+    <ViewContext.Provider value={view}>
+      <a className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-ui focus:bg-white focus:px-3 focus:py-2 focus:text-sm" href="#inhalt">Zum Inhalt</a>
+      <header className="fixed inset-x-0 top-0 z-30 flex h-12 items-center gap-3 border-b border-line bg-chrome px-2 min-[651px]:hidden">
+        <button type="button" className="grid size-10 place-items-center rounded-ui text-xl hover:bg-pill" aria-label={menu ? 'Menü schließen' : 'Menü öffnen'} aria-expanded={menu} onClick={() => setMenu(!menu)}><span aria-hidden="true">☰</span></button>
+        <Brand/>
+      </header>
+      {menu && <button type="button" tabIndex={-1} aria-hidden="true" className="fixed inset-0 z-30 bg-ink/30 min-[651px]:hidden" onClick={() => setMenu(false)}/>}
+      <aside aria-label="Seitenleiste" className={`fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col gap-6 overflow-y-auto border-r border-line bg-chrome px-3 py-5 max-[650px]:top-12 max-[650px]:w-[min(86vw,320px)] max-[650px]:transition-transform ${menu ? '' : 'max-[650px]:invisible max-[650px]:-translate-x-full'}`}>
+        <Link to="/" className="rounded-ui px-2.5" aria-label="AbiZeitBetrug Startseite" onClick={() => setMenu(false)}><Brand/></Link>
+        <nav aria-label="Hauptnavigation" className="flex flex-col gap-6" onClick={e => { if ((e.target as Element).closest('a')) setMenu(false); }}>
+          <NavItem to="/">Überblick</NavItem>
+          {view[0] === 'redaktion' && editorial(user) ? <EditorNav/> : <StudentNav/>}
+        </nav>
+        <div className="mt-auto flex flex-col gap-3">
+          {editorial(user) && <ViewSwitch onSwitch={() => setMenu(false)}/>}
+          <div className="flex items-center gap-3 px-1">
+            <span className="grid size-9 flex-none place-items-center rounded-full bg-pill text-[13px] font-semibold" aria-hidden="true">{user.name.split(' ').map(n => n[0]).slice(0, 2).join('')}</span>
+            <div className="min-w-0 leading-tight"><strong className="block truncate text-[15px] font-semibold">{user.name}</strong><small className="text-[13px] text-muted">{roleName(user.role)}</small></div>
           </div>
-        </form>
-        <aside className="tip-card"><span className="tip-icon">✦</span><h3>Kleine Momente.<br/>Große Geschichten.</h3><p>Ein Insider aus dem Unterricht, das beste Foto der Klassenfahrt oder eine Idee für unsere Zeitung.</p><hr/><strong>Dein Beitrag bleibt bearbeitbar.</strong><p>Solange er in Prüfung ist, kannst du Text und Bilder jederzeit ändern.</p><small>Bitte lade nur Bilder hoch, die du für unsere Abizeitung verwenden darfst.</small></aside>
-      </div>}
+          <div className="px-2.5"><Logout/></div>
+        </div>
+      </aside>
+      <div className="flex min-h-screen flex-col bg-paper max-[650px]:pt-12 min-[651px]:pl-[248px]">
+        <main id="inhalt" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-8 sm:py-10"><Outlet/></main>
+        <footer className="px-4 pb-6 text-[13px] text-muted sm:px-8">AbiZeitBetrug. · Privater Jahrgangsbereich LMGU 2027</footer>
+      </div>
+    </ViewContext.Provider>
+  );
+}
+
+function ViewSwitch({ onSwitch }: { onSwitch: () => void }) {
+  const [view, setView] = useContext(ViewContext);
+  const navigate = useNavigate();
+  const choose = (next: View) => { setView(next); onSwitch(); navigate('/'); };
+  const seg = (active: boolean) => `min-h-9 flex-1 rounded-ui px-3 text-sm ${active ? 'bg-white font-semibold text-ink' : 'text-muted hover:text-ink'}`;
+  return (
+    <div className="flex gap-0.5 rounded-ui bg-pill p-0.5">
+      <button type="button" className={seg(view === 'schueler')} aria-pressed={view === 'schueler'} onClick={() => choose('schueler')}>Schüler</button>
+      <button type="button" className={seg(view === 'redaktion')} aria-pressed={view === 'redaktion'} onClick={() => choose('redaktion')}>Redaktion</button>
+    </div>
+  );
+}
+
+function NavItem({ to, children }: { to: string; children: ReactNode }) {
+  const location = useLocation();
+  const active = location.pathname + location.search === to;
+  return <Link to={to} aria-current={active ? 'page' : undefined} className={`${navItem} ${active ? 'bg-pill font-semibold' : 'hover:bg-pill/60'}`}>{children}</Link>;
+}
+function NavRow({ to, title, sub, end }: { to: string; title: string; sub?: string; end?: string }) {
+  const location = useLocation();
+  const active = location.pathname + location.search === to;
+  return (
+    <Link to={to} aria-current={active ? 'page' : undefined} className={`${navItem} ${active ? 'bg-pill' : 'hover:bg-pill/60'}`}>
+      <span className="min-w-0"><span className={`block truncate ${active ? 'font-semibold' : ''}`}>{title}</span>{sub && <small className="block truncate text-[13px] text-muted">{sub}</small>}</span>
+      {end && <span className="flex-none text-[13px] tabular-nums text-muted">{end}</span>}
+    </Link>
+  );
+}
+function NavGroup({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+  return <div role="group" aria-labelledby={id} className="flex flex-col gap-1"><p id={id} className={groupLabel}>{label}</p>{children}</div>;
+}
+const quiet = 'px-2.5 text-[13px] text-muted';
+
+function StudentNav() {
+  const { user } = useSession();
+  const polls = useData<Poll[]>('/polls');
+  const categories = useData<Category[]>('/categories');
+  const submissions = useData<Submission[]>('/submissions');
+  const todo = (polls.data ?? []).filter(p => p.status === 'open' && p.my_option_id === null).sort(newestOpened);
+  const done = (polls.data ?? []).filter(p => p.status === 'closed' || (p.status === 'open' && p.my_option_id !== null)).sort(newestOpened);
+  const own = (submissions.data ?? []).filter(s => s.author_id === user.id);
+  return <>
+    <NavGroup id="nav-offen" label="Offen">
+      {polls.isPending ? <p className={quiet}>Einen Moment …</p> : polls.error ? <p className={quiet}>Abstimmungen nicht erreichbar.</p> : todo.length === 0 ? <p className={quiet}>Gerade ist nichts offen.</p> : (
+        <ol aria-labelledby="nav-offen" className="ml-3 flex flex-col border-l border-line">
+          {todo.map(p => <li key={p.id} className="relative pl-3"><span aria-hidden="true" className="absolute left-0 top-[17px] size-2 -translate-x-1/2 rounded-full bg-accent"/><NavRow to={`/abstimmungen/${p.id}`} title={p.title} sub={since(p.opened_at)}/></li>)}
+        </ol>
+      )}
+    </NavGroup>
+    <NavGroup id="nav-jederzeit" label="Jederzeit">
+      {categories.isPending ? <p className={quiet}>Einen Moment …</p> : categories.error ? <p className={quiet}>Rubriken nicht erreichbar.</p> : categories.data?.map(c => {
+        const n = own.filter(s => s.category_id === c.id).length;
+        return <NavRow key={c.id} to={`/beitraege/neu?kategorie=${c.id}`} title={c.name} sub={n ? `${n} eingereicht` : 'Noch nichts eingereicht'}/>;
+      })}
+    </NavGroup>
+    <div className="flex flex-col gap-1">
+      <details className="group">
+        <summary className={`${navItem} cursor-pointer list-none text-muted hover:bg-pill/60 [&::-webkit-details-marker]:hidden`}>Erledigt ({done.length})<span aria-hidden="true" className="text-xs group-open:rotate-90">›</span></summary>
+        <div className="mt-1 flex flex-col gap-1">
+          {done.length === 0 ? <p className={quiet}>Noch nichts erledigt.</p> : done.map(p => <NavRow key={p.id} to={`/abstimmungen/${p.id}`} title={p.title} sub={p.my_option_id ? '✓ abgestimmt' : 'beendet'}/>)}
+        </div>
+      </details>
+      <NavItem to="/beitraege">Meine Beiträge</NavItem>
+    </div>
   </>;
 }
-function ContributionDetail() {
-  const { id } = useParams(); const { user } = useSession(); const item = useData<Submission>(`/submissions/${id}`); const categories = useData<Category[]>('/categories'); const revisions = useData<Revision[]>(`/submissions/${id}/revisions`); const corrections = useData<Correction[]>(`/submissions/${id}/corrections`); const action = useAction(); const [editing,setEditing] = useState(false); const [baseVersion,setBaseVersion] = useState(0); const [draft,setDraft] = useState({ title:'', body:'', context:'', category_id:'' }); const [file,setFile] = useState<File|null>(null); const [correction,setCorrection] = useState('');
-  if (item.isPending) return <Loading/>; if (item.error) return <Failure error={item.error} retry={() => item.refetch()}/>; const s = item.data; const own = s.author_id === user.id; const writable = s.status === 'pending' && own || canEdit(user,s.category_id); const editable = writable && (s.status === 'pending' || editorial(user));
-  const beginEdit = () => { setDraft({ title:s.title, body:s.body, context:s.context, category_id:s.category_id }); setBaseVersion(s.version); setEditing(true); };
-  const setStatus = (status: Submission['status']) => action.run(async () => { await api(`/submissions/${id}/status`, json('POST', { version:s.version,status })); }, 'Status aktualisiert.');
-  async function save(e: FormEvent) { e.preventDefault(); await action.run(async () => { await api(`/submissions/${id}`,json('PATCH',{ version:baseVersion,...draft })); setEditing(false); },'Änderungen gespeichert.'); }
-  async function upload(e: FormEvent) { e.preventDefault(); if (!file) return; await action.run(async () => { const data = new FormData(); data.set('file',file!); data.set('version',String(s.version)); await api(`/submissions/${id}/attachments`,{ method:'POST',body:data }); setFile(null); },'Datei hochgeladen.'); }
-  return <><Link className="back-link" to={own ? '/beitraege' : '/redaktion'}>← {own ? 'Meine Beiträge' : 'Redaktion'}</Link><PageHead eyebrow={categories.data?.find(c => c.id === s.category_id)?.name ?? 'DEIN BEITRAG'} title={s.title} action={<Badge status={s.status}/>}>Von {s.author_name} · Aktualisiert am {date(s.updated_at)} · Version {s.version}</PageHead>{action.feedback}{action.error instanceof ApiError && action.error.status === 409 && editing && <div className="notice"><button className="secondary" onClick={async () => { const latest = await item.refetch(); if (latest.data) setBaseVersion(latest.data.version); }}>Aktuelle Version laden · Eingaben behalten</button><p>Vergleiche den aktuellen Beitrag unter dem Formular mit deinem Entwurf, bevor du erneut speicherst.</p></div>}<div className="detail-layout"><div>{editing ? <form className="panel form-panel" onSubmit={save}><label>Titel<input value={draft.title} maxLength={200} required onChange={e => setDraft({...draft,title:e.target.value})}/></label><label>Rubrik<select value={draft.category_id} onChange={e => setDraft({...draft,category_id:e.target.value})}>{categories.data?.filter(c => own || canEdit(user,c.id)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Dein Beitrag<textarea rows={8} value={draft.body} onChange={e => setDraft({...draft,body:e.target.value})}/></label><label>Kontext<textarea rows={3} value={draft.context} onChange={e => setDraft({...draft,context:e.target.value})}/></label><div className="form-actions"><button type="button" className="secondary" onClick={() => setEditing(false)}>Abbrechen</button><button className="primary" disabled={action.busy}>Änderungen speichern</button></div></form> : null}<article className="panel story"><div className="section-head"><h2>{editing ? 'Aktueller Stand' : 'Deine Geschichte'}</h2>{editable && !editing && <button className="secondary" onClick={beginEdit}>Bearbeiten ↗</button>}</div><p className="story-body">{s.body || 'Kein Text hinzugefügt.'}</p>{s.context && <div className="context"><span className="eyebrow">KONTEXT & HINWEISE</span><p>{s.context}</p></div>}</article><section className="panel"><h2>Fotos <small>({s.attachments?.length ?? 0})</small></h2>{!!s.attachments?.length && <div className="attachments">{s.attachments.map(a => <AttachmentCard key={a.id} attachment={a} removable={editable} busy={action.busy} onRemove={() => action.run(() => api(`/submissions/${id}/attachments/${a.id}`,json('DELETE',{ version:s.version })),'Datei entfernt.')}/>)}</div>}{editable && <form className="upload-form" onSubmit={upload}><label>Foto hinzufügen <small>JPEG, PNG oder WebP · höchstens 10 Bilder · je 20 MiB · höchstens 24 Megapixel</small><input type="file" required accept="image/jpeg,image/png,image/webp" onChange={e => setFile(e.target.files?.[0] ?? null)}/></label><button className="secondary" disabled={action.busy || !file}>Hochladen ↑</button></form>}{!s.attachments?.length && !editable && <p className="muted">Keine Fotos vorhanden.</p>}</section><section className="panel"><h2>Korrekturwünsche</h2>{corrections.isPending ? <Loading/> : corrections.error ? <Failure error={corrections.error}/> : corrections.data?.length ? corrections.data.map(c => <article className="correction" key={c.id}><div><strong>{c.author_name}</strong><small>{date(c.created_at)} · {c.resolved ? 'Erledigt' : 'Offen'}</small></div><p>{c.body}</p>{!c.resolved && canEdit(user,s.category_id) && <button className="secondary" disabled={action.busy} onClick={() => action.run(() => api(`/submissions/${id}/corrections/${c.id}/resolve`,json('POST')),'Korrektur als erledigt markiert.')}>Als erledigt markieren</button>}</article>) : <p className="muted">Noch keine Korrekturwünsche.</p>}{own && s.status !== 'pending' && <form onSubmit={e => { e.preventDefault(); action.run(async () => { await api(`/submissions/${id}/corrections`,json('POST',{ body:correction })); setCorrection(''); },'Korrekturwunsch gesendet.'); }}><label>Änderung an die Redaktion<textarea rows={3} value={correction} required onChange={e => setCorrection(e.target.value)} placeholder="Was soll korrigiert werden?"/></label><button className="secondary" disabled={action.busy}>Korrekturwunsch senden</button></form>}</section></div><aside><section className="panel review-panel"><p className="eyebrow">DER NÄCHSTE SCHRITT</p><h3>{s.status === 'pending' ? 'Die Redaktion liest mit.' : 'Dein Beitrag ist geprüft.'}</h3><p>{s.status === 'pending' ? 'Bis zur Entscheidung kannst du deinen Beitrag noch anpassen.' : 'Du hast noch eine Änderung? Schicke einen Korrekturwunsch an das Team.'}</p>{own && s.status === 'pending' && <button className="secondary danger" disabled={action.busy} onClick={() => setStatus('withdrawn')}>Beitrag zurückziehen</button>}{canEdit(user,s.category_id) && (s.status === 'pending' ? <div className="button-stack"><button className="primary" disabled={action.busy} onClick={() => setStatus('accepted')}>Für die Zeitung annehmen ✓</button><button className="secondary danger" disabled={action.busy} onClick={() => setStatus('rejected')}>Ablehnen</button></div> : <button className="secondary" disabled={action.busy} onClick={() => setStatus('pending')}>Erneut zur Prüfung öffnen</button>)}{editorial(user) && !canEdit(user,s.category_id) && <p className="privacy-note">Leserechte · Zum Bearbeiten brauchst du eine Zuweisung zu dieser Rubrik.</p>}</section><section className="panel"><h3>Versionsverlauf</h3>{revisions.isPending ? <Loading/> : revisions.error ? <Failure error={revisions.error}/> : revisions.data?.map(r => <details className="revision" key={r.id}><summary><strong>Version {r.version}</strong><small>{r.actor_name} · {date(r.created_at)}</small></summary><Badge status={r.status}/><h4>{r.title}</h4><p>{r.body}</p>{r.context && <p className="muted">{r.context}</p>}</details>)}</section></aside></div></>;
+
+function EditorNav() {
+  const { user } = useSession();
+  const polls = useData<Poll[]>('/polls');
+  const categories = useData<Category[]>('/categories');
+  const submissions = useData<Submission[]>('/submissions');
+  const groups: [Poll['status'], string, string][] = [['open', 'Offen', 'nav-poll-offen'], ['draft', 'Entwürfe', 'nav-poll-entwuerfe'], ['closed', 'Beendet', 'nav-poll-beendet']];
+  return <>
+    <NavGroup id="nav-abstimmungen" label="Abstimmungen">
+      {polls.isPending ? <p className={quiet}>Einen Moment …</p> : polls.error ? <p className={quiet}>Abstimmungen nicht erreichbar.</p> : polls.data?.length === 0 ? <p className={quiet}>Noch keine Abstimmung.</p> : groups.map(([status, label, id]) => {
+        const items = (polls.data ?? []).filter(p => p.status === status).sort(newestOpened);
+        return items.length > 0 && (
+          <div key={status} role="group" aria-labelledby={id} className="mt-1 flex flex-col gap-1">
+            <p id={id} className={`${quiet} flex items-center gap-1.5`}>{status === 'open' && <span aria-hidden="true" className="size-1.5 rounded-full bg-accent"/>}{label}</p>
+            {items.map(p => <NavRow key={p.id} to={`/abstimmungen/${p.id}`} title={p.title} end={plural(p.ballot_count ?? 0, 'Stimme', 'Stimmen')}/>)}
+          </div>
+        );
+      })}
+      <NavItem to="/abstimmungen?neu">Neue Abstimmung</NavItem>
+    </NavGroup>
+    <NavGroup id="nav-rubriken" label="Rubriken">
+      {categories.isPending ? <p className={quiet}>Einen Moment …</p> : categories.error ? <p className={quiet}>Rubriken nicht erreichbar.</p> : categories.data?.map(c => {
+        const mine = (submissions.data ?? []).filter(s => s.category_id === c.id);
+        return <NavRow key={c.id} to={`/redaktion?rubrik=${c.id}`} title={c.name} sub={`${plural(mine.length, 'Beitrag', 'Beiträge')} · ${mine.filter(s => s.status === 'pending').length} offen`}/>;
+      })}
+      <NavItem to="/redaktion">Alle Beiträge</NavItem>
+    </NavGroup>
+    {user.role === 'admin' && <NavItem to="/admin">Verwaltung</NavItem>}
+  </>;
 }
-function AttachmentCard({ attachment:a, removable, busy, onRemove }: { attachment: Attachment; removable: boolean; busy: boolean; onRemove: () => void }) { return <div className="attachment">{a.mime_type.startsWith('image/') && <a href={a.url} target="_blank" rel="noreferrer"><img src={a.preview_url} alt={a.filename} loading="lazy"/></a>}<a href={a.url} target="_blank" rel="noreferrer">{a.filename} ↗</a><small>{(a.size_bytes / 1024).toFixed(0)} KB</small>{removable && <button type="button" className="text-button danger" disabled={busy} onClick={onRemove}>Datei entfernen</button>}</div>; }
-function Editorial() {
-  const categories = useData<Category[]>('/categories'); const [category,setCategory] = useState(''); const [status,setStatus] = useState('pending'); const [search,setSearch] = useState(''); const { user } = useSession(); const path = `/submissions?${new URLSearchParams({ category_id:category,status,q:search })}`; const items = useData<Submission[]>(path); const [exportStatus,setExportStatus] = useState('accepted');
-  return <><PageHead eyebrow="HINTER DEN KULISSEN" title="Aus Geschichten wird Zeitung.">Alle Beiträge im Blick. Du bearbeitest die Rubriken, die dir zugewiesen sind.</PageHead><div className="filterbar"><label><span>Rubrik</span><select value={category} onChange={e => setCategory(e.target.value)}><option value="">Alle Rubriken</option>{categories.data?.map(c => <option key={c.id} value={c.id}>{c.name}{canEdit(user,c.id) ? ' · zugewiesen' : ''}</option>)}</select></label><label><span>Status</span><select value={status} onChange={e => setStatus(e.target.value)}><option value="">Alle Status</option>{(['pending','accepted','rejected','withdrawn'] as const).map(s => <option key={s} value={s}>{statusLabels[s]}</option>)}</select></label><label className="search-label"><span>Suchen</span><input type="search" value={search} placeholder="Titel, Text, Name …" onChange={e => setSearch(e.target.value)}/></label></div>{items.isPending ? <Loading/> : items.error ? <Failure error={items.error} retry={() => items.refetch()}/> : items.data?.length ? <SubmissionList items={items.data} categories={categories.data ?? []} showAuthor/> : <Empty>In dieser Auswahl sind noch keine Beiträge.</Empty>}<section className="panel export-panel"><div><p className="eyebrow">AB IN DEN SATZ</p><h2>Eine Rubrik exportieren</h2><p>ZIP mit CSV, Originaldateien und Manifest. Abstimmungsdaten sind nicht enthalten.</p></div><div className="export-controls"><label>Rubrik<select value={category} onChange={e => setCategory(e.target.value)}><option value="">Rubrik auswählen</option>{categories.data?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Umfang<select value={exportStatus} onChange={e => setExportStatus(e.target.value)}><option value="accepted">Nur angenommene Beiträge</option><option value="all">Alle Beiträge inklusive abgelehnter</option></select></label>{category ? <a className="button primary" href={`/api/v1/categories/${category}/export?status=${exportStatus}`}>ZIP herunterladen ↓</a> : <button className="primary" disabled>Rubrik auswählen</button>}</div></section></>;
+
+function RoleGuard({ children, admin = false }: { children: ReactNode; admin?: boolean }) {
+  const { user } = useSession();
+  return (admin ? user.role === 'admin' : editorial(user)) ? children : <Navigate to="/" replace/>;
 }
-function Polls() {
-  const { user } = useSession(); const polls = useData<Poll[]>('/polls'); const [creating,setCreating] = useState(false);
-  return <><PageHead eyebrow="EINE STIMME. DEINE STIMME." title="Der Jahrgang entscheidet." action={editorial(user) && <button className="primary" onClick={() => setCreating(!creating)}>{creating ? 'Formular schließen' : 'Neue Abstimmung ＋'}</button>}>Wer bleibt uns in Erinnerung? Welche Idee schafft es ins Heft? Stimme mit ab.</PageHead><div className="notice privacy-poll"><strong>Transparent abgestimmt.</strong><p>Deine Stimme wird deinem Namen zugeordnet. Die Administration kann Stimmen und Änderungen nachvollziehen. Die Redaktion sieht nur Gesamtergebnisse. Als Schüler:in siehst du keine Ergebnisse. Du kannst deine Stimme ändern, solange die Abstimmung offen ist.</p></div>{creating && <PollForm onSaved={() => setCreating(false)}/>}<div className="section-head"><h2>Unsere Abstimmungen</h2><span className="muted">Eine Auswahl pro Person</span></div>{polls.isPending ? <Loading/> : polls.error ? <Failure error={polls.error} retry={() => polls.refetch()}/> : polls.data?.length ? <div className="poll-grid">{polls.data.map(p => <Link className="poll-card" to={`/abstimmungen/${p.id}`} key={p.id}><div className="card-top"><span className="category-icon">{p.kind === 'person' ? '♙' : '✦'}</span><Badge status={p.status}/></div><h2>{p.title}</h2><p>{p.description}</p><div className="poll-bottom"><span>{p.my_option_id ? '✓ Deine Stimme ist gespeichert' : `${p.options.length} Optionen`}</span><span>{p.status === 'open' ? 'Abstimmen' : 'Ansehen'} <Arrow/></span></div></Link>)}</div> : <Empty>Hier geht’s bald los. Aktuell gibt es keine Abstimmungen.</Empty>}</>;
+
+// ---------- home ----------
+function Overview() {
+  const { user } = useSession();
+  const [view] = useContext(ViewContext);
+  return view === 'redaktion' && editorial(user) ? <EditorHome/> : <StudentHome/>;
 }
-function PollForm({ poll, onSaved }: { poll?: Poll; onSaved: () => void }) {
-  const { user } = useSession(); const categories = useData<Category[]>('/categories'); const roster = useData<{id:string;name:string}[]>('/roster'); const action = useAction(); const [kind,setKind] = useState<Poll['kind']>(poll?.kind ?? 'proposal'); const [selected,setSelected] = useState<string[]>(poll?.options.flatMap(o => o.user_id ? [o.user_id] : []) ?? []); const [options,setOptions] = useState(poll?.options.map(o => o.label).join('\n') ?? '');
-  function save(e: FormEvent<HTMLFormElement>) { e.preventDefault(); const data = new FormData(e.currentTarget); const choices = kind === 'person' ? selected.map(id => ({ label:roster.data?.find(u => u.id === id)?.name ?? '',user_id:id })) : options.split('\n').map(s => s.trim()).filter(Boolean).map(label => ({label})); action.run(async () => { if (choices.length < 2) throw new Error('Bitte mindestens zwei Optionen auswählen.'); await api(poll ? `/polls/${poll.id}` : '/polls',json(poll ? 'PATCH' : 'POST',{ ...(poll ? { version:poll.version } : {}), category_id:data.get('category_id'),title:data.get('title'),description:data.get('description'),kind,allow_self_vote:data.get('allow_self_vote') === 'on',options:choices })); onSaved(); },'Abstimmung gespeichert.'); }
-  return <form className="panel form-panel poll-form" onSubmit={save}><h2>{poll ? 'Entwurf bearbeiten' : 'Eine neue Abstimmung'}</h2><label>Rubrik<select name="category_id" required defaultValue={poll?.category_id}><option value="">Bitte auswählen</option>{categories.data?.filter(c => canEdit(user,c.id)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Titel<input name="title" defaultValue={poll?.title} maxLength={200} required/></label><label>Beschreibung<textarea name="description" defaultValue={poll?.description} rows={3}/></label><label>Art<select value={kind} onChange={e => setKind(e.target.value as Poll['kind'])}><option value="proposal">Vorschläge & Ideen</option><option value="person">Personenwahl</option></select></label>{kind === 'proposal' ? <label>Antwortoptionen <small>eine Option pro Zeile</small><textarea rows={5} value={options} onChange={e => setOptions(e.target.value)} required placeholder={'Option A\nOption B'}/></label> : <fieldset className="candidate-picker"><legend>Kandidat:innen · mindestens zwei</legend>{roster.isPending ? <Loading/> : roster.error ? <Failure error={roster.error}/> : roster.data?.map(u => <label className="check-label" key={u.id}><input type="checkbox" checked={selected.includes(u.id)} onChange={e => setSelected(e.target.checked ? [...selected,u.id] : selected.filter(id => id !== u.id))}/>{u.name}</label>)}</fieldset>}<label className="check-label"><input type="checkbox" name="allow_self_vote" defaultChecked={poll?.allow_self_vote}/>Stimme für die eigene Person erlauben</label><p className="muted">Format: Eine Auswahl. Nach dem Öffnen ist die Definition gesperrt.</p>{action.feedback}<div className="form-actions"><button type="button" className="secondary" onClick={onSaved}>Abbrechen</button><button className="primary" disabled={action.busy}>Entwurf speichern</button></div></form>;
+
+function StudentHome() {
+  const { user } = useSession();
+  const polls = useData<Poll[]>('/polls');
+  const categories = useData<Category[]>('/categories');
+  const submissions = useData<Submission[]>('/submissions');
+  const first = user.name.split(' ')[0];
+  const todo = (polls.data ?? []).filter(p => p.status === 'open' && p.my_option_id === null).sort(newestOpened);
+  const done = (polls.data ?? []).filter(p => p.status === 'closed' || (p.status === 'open' && p.my_option_id !== null)).sort(newestOpened);
+  const own = (submissions.data ?? []).filter(s => s.author_id === user.id);
+  const title = polls.data ? (todo.length === 0 ? `Hey ${first}. Gerade ist alles erledigt.` : `Hey ${first}. ${todo.length === 1 ? '1 Abstimmung wartet' : `${todo.length} Abstimmungen warten`} auf dich.`) : `Hey ${first}.`;
+  return <>
+    <PageHead title={title}>{todo.length > 0 ? 'Deine Stimme entscheidet mit, was in der Abizeitung landet.' : 'Vielleicht fällt dir noch eine Geschichte ein, die in die Abizeitung gehört.'}</PageHead>
+
+    <section aria-labelledby="home-dran">
+      <h2 id="home-dran" className={heading}>Jetzt dran</h2>
+      <div className="mt-4">
+        {polls.isPending ? <Loading/> : polls.error ? <Failure error={polls.error} retry={() => polls.refetch()}/> : todo.length === 0 ? <Empty>Gerade ist nichts offen. Sobald die Redaktion eine Abstimmung öffnet, steht sie hier.</Empty> : (
+          <ul className="grid gap-4 md:grid-cols-2">
+            {todo.map((p, i) => (
+              <li key={p.id} className="flex flex-col rounded-ui border border-line bg-white p-5">
+                <h3 className="text-lg font-semibold leading-snug">{p.title}</h3>
+                {p.description && <p className="mt-2 text-[15px] text-muted">{p.description}</p>}
+                <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-5">
+                  <span className="text-[13px] text-muted">{[kindLabel(p.kind), plural(p.options.length, 'Option', 'Optionen'), since(p.opened_at)].filter(Boolean).join(' · ')}</span>
+                  <Link to={`/abstimmungen/${p.id}`} className={i === 0 ? btn.primary : btn.secondary}>Abstimmen<span className="sr-only"> bei {p.title}</span></Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+
+    <section aria-labelledby="home-jederzeit" className="mt-10">
+      <h2 id="home-jederzeit" className={heading}>Jederzeit</h2>
+      <div className="mt-4">
+        {categories.isPending ? <Loading/> : categories.error ? <Failure error={categories.error} retry={() => categories.refetch()}/> : (
+          <ul className="grid gap-4 md:grid-cols-2">
+            {categories.data?.map(c => {
+              const n = own.filter(s => s.category_id === c.id).length;
+              return (
+                <li key={c.id}>
+                  <Link to={`/beitraege/neu?kategorie=${c.id}`} className="flex h-full flex-col rounded-ui border border-line bg-white p-5 transition-colors hover:bg-paper">
+                    <span className="flex items-start justify-between gap-3"><strong className="text-lg font-semibold leading-snug">{c.name}</strong><Arrow/></span>
+                    {c.description && <span className="mt-2 text-[15px] text-muted">{c.description}</span>}
+                    <span className="mt-auto pt-4 text-[13px] text-muted">{n ? `${n} eingereicht` : 'Noch nichts eingereicht'}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </section>
+
+    <section aria-labelledby="home-beitraege" className="mt-10">
+      <div className="flex items-baseline justify-between gap-4"><h2 id="home-beitraege" className={heading}>Deine Beiträge</h2>{own.length > 0 && <Link to="/beitraege" className={btn.text}>Alle ansehen <Arrow/></Link>}</div>
+      <div className="mt-4">
+        {submissions.isPending ? <Loading/> : submissions.error ? <Failure error={submissions.error} retry={() => submissions.refetch()}/> : own.length ? <SubmissionList items={own.slice(0, 5)} categories={categories.data ?? []}/> : <Empty>Die erste Geschichte wartet auf dich. Such dir oben eine Rubrik aus.</Empty>}
+      </div>
+    </section>
+
+    {done.length > 0 && (
+      <details className="mt-10 rounded-ui border border-line bg-white">
+        <summary className="cursor-pointer px-5 py-4 text-[15px] font-semibold">Erledigte Abstimmungen ({done.length})</summary>
+        <ul className="divide-y divide-line border-t border-line">
+          {done.map(p => <li key={p.id}><Link to={`/abstimmungen/${p.id}`} className="flex items-center justify-between gap-4 px-5 py-3 text-[15px] hover:bg-paper"><span className="min-w-0">{p.title}</span><span className="flex-none text-[13px] text-muted">{p.my_option_id ? '✓ abgestimmt' : 'beendet'}</span></Link></li>)}
+        </ul>
+      </details>
+    )}
+
+    <p className={`${notice} mt-10 text-muted`}><strong className="font-semibold text-ink">Unsere Erinnerungen bleiben im Jahrgang.</strong> Nur du und berechtigte Mitglieder der Redaktion können deine Beiträge sehen.</p>
+  </>;
 }
-function PollDetail() {
-  const { id } = useParams(); const { user } = useSession(); const polls = useData<Poll[]>('/polls'); const poll = polls.data?.find(p => p.id === id); const action = useAction(); const [choice,setChoice] = useState<string|null>(null); const [editing,setEditing] = useState(false); const results = useData<PollResult[]>(`/polls/${id}/results`,!!poll && editorial(user)); const [auditOpen,setAuditOpen] = useState(false); const audit = useData<BallotAudit[]>(`/polls/${id}/audit`,auditOpen && user.role === 'admin');
-  useEffect(() => { setChoice(poll?.my_option_id ?? null); },[poll?.my_option_id]);
-  if (polls.isPending) return <Loading/>; if (polls.error) return <Failure error={polls.error} retry={() => polls.refetch()}/>; if (!poll) return <NotFound/>;
-  const writable = canEdit(user,poll.category_id); const eligible = user.admitted && user.cohort_member; const total = results.data?.reduce((n,r) => n+r.count,0) ?? 0;
-  return <><Link className="back-link" to="/abstimmungen">← Abstimmungen</Link><PageHead eyebrow={poll.kind === 'person' ? 'PERSONENWAHL' : 'VORSCHLÄGE & IDEEN'} title={poll.title} action={<Badge status={poll.status}/>}>{poll.description}</PageHead>{action.feedback}{editing ? <PollForm poll={poll} onSaved={() => setEditing(false)}/> : <div className="detail-layout"><section className="panel vote-panel"><p className="eyebrow">DEINE ENTSCHEIDUNG</p><h2>{poll.status === 'open' ? 'Wem gibst du deine Stimme?' : poll.status === 'closed' ? 'Die Abstimmung ist beendet.' : 'Diese Abstimmung ist ein Entwurf.'}</h2><form onSubmit={e => { e.preventDefault(); action.run(async () => { await api(`/polls/${id}/ballot`,json('PUT',{option_id:choice})); },'Deine Stimme wurde gespeichert.'); }}><fieldset disabled={poll.status !== 'open' || !eligible || action.busy}><legend className="sr-only">Eine Option auswählen</legend>{poll.options.map(o => { const self = o.user_id === user.id && !poll.allow_self_vote; return <label className={`vote-option ${choice === o.id ? 'selected' : ''}`} key={o.id}><input type="radio" name="ballot" value={o.id} checked={choice === o.id} onChange={() => setChoice(o.id)} disabled={self}/><span>{o.label}{self && <small>Eine Stimme für dich selbst ist hier nicht erlaubt.</small>}</span>{choice === o.id && <span className="vote-check">✓</span>}</label>; })}</fieldset>{poll.status === 'open' && <button className="primary" disabled={action.busy || !choice || !eligible || poll.options.some(o => o.id === choice && o.user_id === user.id && !poll.allow_self_vote)}>{poll.my_option_id ? 'Stimme ändern' : 'Stimme speichern'} <Arrow/></button>}{!eligible && <p className="notice">Nur freigegebene Mitglieder des Jahrgangs dürfen abstimmen.</p>}{poll.my_option_id && <p className="saved-vote">✓ Gespeicherte Stimme: {poll.options.find(o => o.id === poll.my_option_id)?.label}</p>}</form><p className="privacy-note">Namentliche Abstimmung: Die Administration kann deine Stimme und Änderungen zuordnen. Während der Öffnung kannst du deine Auswahl ändern. Ergebnisse sind für Schüler:innen nicht sichtbar.</p></section><aside>{writable && <section className="panel"><h3>Abstimmung verwalten</h3><div className="button-stack">{poll.status === 'draft' && <><button className="secondary" onClick={() => setEditing(true)}>Definition bearbeiten</button><button className="primary" disabled={action.busy} onClick={() => action.run(() => api(`/polls/${id}/status`,json('POST',{version:poll.version,status:'open'})),'Abstimmung geöffnet.')}>Abstimmung öffnen</button><p className="muted">Die Definition kann nach dem Öffnen nicht mehr geändert werden.</p></>}{poll.status === 'open' && <button className="primary" disabled={action.busy} onClick={() => action.run(() => api(`/polls/${id}/status`,json('POST',{version:poll.version,status:'closed'})),'Abstimmung beendet.')}>Abstimmung beenden</button>}</div></section>}{editorial(user) && <section className="panel"><p className="eyebrow">NUR FÜR DIE REDAKTION</p><h3>Gesamtergebnisse</h3>{results.isPending ? <Loading/> : results.error ? <Failure error={results.error} retry={() => results.refetch()}/> : <><p className="muted">{total} abgegebene Stimme(n)</p>{results.data?.map(r => <div className="result" key={r.option_id}><div><strong>{r.label}</strong><span>{r.count}</span></div><div className="result-track"><span style={{width:`${total ? r.count/total*100 : 0}%`}}/></div></div>)}</>}</section>}</aside></div>}{user.role === 'admin' && <section className="panel"><button className="secondary" aria-expanded={auditOpen} onClick={() => setAuditOpen(!auditOpen)}>{auditOpen ? 'Stimmprotokoll schließen' : 'Namentliches Stimmprotokoll öffnen'}</button>{auditOpen && <><p className="privacy-note">Vertraulich · Enthält die Zuordnung von Stimmen und deren Änderungen.</p>{audit.isPending ? <Loading/> : audit.error ? <Failure error={audit.error}/> : <div className="table-scroll"><table><thead><tr><th>Name</th><th>Auswahl</th><th>Zeitpunkt</th></tr></thead><tbody>{audit.data?.map((a,i) => <tr key={`${a.user_id}-${i}`}><td>{a.user_name}</td><td>{a.option_label}</td><td>{date(a.created_at)}</td></tr>)}</tbody></table>{!audit.data?.length && <p className="muted">Noch keine Stimmen.</p>}</div>}</>}</section>}</>;
+
+// ponytail: min-h-28 keeps room for a per-row summary line; nothing generates one yet.
+function ThickRow({ to, title, badge, meta, count, unit, extra }: { to: string; title: string; badge?: ReactNode; meta: string; count: number; unit: [string, string]; extra?: string }) {
+  return (
+    <li>
+      <Link to={to} className="flex min-h-28 items-start justify-between gap-6 bg-white p-5 transition-colors hover:bg-paper">
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1"><strong className="text-[17px] font-semibold leading-snug">{title}</strong>{badge}</span>
+          <small className="mt-1 block text-[13px] text-muted">{meta}</small>
+        </span>
+        <span className="flex-none text-right"><strong className="block text-2xl font-semibold tabular-nums leading-none">{count}</strong><span className="mt-1 block text-[13px] text-muted">{unit[count === 1 ? 0 : 1]}</span>{extra && <span className="block text-[13px] tabular-nums text-muted">{extra}</span>}</span>
+      </Link>
+    </li>
+  );
 }
-function Admin() {
-  const [tab,setTab] = useState('users'); const users = useData<User[]>('/admin/users'); const categories = useData<Category[]>('/categories'); const audit = useData<AuditEvent[]>('/admin/audit',tab === 'audit'); const system = useData<SystemStatus>('/admin/status'); const [editing,setEditing] = useState<User|null>(null); const [search,setSearch] = useState(''); const [editCategory,setEditCategory] = useState<Category|null>(null); const [categoryForm,setCategoryForm] = useState(false);
-  return <><PageHead eyebrow="DAMIT ALLES RUND LÄUFT" title="Verwaltung">Zugänge freigeben, Verantwortung verteilen und den Betrieb im Blick behalten.</PageHead>{system.data && <div className="admin-status"><div><span className={`status-dot ${system.data.backup_stale ? 'warning' : ''}`}/><strong>{system.data.backup_stale ? 'Backup prüfen' : 'Backup aktuell'}</strong><small>{system.data.backup_last_success ? `Letzter Erfolg: ${date(system.data.backup_last_success)}` : 'Noch kein erfolgreiches Backup gemeldet'}</small></div><div><strong>{(system.data.upload_bytes/1024/1024).toFixed(1)} MB</strong><small>Dateispeicher belegt</small></div></div>}{system.error && <Failure error={system.error} retry={() => system.refetch()}/>}<div className="tabs" role="tablist" aria-label="Verwaltungsbereiche">{[['users','Personen & Zugänge'],['categories','Rubriken'],['audit','Aktivitätsprotokoll']].map(([id,label]) => <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>{label}</button>)}</div><section role="tabpanel">{tab === 'users' && <>{editing ? <UserForm key={editing.id} user={editing} categories={categories.data ?? []} onSaved={() => setEditing(null)}/> : null}<div className="section-head"><h2>Unser Jahrgang & Team</h2><label className="search-label"><span className="sr-only">Person suchen</span><input type="search" placeholder="Person suchen …" value={search} onChange={e => setSearch(e.target.value)}/></label></div>{users.isPending ? <Loading/> : users.error ? <Failure error={users.error} retry={() => users.refetch()}/> : <div className="panel table-scroll"><table><thead><tr><th>Person</th><th>Rolle</th><th>Zugang</th><th>Jahrgang</th><th>Rubriken</th><th><span className="sr-only">Aktion</span></th></tr></thead><tbody>{users.data?.filter(u => u.name.toLowerCase().includes(search.toLowerCase())).map(u => <tr key={u.id}><td><strong>{u.name}</strong></td><td>{roleName(u.role)}</td><td><span className={`badge ${u.admitted ? 'accepted' : 'pending'}`}>{u.admitted ? 'Freigegeben' : 'Wartet'}</span></td><td>{u.cohort_member ? 'Ja' : 'Nein'}</td><td>{u.role === 'admin' ? 'Alle' : u.category_ids.map(id => categories.data?.find(c => c.id === id)?.name).filter(Boolean).join(', ') || '–'}</td><td><button className="text-button" onClick={() => setEditing(u)} aria-label={`${u.name} bearbeiten`}>Bearbeiten ↗</button></td></tr>)}</tbody></table></div>}</>}{tab === 'categories' && <><div className="section-head"><h2>Rubriken der Zeitung</h2><button className="primary" onClick={() => { setEditCategory(null); setCategoryForm(true); }}>Neue Rubrik ＋</button></div>{categoryForm && <CategoryForm category={editCategory} onSaved={() => setCategoryForm(false)}/ >}{categories.isPending ? <Loading/> : categories.error ? <Failure error={categories.error}/> : <div className="category-grid">{categories.data?.map(c => <article className="category-card" key={c.id}><span className="eyebrow">{({idea:'Idee',quote:'Zitat',memory:'Erinnerung',photo:'Foto'})[c.kind]}</span><h3>{c.name}</h3><p>{c.description}</p><button className="secondary" onClick={() => { setEditCategory(c); setCategoryForm(true); }}>Rubrik bearbeiten</button></article>)}</div>}</>}{tab === 'audit' && <><h2>Letzte Aktivitäten</h2><p className="muted">Die letzten 200 Aktionen. Keine Zugangsdaten oder Stimmzuordnungen.</p>{audit.isPending ? <Loading/> : audit.error ? <Failure error={audit.error} retry={() => audit.refetch()}/> : <div className="panel table-scroll"><table><thead><tr><th>Wer</th><th>Aktion</th><th>Datensatz</th><th>Zeitpunkt</th></tr></thead><tbody>{audit.data?.map(a => <tr key={a.id}><td>{a.actor_name}</td><td>{actionName(a.action)}</td><td><code title={a.entity_id}>{a.entity_id.slice(0,8)}…</code></td><td>{date(a.created_at)}</td></tr>)}</tbody></table>{!audit.data?.length && <p>Keine Aktivitäten vorhanden.</p>}</div>}</>}</section></>;
+const rows = 'mt-4 divide-y divide-line overflow-hidden rounded-ui border border-line bg-white';
+
+function EditorHome() {
+  const polls = useData<Poll[]>('/polls');
+  const categories = useData<Category[]>('/categories');
+  const submissions = useData<Submission[]>('/submissions');
+  const pending = (submissions.data ?? []).filter(s => s.status === 'pending').length;
+  const open = (polls.data ?? []).filter(p => p.status === 'open').length;
+  const fact = !polls.data || !submissions.data ? '' : `${pending === 0 ? 'Keine Beiträge warten auf Prüfung' : pending === 1 ? '1 Beitrag wartet auf Prüfung' : `${pending} Beiträge warten auf Prüfung`} · ${open === 0 ? 'keine Abstimmung offen' : plural(open, 'Abstimmung', 'Abstimmungen') + ' offen'}`;
+  const sorted = [...(polls.data ?? [])].sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || newestOpened(a, b));
+  return <>
+    <PageHead title="Redaktion">{fact || 'Einen Moment …'}</PageHead>
+    <section aria-labelledby="home-abstimmungen">
+      <h2 id="home-abstimmungen" className={heading}>Abstimmungen</h2>
+      {polls.isPending ? <div className="mt-4"><Loading/></div> : polls.error ? <div className="mt-4"><Failure error={polls.error} retry={() => polls.refetch()}/></div> : sorted.length === 0 ? <div className="mt-4"><Empty>Noch keine Abstimmung. <Link to="/abstimmungen?neu">Neue Abstimmung anlegen →</Link></Empty></div> : (
+        <ul className={rows}>
+          {sorted.map(p => <ThickRow key={p.id} to={`/abstimmungen/${p.id}`} title={p.title} badge={<Badge status={p.status}/>} meta={[kindLabel(p.kind), plural(p.options.length, 'Option', 'Optionen'), p.status === 'open' ? since(p.opened_at) : ''].filter(Boolean).join(' · ')} count={p.ballot_count ?? 0} unit={['Stimme', 'Stimmen']}/>)}
+        </ul>
+      )}
+    </section>
+    <section aria-labelledby="home-rubriken" className="mt-10">
+      <h2 id="home-rubriken" className={heading}>Rubriken</h2>
+      {categories.isPending || submissions.isPending ? <div className="mt-4"><Loading/></div> : categories.error || submissions.error ? <div className="mt-4"><Failure error={(categories.error ?? submissions.error)!} retry={() => { categories.refetch(); submissions.refetch(); }}/></div> : (
+        <ul className={rows}>
+          {categories.data?.map(c => {
+            const mine = (submissions.data ?? []).filter(s => s.category_id === c.id);
+            return <ThickRow key={c.id} to={`/redaktion?rubrik=${c.id}`} title={c.name} meta={c.description || 'Rubrik'} count={mine.length} unit={['Beitrag', 'Beiträge']} extra={`${mine.filter(s => s.status === 'pending').length} offen`}/>;
+          })}
+        </ul>
+      )}
+    </section>
+  </>;
 }
-function actionName(action: string) { const names: Record<string,string> = { 'submission.created':'Beitrag eingereicht', 'submission.updated':'Beitrag geändert', 'submission.status':'Beitragsstatus geändert', 'attachment.created':'Datei hinzugefügt', 'attachment.deleted':'Datei entfernt', 'poll.created':'Abstimmung erstellt', 'poll.updated':'Abstimmung geändert', 'poll.status':'Abstimmungsstatus geändert', 'user.updated':'Zugang geändert', 'category.created':'Rubrik erstellt', 'category.updated':'Rubrik geändert', 'correction.created':'Korrektur angefragt', 'correction.resolved':'Korrektur erledigt' }; return names[action] ?? action.replaceAll('_',' ').replaceAll('.',' · '); }
-function UserForm({ user, categories, onSaved }: { user: User; categories: Category[]; onSaved: () => void }) {
-  const action = useAction(); const [role,setRole] = useState(user.role); const [grants,setGrants] = useState(user.category_ids);
-  return <form key={user.id} className="panel form-panel" onSubmit={e => { e.preventDefault(); const data = new FormData(e.currentTarget); action.run(async () => { await api(`/admin/users/${user.id}`,json('PATCH',{ name:data.get('name'),role,admitted:data.get('admitted') === 'on',cohort_member:data.get('cohort_member') === 'on',category_ids:grants })); onSaved(); },'Zugang gespeichert.'); }}><h2>Zugang bearbeiten · {user.name}</h2><label>Anzeigename<input name="name" defaultValue={user.name} required maxLength={200}/></label><label>Rolle<select value={role} onChange={e => setRole(e.target.value as User['role'])}><option value="student">Jahrgang</option><option value="manager">Redaktion</option><option value="admin">Administration</option></select></label><div className="check-grid"><label className="check-label"><input type="checkbox" name="admitted" defaultChecked={user.admitted}/>Zugang freigegeben</label><label className="check-label"><input type="checkbox" name="cohort_member" defaultChecked={user.cohort_member}/>Mitglied des Jahrgangs · stimmberechtigt</label></div><fieldset><legend>Rubriken zur Bearbeitung</legend><p className="muted">Die Redaktion kann alle Beiträge lesen und nur zugewiesene Rubriken bearbeiten. Die Administration hat Zugriff auf alle Rubriken.</p>{categories.map(c => <label key={c.id} className="check-label"><input type="checkbox" checked={grants.includes(c.id)} onChange={e => setGrants(e.target.checked ? [...grants,c.id] : grants.filter(id => id !== c.id))}/>{c.name}</label>)}</fieldset><p className="privacy-note">Der letzte freigegebene Administrationszugang kann nicht entfernt werden.</p>{action.feedback}<div className="form-actions"><button className="secondary" type="button" onClick={onSaved}>Abbrechen</button><button className="primary" disabled={action.busy}>Zugang speichern</button></div></form>;
-}
-function CategoryForm({ category, onSaved }: { category: Category|null; onSaved: () => void }) { const action = useAction(); return <form key={category?.id ?? 'new'} className="panel form-panel" onSubmit={e => { e.preventDefault(); const data = new FormData(e.currentTarget); action.run(async () => { await api(category ? `/categories/${category.id}` : '/categories',json(category ? 'PATCH' : 'POST',{ name:data.get('name'),description:data.get('description'),kind:data.get('kind') })); onSaved(); },'Rubrik gespeichert.'); }}><h2>{category ? 'Rubrik bearbeiten' : 'Neue Rubrik'}</h2><label>Name<input name="name" defaultValue={category?.name} required maxLength={200}/></label><label>Beschreibung<textarea rows={3} name="description" defaultValue={category?.description}/></label><label>Inhaltstyp<select name="kind" defaultValue={category?.kind ?? 'memory'}><option value="memory">Erinnerung</option><option value="quote">Zitat</option><option value="idea">Idee</option><option value="photo">Foto</option></select></label>{action.feedback}<div className="form-actions"><button type="button" className="secondary" onClick={onSaved}>Abbrechen</button><button className="primary" disabled={action.busy}>Rubrik speichern</button></div></form>; }
-function NotFound() { return <><PageHead eyebrow="KURZ VERLAUFEN?" title="Diese Seite ist nicht verfügbar.">Vielleicht wurde der Link geändert oder du hast keinen Zugriff.</PageHead><Link className="button primary" to="/">Zur Übersicht <Arrow/></Link></>; }

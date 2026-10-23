@@ -1,0 +1,58 @@
+import { createContext, useContext, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { api, ApiError, date, editorial, statusLabels, type Category, type Me, type Submission, type User } from './api';
+
+// Shared class strings. Pages compose these with layout utilities; no component CSS exists.
+export const btn = {
+  primary: 'inline-flex items-center justify-center gap-3 rounded-ui bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-dark',
+  secondary: 'inline-flex items-center justify-center gap-2 rounded-ui border border-line bg-paper px-3.5 py-2 text-sm font-semibold text-ink transition-colors hover:bg-soft',
+  text: 'inline-flex items-center gap-2 bg-transparent p-0 text-sm font-semibold text-ink hover:text-accent-dark',
+  danger: 'inline-flex items-center gap-2 bg-transparent p-0 text-sm font-semibold text-bad hover:underline',
+};
+export const field = 'mt-1.5 block font-normal min-h-11 w-full rounded-ui border border-line bg-white px-3 py-2 text-[15px] text-ink placeholder:text-muted/70';
+export const label = 'block text-sm font-semibold';
+export const panel = 'rounded-ui bg-soft p-5 sm:p-6';
+export const heading = 'text-lg font-semibold tracking-tight';
+export const notice = 'rounded-ui bg-soft px-4 py-3 text-sm';
+
+export const Session = createContext<Me>(null!);
+export const useSession = () => useContext(Session);
+export function useData<T>(path: string, enabled = true) { return useQuery({ queryKey: [path], queryFn: () => api<T>(path), enabled }); }
+export function useAction() {
+  const client = useQueryClient(); const [busy, setBusy] = useState(false); const [error, setError] = useState<Error|null>(null); const [success, setSuccess] = useState('');
+  async function run(fn: () => Promise<unknown>, message = '') { setBusy(true); setError(null); setSuccess(''); try { await fn(); await client.invalidateQueries(); setSuccess(message); } catch (e) { setError(e as Error); } finally { setBusy(false); } }
+  return { busy, error, success, run, feedback: <>{error && <Failure error={error}/>} {success && <p className={`${notice} text-ok`} role="status">{success}</p>}</> };
+}
+
+// View mode is a per-browser preference; only editors can leave the student view.
+export type View = 'schueler' | 'redaktion';
+export function useView(): [View, (v: View) => void] {
+  const { user } = useSession();
+  const [view, setView] = useState<View>(() => { try { return localStorage.getItem('view') === 'schueler' ? 'schueler' : 'redaktion'; } catch { return 'redaktion'; } });
+  const set = (v: View) => { setView(v); try { localStorage.setItem('view', v); } catch { /* private mode */ } };
+  return [editorial(user) ? view : 'schueler', set];
+}
+
+export const roleName = (role: User['role']) => ({ student: 'Jahrgang', manager: 'Redaktion', admin: 'Administration' })[role];
+export function since(value: string | null | undefined) {
+  if (!value) return '';
+  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
+  return days <= 0 ? 'seit heute' : days === 1 ? 'seit gestern' : `seit ${days} Tagen`;
+}
+
+export function Failure({ error, retry }: { error: Error; retry?: () => void }) {
+  const stale = error instanceof ApiError && error.status === 409;
+  return <div className="rounded-ui bg-bad-tint px-4 py-3 text-sm text-bad" role="alert"><strong>{stale ? 'Eine neuere Version liegt vor.' : 'Das hat noch nicht geklappt.'}</strong><p className="mt-1">{stale ? 'Deine Eingaben bleiben erhalten. Lade die aktuelle Version, prüfe die Änderungen und versuche es erneut.' : error.message}</p>{error instanceof ApiError && error.status === 401 ? <a className="mt-2 inline-block underline" href="/auth/login">Erneut anmelden →</a> : retry && <button type="button" className={`${btn.text} mt-2 text-bad`} onClick={retry}>Erneut versuchen</button>}</div>;
+}
+export function Loading() { return <div className="flex min-h-36 items-center justify-center gap-3 text-sm text-muted" role="status"><span className="size-5 animate-spin rounded-full border-2 border-line border-t-accent"/> Einen Moment …</div>; }
+export function Empty({ children }: { children: ReactNode }) { return <div className="flex min-h-32 flex-col items-center justify-center rounded-ui border border-dashed border-line px-6 py-8 text-center text-sm text-muted [&_a]:font-semibold [&_a]:text-ink [&_a]:underline">{children}</div>; }
+const badgeTone: Record<keyof typeof statusLabels, string> = { pending: 'bg-wait-tint text-wait', accepted: 'bg-ok-tint text-ok', open: 'bg-ok-tint text-ok', rejected: 'bg-bad-tint text-bad', withdrawn: 'bg-pill text-muted', closed: 'bg-pill text-muted', draft: 'bg-pill text-muted' };
+export function Badge({ status }: { status: keyof typeof statusLabels }) { return <span className={`inline-flex flex-none items-center gap-1.5 whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium ${badgeTone[status]}`}><span className="size-1.5 rounded-full bg-current"/>{statusLabels[status]}</span>; }
+export function Arrow() { return <span aria-hidden="true">↗</span>; }
+export function PageHead({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
+  return <header className="mb-8 flex flex-wrap items-start justify-between gap-4"><div className="min-w-0"><h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>{children && <p className="mt-2 max-w-2xl text-[15px] text-muted">{children}</p>}</div>{action}</header>;
+}
+export function SubmissionList({ items, categories, showAuthor = false }: { items: Submission[]; categories: Category[]; showAuthor?: boolean }) {
+  return <ul className="divide-y divide-line rounded-ui border border-line bg-white">{items.map(s => <li key={s.id}><Link to={`/beitraege/${s.id}`} className="flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-paper"><span className="min-w-0 flex-1"><strong className="block truncate text-[15px] font-semibold">{s.title}</strong><small className="mt-0.5 block text-[13px] text-muted">{categories.find(c => c.id === s.category_id)?.name ?? 'Beitrag'} · {showAuthor ? `${s.author_name} · ` : ''}{date(s.updated_at)}{s.attachments?.length ? ` · ${s.attachments.length} Datei(en)` : ''}</small></span><Badge status={s.status}/></Link></li>)}</ul>;
+}

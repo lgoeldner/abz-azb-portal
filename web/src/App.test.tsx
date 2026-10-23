@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from './App';
@@ -28,7 +28,7 @@ describe('contribution submission', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/beitraege/neu']}><App/></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/beitraege/neu?kategorie=memory']}><App/></MemoryRouter></QueryClientProvider>);
 
     const title = await screen.findByPlaceholderText('Gib deiner Erinnerung einen Namen');
     fireEvent.change(title, { target: { value: 'Die letzte Freistunde' } });
@@ -41,7 +41,7 @@ describe('contribution submission', () => {
   });
 
   it('rejects an unsupported file before creating a contribution and preserves the form', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith('/api/v1/me')) return Response.json({ user, csrf_token: 'csrf' });
       if (url.endsWith('/api/v1/categories')) return Response.json([category]);
@@ -49,7 +49,7 @@ describe('contribution submission', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/beitraege/neu']}><App/></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/beitraege/neu?kategorie=memory']}><App/></MemoryRouter></QueryClientProvider>);
 
     const title = await screen.findByPlaceholderText('Gib deiner Erinnerung einen Namen');
     fireEvent.change(title, { target: { value: 'Die letzte Freistunde' } });
@@ -59,7 +59,7 @@ describe('contribution submission', () => {
     fireEvent.click(screen.getByRole('button', { name: /Beitrag einreichen/i }));
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Bitte wähle nur JPEG-, PNG- oder WebP-Bilder aus.'));
-    expect(fetchMock).not.toHaveBeenCalledWith('/api/v1/submissions', expect.anything());
+    expect(fetchMock.mock.calls.some(([url, init]) => String(url) === '/api/v1/submissions' && init?.method === 'POST')).toBe(false);
     expect(title).toHaveValue('Die letzte Freistunde');
   });
 
@@ -86,7 +86,7 @@ describe('contribution submission', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/beitraege/neu']}><App/></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/beitraege/neu?kategorie=memory']}><App/></MemoryRouter></QueryClientProvider>);
 
     const title = await screen.findByPlaceholderText('Gib deiner Erinnerung einen Namen');
     fireEvent.change(title, { target: { value: submission.title } });
@@ -140,5 +140,106 @@ describe('admin access editing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Zugang speichern' }));
 
     await waitFor(() => expect(saved).toEqual(expect.objectContaining({ role: 'student', category_ids: [] })));
+  });
+});
+
+describe('navigation by view', () => {
+  const now = Date.now();
+  const iso = (daysAgo: number) => new Date(now - daysAgo * 86_400_000).toISOString();
+  const categories = [category, { id: 'quotes', name: 'Zitate', description: 'Sprüche', kind: 'quote' }];
+  const poll = (id: string, title: string, extra: Record<string, unknown> = {}) => ({
+    id, category_id: 'memory', title, description: 'Beschreibung', kind: 'proposal', format: 'single_choice', status: 'open',
+    allow_self_vote: false, options: [{ id: `${id}-a`, label: 'A' }, { id: `${id}-b`, label: 'B' }], my_option_id: null, version: 1,
+    created_at: iso(10), opened_at: iso(3), ballot_count: null, ...extra,
+  });
+  const submission = (id: string, categoryId: string, authorId: string, status = 'pending') => ({
+    id, category_id: categoryId, author_id: authorId, author_name: 'Wer', title: `Beitrag ${id}`, body: 'x', context: '', status, version: 1,
+    created_at: iso(1), updated_at: iso(1), attachments: [],
+  });
+  function mount(who: Record<string, unknown>, data: { polls: unknown[]; submissions: unknown[] }) {
+    localStorage.clear();
+    const urls: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.endsWith('/api/v1/me')) return Response.json({ user: who, csrf_token: 'csrf' });
+      if (url.endsWith('/api/v1/categories')) return Response.json(categories);
+      if (url.endsWith('/api/v1/polls')) return Response.json(data.polls);
+      if (url.endsWith('/api/v1/submissions')) return Response.json(data.submissions);
+      return Response.json([]);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><MemoryRouter><App/></MemoryRouter></QueryClientProvider>);
+    return urls;
+  }
+
+  it('shows students open unvoted polls first, files finished ones under "Erledigt" and never offers the view switch', async () => {
+    const urls = mount(user, {
+      polls: [
+        poll('p-open', 'Abimotto', { opened_at: iso(3) }),
+        poll('p-newer', 'Lehrerzitat', { opened_at: iso(1) }),
+        poll('p-voted', 'Mottowoche', { my_option_id: 'p-voted-a' }),
+        poll('p-closed', 'Altlast', { status: 'closed' }),
+        poll('p-draft', 'Geheimer Entwurf', { status: 'draft', opened_at: null }),
+      ],
+      submissions: [submission('s1', 'memory', user.id), submission('s2', 'memory', user.id), submission('s3', 'memory', 'someone-else')],
+    });
+    const aside = await screen.findByRole('complementary');
+    const open = await within(aside).findByRole('list', { name: 'Offen' });
+    const links = within(open).getAllByRole('link');
+    expect(links.map(l => l.textContent)).toEqual([expect.stringContaining('Lehrerzitat'), expect.stringContaining('Abimotto')]);
+    expect(links[0]).toHaveAttribute('href', '/abstimmungen/p-newer');
+
+    const category = within(aside).getByRole('link', { name: /Erinnerungen/ });
+    expect(category).toHaveAttribute('href', '/beitraege/neu?kategorie=memory');
+    expect(category).toHaveTextContent('2 eingereicht');
+    expect(within(aside).getByRole('link', { name: /Zitate/ })).toHaveTextContent('Noch nichts eingereicht');
+    expect(open.compareDocumentPosition(category) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    const voted = within(aside).getByRole('link', { name: /Mottowoche/ });
+    const closed = within(aside).getByRole('link', { name: /Altlast/ });
+    expect(voted.closest('details')).not.toBeNull();
+    expect(closed.closest('details')).not.toBeNull();
+    expect(open).not.toContainElement(voted);
+    expect(within(aside).getByRole('link', { name: /Abimotto/ }).closest('details')).toBeNull();
+    expect(within(aside).queryByText('Geheimer Entwurf')).toBeNull();
+    expect(within(aside).getByText(/Erledigt \(2\)/)).toBeInTheDocument();
+
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Hey Mia. 2 Abstimmungen warten auf dich.');
+    expect(screen.queryByRole('button', { name: 'Schüler' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Redaktion' })).toBeNull();
+    expect(urls.some(url => url.includes('/results') || url.includes('/audit'))).toBe(false);
+  });
+
+  it.each([['manager', 'Sam Redaktion'], ['admin', 'Alex Admin']])('lets a %s switch between the editorial and the student home', async (role, name) => {
+    const who = { id: `${role}-1`, name, role, admitted: true, cohort_member: false, category_ids: ['memory'] };
+    mount(who, {
+      polls: [poll('p-open', 'Abimotto', { ballot_count: 34 }), poll('p-draft', 'Entwurf', { status: 'draft', opened_at: null, ballot_count: 0 })],
+      submissions: [submission('s1', 'memory', 'a'), submission('s2', 'memory', 'b'), submission('s3', 'memory', 'c', 'accepted'), submission('s4', 'quotes', 'd')],
+    });
+    const aside = await screen.findByRole('complementary');
+    const editorSwitch = await within(aside).findByRole('button', { name: 'Redaktion' });
+    expect(editorSwitch).toHaveAttribute('aria-pressed', 'true');
+    expect(within(aside).getByRole('button', { name: 'Schüler' })).toHaveAttribute('aria-pressed', 'false');
+    expect(within(aside).queryByRole('link', { name: 'Verwaltung' }) !== null).toBe(role === 'admin');
+
+    const main = screen.getByRole('main');
+    expect(await within(main).findByRole('heading', { level: 1, name: 'Redaktion' })).toBeInTheDocument();
+    expect(await within(main).findByText('3 Beiträge warten auf Prüfung · 1 Abstimmung offen')).toBeInTheDocument();
+    expect(within(main).getByRole('link', { name: /Abimotto/ })).toHaveTextContent(/34\s*Stimmen/);
+    expect(within(main).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent(/3\s*Beiträge.*2 offen/);
+    expect(within(main).getByRole('link', { name: /Zitate/ })).toHaveTextContent(/1\s*Beitrag1 offen/);
+    expect(within(aside).getByRole('link', { name: /Abimotto/ })).toHaveTextContent('34 Stimmen');
+    expect(within(aside).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('3 Beiträge · 2 offen');
+    expect(within(aside).getByRole('link', { name: /Erinnerungen/ })).toHaveAttribute('href', '/redaktion?rubrik=memory');
+    expect(within(aside).getByRole('link', { name: 'Neue Abstimmung' })).toHaveAttribute('href', '/abstimmungen?neu');
+
+    fireEvent.click(within(aside).getByRole('button', { name: 'Schüler' }));
+    expect(await screen.findByRole('heading', { level: 1, name: /^Hey / })).toHaveTextContent(`Hey ${name.split(' ')[0]}.`);
+    expect(within(aside).getByRole('button', { name: 'Schüler' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(aside).getByRole('list', { name: 'Offen' })).toBeInTheDocument();
+    expect(within(aside).queryByRole('link', { name: 'Neue Abstimmung' })).toBeNull();
+    expect(within(aside).queryByRole('link', { name: 'Verwaltung' })).toBeNull();
   });
 });

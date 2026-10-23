@@ -14,3 +14,4 @@ tmp/
 .playwright-mcp/
 server/portal
 server/bin/
+.taste-skill/
