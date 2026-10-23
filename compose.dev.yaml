@@ -10,7 +10,7 @@ services:
       OIDC_CLIENT_ID: portal-dev
       OIDC_CLIENT_SECRET: dev-only
       AUTH_MOCK_USERS: /config/users.yaml
-      AUTH_MOCK_REDIRECT_URIS: http://localhost:5173/auth/callback,http://localhost:8080/auth/callback,http://127.0.0.1:8080/auth/callback
+      AUTH_MOCK_REDIRECT_URIS: http://localhost:5173/auth/callback,http://localhost:8080/auth/callback,http://127.0.0.1:8080/auth/callback,https://localhost/auth/callback
     ports:
       - "127.0.0.1:9090:9090"
     volumes:
@@ -33,12 +33,13 @@ services:
     build:
       context: .
       dockerfile: deployables/portal/Dockerfile
+    restart: "no"
     entrypoint: ["/bin/sh", "-c"]
     command: ["portal migrate && portal seed && exec portal serve"]
     environment:
       APP_ENV: development
       DATABASE_URL: postgres://portal:portal-dev@db:5432/portal?sslmode=disable
-      PUBLIC_URL: http://localhost:8080
+      PUBLIC_URL: https://localhost
       AUTH_MODE: mock
       OIDC_ISSUER: http://localhost:9090
       OIDC_BACKCHANNEL_URL: http://auth-mock:9090
@@ -48,9 +49,26 @@ services:
       UPLOAD_DIR: /var/lib/portal/uploads
       STATIC_DIR: /app/static
       BACKUP_STATUS_FILE: /var/lib/portal/status/status.json
-    ports:
-      - "127.0.0.1:8080:8080"
+    # No host port: the host Go API owns 8080; this container is reached through caddy.
     volumes:
+      - ./server/data/uploads:/var/lib/portal/uploads
       - backup_status:/var/lib/portal/status:ro
     depends_on:
       auth-mock: { condition: service_healthy }
+
+  caddy:
+    restart: "no"
+    ports: !override
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
+      - "127.0.0.1:443:443/udp"
+
+  backup:
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c", "restic cat config >/dev/null 2>&1 || restic init; exec /usr/local/bin/backup.sh"]
+    volumes:
+      - ./server/data/uploads:/uploads:ro
+      - restic_dev:/restic
+
+volumes:
+  restic_dev:

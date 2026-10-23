@@ -17,7 +17,18 @@ export UPLOAD_DIR="$ROOT_DIR/server/data/uploads"
 export SESSION_SECRET=development-only-secret-change-for-production
 
 start_dev_services() {
-  docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml up -d --build --wait db auth-mock
+  local services=(db auth-mock portal caddy)
+  local compose=(docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml)
+  if [[ "${BACKUP_DEV:-false}" == true ]]; then
+    services+=(backup)
+  else
+    "${compose[@]}" --profile production rm -sf backup
+  fi
+  # ponytail: the portal container (uid 10001) shares this dir; fine on macOS engines,
+  # native Linux needs matching ownership or a separate volume.
+  mkdir -p "$UPLOAD_DIR"
+  # Naming caddy and backup enables their production profile.
+  "${compose[@]}" up -d --build --wait "${services[@]}"
 }
 
 prepare_dev_database() {

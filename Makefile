@@ -16,7 +16,7 @@ dev\:backend:
 	bash scripts/dev-backend.sh
 
 down:
-	$(DEV_COMPOSE) down
+	$(DEV_COMPOSE) --profile production down
 
 check:
 	bash -n scripts/*.sh deployables/backup/*.sh
