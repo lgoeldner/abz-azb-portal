@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, ApiError, date, editorial, statusLabels, type Category, type Me, type Submission, type User } from './api';
+import { api, ApiError, canEdit, date, editorial, statusLabels, type Category, type Me, type Submission, type User } from './api';
+import { DevDebug } from './DevDebug';
 
 // Shared class strings. Pages compose these with layout utilities; no component CSS exists.
 export const btn = {
@@ -54,5 +55,6 @@ export function PageHead({ title, children, action }: { title: string; children?
   return <header className="mb-10 flex flex-wrap items-start justify-between gap-4"><div className="min-w-0"><h1 className="text-4xl font-extrabold leading-[1.05] tracking-tighter sm:text-5xl">{title}</h1>{children && <p className="mt-2 max-w-2xl text-[15px] text-muted">{children}</p>}</div>{action}</header>;
 }
 export function SubmissionList({ items, categories, showAuthor = false }: { items: Submission[]; categories: Category[]; showAuthor?: boolean }) {
-  return <ul className="divide-y divide-line overflow-hidden rounded-ui border-2 border-line bg-white">{items.map(s => <li key={s.id}><Link to={`/beitraege/${s.id}`} className="flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-pop/30"><span className="min-w-0 flex-1"><strong className="block truncate text-[15px] font-semibold">{s.title}</strong><small className="mt-0.5 block text-[13px] text-muted">{categories.find(c => c.id === s.category_id)?.name ?? 'Beitrag'} · {showAuthor ? `${s.author_name} · ` : ''}{date(s.updated_at)}{s.attachments?.length ? ` · ${s.attachments.length} Datei(en)` : ''}</small></span><Badge status={s.status}/></Link></li>)}</ul>;
+  const { user } = useSession();
+  return <ul className="divide-y divide-line overflow-hidden rounded-ui border-2 border-line bg-white">{items.map(s => <li className="min-w-0" key={s.id}><Link to={`/beitraege/${s.id}`} className="flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-pop/30"><span className="min-w-0 flex-1"><strong className="block truncate text-[15px] font-semibold">{s.title}</strong><small className="mt-0.5 block text-[13px] text-muted">{categories.find(c => c.id === s.category_id)?.name ?? 'Beitrag'} · {showAuthor ? `${s.author_name} · ` : ''}{date(s.updated_at)}{s.attachments?.length ? ` · ${s.attachments.length} Datei(en)` : ''}</small></span><Badge status={s.status}/></Link>{import.meta.env.DEV && <div className="px-4 pb-2"><DevDebug label="Beitrag" data={{ id: s.id, category: s.category_id, status: s.status, version: s.version, attachments: s.attachments?.length ?? 0, editable: (s.status === 'pending' && s.author_id === user.id) || canEdit(user, s.category_id), own: s.author_id === user.id }}/></div>}</li>)}</ul>;
 }

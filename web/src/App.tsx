@@ -3,6 +3,7 @@ import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 
 import { api, ApiError, editorial, json, setCsrf, type Category, type Me, type Poll, type Submission } from './api';
 import { Arrow, Badge, Empty, Failure, Loading, PageHead, Session, SubmissionList, btn, heading, notice, roleName, since, useAction, useData, useSession, useView, type View } from './ui';
 import { Admin, ContributionDetail, Contributions, Editorial, NewContribution, NotFound, PollDetail, Polls } from './pages';
+import { DevDebug } from './DevDebug';
 
 export function App() {
   const me = useData<Me>('/me');
@@ -88,6 +89,7 @@ function Layout() {
   const { user } = useSession();
   const view = useView();
   const [menu, setMenu] = useState(false);
+  const location = useLocation();
   return (
     <ViewContext.Provider value={view}>
       <a className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-full focus:bg-white focus:px-3 focus:py-2 focus:text-sm" href="#inhalt">Zum Inhalt</a>
@@ -112,7 +114,7 @@ function Layout() {
         </div>
       </aside>
       <div className="flex min-h-screen flex-col bg-paper max-[651px]:pt-12 min-[651px]:pl-[260px]">
-        <main id="inhalt" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-8 sm:py-10"><Outlet/></main>
+        <main id="inhalt" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-8 sm:py-10"><Outlet/>{import.meta.env.DEV && <div className="mt-8"><DevDebug label="Sitzung" data={{ role: user.role, view: view[0], admitted: user.admitted, cohort: user.cohort_member, grants: user.category_ids.length, route: location.pathname }}/></div>}</main>
         <footer className="px-4 pb-6 text-[13px] text-muted sm:px-8">AbiZeitBetrug. · Privater Jahrgangsbereich LMGU 2027</footer>
       </div>
     </ViewContext.Provider>
@@ -247,13 +249,14 @@ function StudentHome() {
         {polls.isPending ? <Loading/> : polls.error ? <Failure error={polls.error} retry={() => polls.refetch()}/> : todo.length === 0 ? <Empty>Gerade ist nichts offen. Sobald die Redaktion eine Abstimmung öffnet, steht sie hier.</Empty> : (
           <ul className="grid gap-4 md:grid-cols-2">
             {todo.map((p, i) => (
-              <li key={p.id} className="flex flex-col rounded-ui bg-white p-5">
+              <li key={p.id} className="flex min-w-0 flex-col rounded-ui bg-white p-5">
                 <h3 className="text-xl font-extrabold leading-snug">{p.title}</h3>
                 {p.description && <p className="mt-2 text-[15px] text-muted">{p.description}</p>}
                 <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-5">
                   <span className="text-[13px] text-muted">{[kindLabel(p.kind), plural(p.options.length, 'Option', 'Optionen'), since(p.opened_at)].filter(Boolean).join(' · ')}</span>
                   <Link to={`/abstimmungen/${p.id}`} className={i === 0 ? btn.primary : btn.secondary}>Abstimmen<span className="sr-only"> bei {p.title}</span></Link>
                 </div>
+                <DevDebug label="Abstimmung" data={{ id: p.id, category: p.category_id, status: p.status, kind: p.kind, version: p.version, options: p.options.length, allowSelfVote: p.allow_self_vote, hasVoted: p.my_option_id !== null }}/>
               </li>
             ))}
           </ul>
@@ -269,12 +272,15 @@ function StudentHome() {
             {categories.data?.map(c => {
               const n = own.filter(s => s.category_id === c.id).length;
               return (
-                <li key={c.id}>
+                <li key={c.id} className="min-w-0">
+                  <div className="flex h-full flex-col">
                   <Link to={`/beitraege/neu?kategorie=${c.id}`} className="flex h-full flex-col rounded-ui bg-white p-5 transition-transform hover:-translate-y-1 hover:bg-pop/40 active:scale-[.99]">
                     <span className="flex items-start justify-between gap-3"><strong className="text-xl font-extrabold leading-snug">{c.name}</strong><Arrow/></span>
                     {c.description && <span className="mt-2 text-[15px] text-muted">{c.description}</span>}
                     <span className="mt-auto pt-4 text-[13px] text-muted">{n ? `${n} eingereicht` : 'Noch nichts eingereicht'}</span>
                   </Link>
+                  {import.meta.env.DEV && <div className="px-5"><DevDebug label="Rubrik" data={{ id: c.id, kind: c.kind, ownSubmissions: n }}/></div>}
+                  </div>
                 </li>
               );
             })}
@@ -304,7 +310,7 @@ function StudentHome() {
 }
 
 // ponytail: min-h-28 keeps room for a per-row summary line; nothing generates one yet.
-function ThickRow({ to, title, badge, meta, count, unit, extra }: { to: string; title: string; badge?: ReactNode; meta: string; count: number; unit: [string, string]; extra?: string }) {
+function ThickRow({ to, title, badge, meta, count, unit, extra, debug }: { to: string; title: string; badge?: ReactNode; meta: string; count: number; unit: [string, string]; extra?: string; debug?: { label: string; data: Record<string, string | number | boolean | null | undefined> } }) {
   return (
     <li>
       <Link to={to} className="flex min-h-28 items-start justify-between gap-6 bg-white p-5 transition-colors hover:bg-pop/30">
@@ -314,6 +320,7 @@ function ThickRow({ to, title, badge, meta, count, unit, extra }: { to: string; 
         </span>
         <span className="flex-none text-right"><strong className="block text-3xl font-extrabold tabular-nums leading-none">{count}</strong><span className="mt-1 block text-[13px] text-muted">{unit[count === 1 ? 0 : 1]}</span>{extra && <span className="block text-[13px] tabular-nums text-muted">{extra}</span>}</span>
       </Link>
+      {import.meta.env.DEV && debug && <div className="px-5 pb-2"><DevDebug label={debug.label} data={debug.data}/></div>}
     </li>
   );
 }
@@ -333,7 +340,7 @@ function EditorHome() {
       <h2 id="home-abstimmungen" className={heading}>Abstimmungen</h2>
       {polls.isPending ? <div className="mt-4"><Loading/></div> : polls.error ? <div className="mt-4"><Failure error={polls.error} retry={() => polls.refetch()}/></div> : sorted.length === 0 ? <div className="mt-4"><Empty>Noch keine Abstimmung. <Link to="/abstimmungen?neu">Neue Abstimmung anlegen →</Link></Empty></div> : (
         <ul className={rows}>
-          {sorted.map(p => <ThickRow key={p.id} to={`/abstimmungen/${p.id}`} title={p.title} badge={<Badge status={p.status}/>} meta={[kindLabel(p.kind), plural(p.options.length, 'Option', 'Optionen'), p.status === 'open' ? since(p.opened_at) : ''].filter(Boolean).join(' · ')} count={p.ballot_count ?? 0} unit={['Stimme', 'Stimmen']}/>)}
+          {sorted.map(p => <ThickRow key={p.id} to={`/abstimmungen/${p.id}`} title={p.title} badge={<Badge status={p.status}/>} meta={[kindLabel(p.kind), plural(p.options.length, 'Option', 'Optionen'), p.status === 'open' ? since(p.opened_at) : ''].filter(Boolean).join(' · ')} count={p.ballot_count ?? 0} unit={['Stimme', 'Stimmen']} debug={{ label: 'Abstimmung', data: { id: p.id, category: p.category_id, status: p.status, kind: p.kind, version: p.version, options: p.options.length, allowSelfVote: p.allow_self_vote, hasVoted: p.my_option_id !== null } }}/>) }
         </ul>
       )}
     </section>
@@ -343,7 +350,7 @@ function EditorHome() {
         <ul className={rows}>
           {categories.data?.map(c => {
             const mine = (submissions.data ?? []).filter(s => s.category_id === c.id);
-            return <ThickRow key={c.id} to={`/redaktion?rubrik=${c.id}`} title={c.name} meta={c.description || 'Rubrik'} count={mine.length} unit={['Beitrag', 'Beiträge']} extra={`${mine.filter(s => s.status === 'pending').length} offen`}/>;
+            return <ThickRow key={c.id} to={`/redaktion?rubrik=${c.id}`} title={c.name} meta={c.description || 'Rubrik'} count={mine.length} unit={['Beitrag', 'Beiträge']} extra={`${mine.filter(s => s.status === 'pending').length} offen`} debug={{ label: 'Rubrik', data: { id: c.id, kind: c.kind, submissions: mine.length, pending: mine.filter(s => s.status === 'pending').length } }}/>;
           })}
         </ul>
       )}

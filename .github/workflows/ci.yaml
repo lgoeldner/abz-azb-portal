@@ -80,6 +80,7 @@ jobs:
       - name: Playwright core journeys
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:8080
+          DEBUG_EXPECT_PRODUCTION: '1'
         run: cd web && npx playwright install --with-deps chromium && npm run test:e2e
       - name: Ops shell and restore safety checks
         run: |
