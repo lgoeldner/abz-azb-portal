@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+.env
+.env.local
+.env.production
+data/
+tmp/
+*.log
+*.tsbuildinfo
+.DS_Store
+.playwright-mcp/
+server/portal
+server/bin/
