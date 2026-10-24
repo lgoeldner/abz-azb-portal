@@ -23,10 +23,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List category descriptions */
+        /** List collections (students: no drafts; ballot_count editors only) */
         get: operations["getCategories"];
         put?: never;
-        /** Create category (admin) */
+        /** Create collection (admins; managers for single-answer kinds only) */
         post: operations["postCategories"];
         delete?: never;
         options?: never;
@@ -47,7 +47,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update category (admin) */
+        /** Update collection (admin for repeatable kinds; editors with grant for single-answer drafts); kind changes stay within their group */
         patch: operations["patchCategoriesId"];
         trace?: never;
     };
@@ -224,109 +224,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/polls": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List visible polls */
-        get: operations["getPolls"];
-        put?: never;
-        /** Create draft poll */
-        post: operations["postPolls"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/polls/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Edit draft poll */
-        patch: operations["patchPollsId"];
-        trace?: never;
-    };
-    "/api/v1/polls/{id}/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Open or close poll */
-        post: operations["postPollsIdStatus"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/polls/{id}/ballot": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Cast or change named ballot */
-        put: operations["putPollsIdBallot"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/polls/{id}/results": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Editorial aggregate counts */
-        get: operations["getPollsIdResults"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/polls/{id}/audit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Admin-only named ballot history */
-        get: operations["getPollsIdAudit"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/roster": {
         parameters: {
             query?: never;
@@ -351,7 +248,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Editorial CSV and original-photo ZIP */
+        /** Editorial CSV and original-photo ZIP (repeatable categories only) */
         get: operations["getCategoriesIdExport"];
         put?: never;
         post?: never;
@@ -430,6 +327,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/categories/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Open or close a single-answer category (400 for repeatable) */
+        post: operations["postCategoriesIdStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories/{id}/ballot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Cast or change named ballot (single-answer only) */
+        put: operations["putCategoriesIdBallot"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories/{id}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Editorial aggregate counts (single-answer only) */
+        get: operations["getCategoriesIdResults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories/{id}/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin-only named ballot history (single-answer only) */
+        get: operations["getCategoriesIdAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -454,7 +419,29 @@ export interface components {
             name: string;
             description: string;
             /** @enum {string} */
-            kind: "idea" | "quote" | "memory" | "photo";
+            kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal";
+            /** @description True for idea, quote, memory, photo (any number of submissions); false for person, proposal (single-answer ballot). */
+            repeatable: boolean;
+            /**
+             * @description Always open for repeatable categories.
+             * @enum {string}
+             */
+            status: "draft" | "open" | "closed";
+            allow_self_vote: boolean;
+            /** @description Empty for repeatable categories. */
+            options: components["schemas"]["PollOption"][];
+            /** @description The viewer's current choice; null for repeatable categories. */
+            my_option_id: string | null;
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Set once when a single-answer category moves from draft to open; creation time for repeatable ones.
+             */
+            opened_at: string | null;
+            /** @description Number of current ballots. Editors only; null for students and repeatable categories. */
+            ballot_count: number | null;
         };
         Attachment: {
             id: string;
@@ -507,31 +494,6 @@ export interface components {
             label: string;
             user_id?: string;
         };
-        Poll: {
-            id: string;
-            category_id: string;
-            title: string;
-            description: string;
-            /** @enum {string} */
-            kind: "person" | "proposal";
-            /** @enum {string} */
-            format: "single_choice";
-            /** @enum {string} */
-            status: "draft" | "open" | "closed";
-            allow_self_vote: boolean;
-            options: components["schemas"]["PollOption"][];
-            my_option_id: string | null;
-            version: number;
-            /** Format: date-time */
-            created_at: string;
-            /**
-             * Format: date-time
-             * @description Set once when the poll moves from draft to open.
-             */
-            opened_at: string | null;
-            /** @description Number of current ballots. Editors only; null for students. */
-            ballot_count: number | null;
-        };
         PollResult: {
             option_id: string;
             label: string;
@@ -572,7 +534,13 @@ export interface components {
             name: string;
             description: string;
             /** @enum {string} */
-            kind: "idea" | "quote" | "memory" | "photo";
+            kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal";
+            allow_self_vote?: boolean;
+            /** @description Empty for repeatable kinds; 2-500 unique options for person and proposal. */
+            options?: {
+                label: string;
+                user_id?: string;
+            }[];
         };
         SubmissionInput: {
             idempotency_key: string;
@@ -593,18 +561,6 @@ export interface components {
             /** @enum {string} */
             status: "pending" | "accepted" | "rejected" | "withdrawn";
         };
-        PollInput: {
-            category_id: string;
-            title: string;
-            description: string;
-            /** @enum {string} */
-            kind: "person" | "proposal";
-            allow_self_vote: boolean;
-            options: {
-                label: string;
-                user_id?: string;
-            }[];
-        };
         UserEdit: {
             name: string;
             /** @enum {string} */
@@ -613,14 +569,14 @@ export interface components {
             cohort_member: boolean;
             category_ids: string[];
         };
-        PollEdit: {
-            category_id: string;
-            title: string;
+        CategoryEdit: {
+            name: string;
             description: string;
             /** @enum {string} */
-            kind: "person" | "proposal";
-            allow_self_vote: boolean;
-            options: {
+            kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal";
+            allow_self_vote?: boolean;
+            /** @description Empty for repeatable kinds; 2-500 unique options for person and proposal. */
+            options?: {
                 label: string;
                 user_id?: string;
             }[];
@@ -741,7 +697,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CategoryInput"];
+                "application/json": components["schemas"]["CategoryEdit"];
             };
         };
         responses: {
@@ -1216,251 +1172,6 @@ export interface operations {
             };
         };
     };
-    getPolls: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Poll"][];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    postPolls: {
-        parameters: {
-            query?: never;
-            header: {
-                "X-CSRF-Token": string;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PollInput"];
-            };
-        };
-        responses: {
-            /** @description Success */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Poll"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    patchPollsId: {
-        parameters: {
-            query?: never;
-            header: {
-                "X-CSRF-Token": string;
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PollEdit"];
-            };
-        };
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Poll"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    postPollsIdStatus: {
-        parameters: {
-            query?: never;
-            header: {
-                "X-CSRF-Token": string;
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    version: number;
-                    /** @enum {string} */
-                    status: "open" | "closed";
-                };
-            };
-        };
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Poll"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    putPollsIdBallot: {
-        parameters: {
-            query?: never;
-            header: {
-                "X-CSRF-Token": string;
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    option_id: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        option_id: string;
-                    };
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getPollsIdResults: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PollResult"][];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getPollsIdAudit: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BallotAudit"][];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
     getRoster: {
         parameters: {
             query?: never;
@@ -1665,6 +1376,150 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SystemStatus"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postCategoriesIdStatus: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    version: number;
+                    /** @enum {string} */
+                    status: "open" | "closed";
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Category"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putCategoriesIdBallot: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    option_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        option_id: string;
+                    };
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCategoriesIdResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PollResult"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCategoriesIdAudit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BallotAudit"][];
                 };
             };
             /** @description Error */

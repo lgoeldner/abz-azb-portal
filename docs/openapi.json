@@ -41,7 +41,7 @@
     },
     "/api/v1/categories": {
       "get": {
-        "summary": "List category descriptions",
+        "summary": "List collections (students: no drafts; ballot_count editors only)",
         "operationId": "getCategories",
         "responses": {
           "200": {
@@ -70,7 +70,7 @@
         }
       },
       "post": {
-        "summary": "Create category (admin)",
+        "summary": "Create collection (admins; managers for single-answer kinds only)",
         "operationId": "postCategories",
         "responses": {
           "201": {
@@ -118,7 +118,7 @@
     },
     "/api/v1/categories/{id}": {
       "patch": {
-        "summary": "Update category (admin)",
+        "summary": "Update collection (admin for repeatable kinds; editors with grant for single-answer drafts); kind changes stay within their group",
         "operationId": "patchCategoriesId",
         "responses": {
           "200": {
@@ -165,7 +165,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CategoryInput"
+                "$ref": "#/components/schemas/CategoryEdit"
               }
             }
           }
@@ -843,368 +843,6 @@
         ]
       }
     },
-    "/api/v1/polls": {
-      "get": {
-        "summary": "List visible polls",
-        "operationId": "getPolls",
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Poll"
-                  }
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "summary": "Create draft poll",
-        "operationId": "postPolls",
-        "responses": {
-          "201": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Poll"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "X-CSRF-Token",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PollInput"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/polls/{id}": {
-      "patch": {
-        "summary": "Edit draft poll",
-        "operationId": "patchPollsId",
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Poll"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-CSRF-Token",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PollEdit"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/polls/{id}/status": {
-      "post": {
-        "summary": "Open or close poll",
-        "operationId": "postPollsIdStatus",
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Poll"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-CSRF-Token",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "version": {
-                    "type": "integer"
-                  },
-                  "status": {
-                    "type": "string",
-                    "enum": [
-                      "open",
-                      "closed"
-                    ]
-                  }
-                },
-                "required": [
-                  "version",
-                  "status"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/polls/{id}/ballot": {
-      "put": {
-        "summary": "Cast or change named ballot",
-        "operationId": "putPollsIdBallot",
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "option_id": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "option_id"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-CSRF-Token",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "option_id": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "option_id"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/polls/{id}/results": {
-      "get": {
-        "summary": "Editorial aggregate counts",
-        "operationId": "getPollsIdResults",
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/PollResult"
-                  }
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      }
-    },
-    "/api/v1/polls/{id}/audit": {
-      "get": {
-        "summary": "Admin-only named ballot history",
-        "operationId": "getPollsIdAudit",
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/BallotAudit"
-                  }
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      }
-    },
     "/api/v1/roster": {
       "get": {
         "summary": "Verified cohort names",
@@ -1238,7 +876,7 @@
     },
     "/api/v1/categories/{id}/export": {
       "get": {
-        "summary": "Editorial CSV and original-photo ZIP",
+        "summary": "Editorial CSV and original-photo ZIP (repeatable categories only)",
         "operationId": "getCategoriesIdExport",
         "responses": {
           "200": {
@@ -1465,6 +1103,235 @@
           }
         }
       }
+    },
+    "/api/v1/categories/{id}/status": {
+      "post": {
+        "summary": "Open or close a single-answer category (400 for repeatable)",
+        "operationId": "postCategoriesIdStatus",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Category"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "open",
+                      "closed"
+                    ]
+                  }
+                },
+                "required": [
+                  "version",
+                  "status"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/categories/{id}/ballot": {
+      "put": {
+        "summary": "Cast or change named ballot (single-answer only)",
+        "operationId": "putCategoriesIdBallot",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "option_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "option_id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "option_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "option_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/categories/{id}/results": {
+      "get": {
+        "summary": "Editorial aggregate counts (single-answer only)",
+        "operationId": "getCategoriesIdResults",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PollResult"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/categories/{id}/audit": {
+      "get": {
+        "summary": "Admin-only named ballot history (single-answer only)",
+        "operationId": "getCategoriesIdAudit",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BallotAudit"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -1555,15 +1422,78 @@
               "idea",
               "quote",
               "memory",
-              "photo"
+              "photo",
+              "person",
+              "proposal"
             ]
+          },
+          "repeatable": {
+            "type": "boolean",
+            "description": "True for idea, quote, memory, photo (any number of submissions); false for person, proposal (single-answer ballot)."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "open",
+              "closed"
+            ],
+            "description": "Always open for repeatable categories."
+          },
+          "allow_self_vote": {
+            "type": "boolean"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PollOption"
+            },
+            "description": "Empty for repeatable categories."
+          },
+          "my_option_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The viewer's current choice; null for repeatable categories."
+          },
+          "version": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "opened_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Set once when a single-answer category moves from draft to open; creation time for repeatable ones."
+          },
+          "ballot_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Number of current ballots. Editors only; null for students and repeatable categories."
           }
         },
         "required": [
           "id",
           "name",
           "description",
-          "kind"
+          "kind",
+          "repeatable",
+          "status",
+          "allow_self_vote",
+          "options",
+          "my_option_id",
+          "version",
+          "created_at",
+          "opened_at",
+          "ballot_count"
         ],
         "additionalProperties": false
       },
@@ -1765,98 +1695,6 @@
         ],
         "additionalProperties": false
       },
-      "Poll": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "category_id": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "person",
-              "proposal"
-            ]
-          },
-          "format": {
-            "type": "string",
-            "enum": [
-              "single_choice"
-            ]
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "draft",
-              "open",
-              "closed"
-            ]
-          },
-          "allow_self_vote": {
-            "type": "boolean"
-          },
-          "options": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PollOption"
-            }
-          },
-          "my_option_id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "version": {
-            "type": "integer"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "opened_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time",
-            "description": "Set once when the poll moves from draft to open."
-          },
-          "ballot_count": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "description": "Number of current ballots. Editors only; null for students."
-          }
-        },
-        "required": [
-          "id",
-          "category_id",
-          "title",
-          "description",
-          "kind",
-          "format",
-          "status",
-          "allow_self_vote",
-          "options",
-          "my_option_id",
-          "version",
-          "created_at",
-          "opened_at",
-          "ballot_count"
-        ],
-        "additionalProperties": false
-      },
       "PollResult": {
         "type": "object",
         "properties": {
@@ -2014,8 +1852,32 @@
               "idea",
               "quote",
               "memory",
-              "photo"
+              "photo",
+              "person",
+              "proposal"
             ]
+          },
+          "allow_self_vote": {
+            "type": "boolean"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "user_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "label"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Empty for repeatable kinds; 2-500 unique options for person and proposal."
           }
         },
         "required": [
@@ -2103,57 +1965,6 @@
         ],
         "additionalProperties": false
       },
-      "PollInput": {
-        "type": "object",
-        "properties": {
-          "category_id": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "person",
-              "proposal"
-            ]
-          },
-          "allow_self_vote": {
-            "type": "boolean"
-          },
-          "options": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "label": {
-                  "type": "string"
-                },
-                "user_id": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "label"
-              ],
-              "additionalProperties": false
-            }
-          }
-        },
-        "required": [
-          "category_id",
-          "title",
-          "description",
-          "kind",
-          "allow_self_vote",
-          "options"
-        ],
-        "additionalProperties": false
-      },
       "UserEdit": {
         "type": "object",
         "properties": {
@@ -2190,13 +2001,10 @@
         ],
         "additionalProperties": false
       },
-      "PollEdit": {
+      "CategoryEdit": {
         "type": "object",
         "properties": {
-          "category_id": {
-            "type": "string"
-          },
-          "title": {
+          "name": {
             "type": "string"
           },
           "description": {
@@ -2205,6 +2013,10 @@
           "kind": {
             "type": "string",
             "enum": [
+              "idea",
+              "quote",
+              "memory",
+              "photo",
               "person",
               "proposal"
             ]
@@ -2228,19 +2040,17 @@
                 "label"
               ],
               "additionalProperties": false
-            }
+            },
+            "description": "Empty for repeatable kinds; 2-500 unique options for person and proposal."
           },
           "version": {
             "type": "integer"
           }
         },
         "required": [
-          "category_id",
-          "title",
+          "name",
           "description",
           "kind",
-          "allow_self_vote",
-          "options",
           "version"
         ],
         "additionalProperties": false
