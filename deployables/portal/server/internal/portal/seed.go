@@ -1,8 +1,8 @@
 package portal
 
 import (
-	"abizeitbetrug/server/internal/authmock"
 	"context"
+	"crypto/sha1"
 	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,7 +21,21 @@ const PendingID = "00000000-0000-4000-8000-000000000006"
 var fixtureSlugs = map[string]string{AdminID: "alex_admin", ManagerID: "sam_redaktion", MiaID: "mia_weber", LeonID: "leon_fischer", GuestID: "kim_gast", PendingID: "pat_ausstehend"}
 
 // FixtureSubject is the OIDC subject the auth mock issues for a seeded account.
-func FixtureSubject(id string) string { return authmock.SubjectForSlug(fixtureSlugs[id]) }
+func FixtureSubject(id string) string { return subjectForSlug(fixtureSlugs[id]) }
+
+// fixtureNamespace and subjectForSlug copy the auth-mock UUIDv5 derivation so production code
+// never imports the auth-mock module; seed_subject_test.go asserts both stay identical.
+var fixtureNamespace = [16]byte{0x6b, 0x1d, 0x3c, 0x0a, 0x7e, 0x42, 0x4f, 0x8b, 0x9a, 0x51, 0xc3, 0x2d, 0x84, 0xe7, 0x10, 0xaf}
+
+func subjectForSlug(slug string) string {
+	h := sha1.New()
+	h.Write(fixtureNamespace[:])
+	h.Write([]byte(slug))
+	b := h.Sum(nil)[:16]
+	b[6] = b[6]&0x0f | 0x50
+	b[8] = b[8]&0x3f | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
 
 func categoryID(i int) string { return fmt.Sprintf("10000000-0000-4000-8000-%012d", i) }
 func Seed(ctx context.Context, pool *pgxpool.Pool, environment string) error {

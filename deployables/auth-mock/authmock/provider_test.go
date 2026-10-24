@@ -221,7 +221,7 @@ func TestProviderDevelopmentIsolation(t *testing.T) {
 }
 
 func TestLoadUsersStrictConfigurationAndFixtures(t *testing.T) {
-	file, err := os.Open("../../../deployables/auth-mock/users.yaml")
+	file, err := os.Open("../users.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

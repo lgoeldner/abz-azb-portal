@@ -1,7 +1,7 @@
 package portal
 
 import (
-	"abizeitbetrug/server/internal/authmock"
+	"abizeitbetrug/auth-mock/authmock"
 	"bytes"
 	"context"
 	"encoding/json"

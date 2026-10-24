@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"abizeitbetrug/server/internal/authmock"
+	"abizeitbetrug/auth-mock/authmock"
 )
 
 func handlerFromEnvironment() (http.Handler, error) {

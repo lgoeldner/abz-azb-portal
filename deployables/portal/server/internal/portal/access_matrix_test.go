@@ -17,7 +17,7 @@ type contractOperation struct{ method, path string }
 // routes are covered by the access invariants without editing this test.
 func contractOperations(t *testing.T) []contractOperation {
 	t.Helper()
-	raw, err := os.ReadFile("../../../docs/openapi.json")
+	raw, err := os.ReadFile("../../../../../docs/openapi.json")
 	if err != nil {
 		t.Fatal(err)
 	}

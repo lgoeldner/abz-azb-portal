@@ -4,12 +4,12 @@ import (
 	"os"
 	"testing"
 
-	"abizeitbetrug/server/internal/authmock"
+	"abizeitbetrug/auth-mock/authmock"
 )
 
 // Seeded accounts must be reachable by logging in as the matching mock identity.
 func TestSeededAccountsMatchAuthMockUsers(t *testing.T) {
-	file, err := os.Open("../../../deployables/auth-mock/users.yaml")
+	file, err := os.Open("../../../../auth-mock/users.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,6 +25,14 @@ func TestSeededAccountsMatchAuthMockUsers(t *testing.T) {
 	for _, id := range []string{AdminID, ManagerID, MiaID, LeonID, GuestID, PendingID} {
 		if !issued[FixtureSubject(id)] {
 			t.Fatalf("seeded account %s has no auth-mock identity", id)
+		}
+	}
+}
+
+func TestSubjectForSlugMatchesAuthMock(t *testing.T) {
+	for _, slug := range []string{"alex_admin", "mia_weber", "kim_gast", "x"} {
+		if got, want := subjectForSlug(slug), authmock.SubjectForSlug(slug); got != want {
+			t.Fatalf("subjectForSlug(%q) = %s, auth-mock issues %s", slug, got, want)
 		}
 	}
 }
