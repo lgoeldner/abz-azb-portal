@@ -226,6 +226,34 @@ describe('verwaltung', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Die Person hat bereits Beiträge.');
   });
 
+  it('blocks access only after confirmation and never offers it for the own account', async () => {
+    const calls = mount('/verwaltung/personen');
+    await openMenu('Test Admin');
+    expect(screen.queryByRole('menuitem', { name: 'Zugang sperren' })).toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await openMenu('Sam Redaktion');
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Zugang sperren' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Zugang von Sam Redaktion sperren?' });
+    expect(calls).toHaveLength(0);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Sperren' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]).toEqual({ url: '/admin/users/mgr-1', method: 'PATCH', body: { name: 'Sam Redaktion', role: 'manager', admitted: false, cohort_member: true, category_ids: ['memory'] } });
+  });
+
+  it('moves keyboard focus into the row menu and back to its trigger', async () => {
+    mount('/verwaltung/personen');
+    await openMenu('Gast Gerda');
+    const items = within(screen.getByRole('menu')).getAllByRole('menuitem');
+    expect(items[0]).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    expect(items[1]).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'ArrowUp' });
+    fireEvent.keyDown(document, { key: 'ArrowUp' });
+    expect(items[items.length - 1]).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByRole('button', { name: 'Aktionen für Gast Gerda' })).toHaveFocus();
+  });
+
   it('closes the row menu on Escape and outside click', async () => {
     mount('/verwaltung/personen');
     await openMenu('Gast Gerda');

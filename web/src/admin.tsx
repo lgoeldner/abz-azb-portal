@@ -1,7 +1,7 @@
 import { BookHeart, Check, GraduationCap, Image, Lightbulb, MoreHorizontal, Pencil, PenLine, Plus, Quote, ShieldCheck, type LucideIcon } from 'lucide-react';
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError, date, json, type AuditEvent, type Category, type SystemStatus, type User } from './api';
-import { Empty, Failure, Loading, PageHead, btn, field, heading, label, panel, roleName, useAction, useData } from './ui';
+import { Empty, Failure, Loading, PageHead, btn, field, heading, label, panel, roleName, useAction, useData, useSession } from './ui';
 import { DevDebug } from './DevDebug';
 
 type Role = User['role'];
@@ -37,9 +37,9 @@ export function People() {
   </>;
 }
 
-type Confirming = { kind: 'role'; role: Role } | { kind: 'delete' } | null;
+type Confirming = { kind: 'role'; role: Role } | { kind: 'block' } | { kind: 'delete' } | null;
 function PersonRow({ u }: { u: User }) {
-  const action = useAction(); const [confirm, setConfirm] = useState<Confirming>(null); const RoleIcon = roleIcon[u.role];
+  const action = useAction(); const [confirm, setConfirm] = useState<Confirming>(null); const RoleIcon = roleIcon[u.role]; const self = useSession().user.id === u.id;
   const close = () => setConfirm(null);
   return <li className="min-w-0 px-4 py-3">
     <div className="flex items-center gap-3">
@@ -49,37 +49,53 @@ function PersonRow({ u }: { u: User }) {
         <span role="img" aria-label={roleName(u.role)} title={roleName(u.role)} className="text-muted"><RoleIcon aria-hidden="true" className="size-[18px]"/></span>
         {u.admitted ? <span className={`${chip} bg-ok-tint text-ok`}>Freigegeben</span> : <button type="button" disabled={action.busy} className={`${chip} bg-wait-tint text-wait ${chipAction}`} aria-label={`Zugang freigeben: ${u.name}`} title="Zugang freigeben" onClick={() => action.run(() => updateUser(u, { admitted: true }), 'Zugang freigegeben.')}>Wartet</button>}
       </div>
-      <RowMenu u={u} onRole={role => setConfirm({ kind: 'role', role })} onDelete={() => setConfirm({ kind: 'delete' })}/>
+      <RowMenu u={u} onRole={role => setConfirm({ kind: 'role', role })} onBlock={u.admitted && !self ? () => setConfirm({ kind: 'block' }) : undefined} onDelete={() => setConfirm({ kind: 'delete' })}/>
     </div>
     {!confirm && action.feedback && <div className="mt-2">{action.feedback}</div>}
     {confirm?.kind === 'role' && <Confirm title={`${u.name} wird zu ${roleName(confirm.role)}?`} busy={action.busy} onCancel={close} onConfirm={() => action.run(async () => { await updateUser(u, { role: confirm.role }); close(); }, 'Rolle geändert.')} error={action.feedback}>Die Rolle ändert sich sofort. Die Administration kann Rollen jederzeit wieder ändern.</Confirm>}
+    {confirm?.kind === 'block' && <Confirm danger title={`Zugang von ${u.name} sperren?`} confirmLabel="Sperren" busy={action.busy} onCancel={close} onConfirm={() => action.run(async () => { await updateUser(u, { admitted: false }); close(); }, 'Zugang gesperrt.')} error={action.feedback}>Die Person wird sofort abgemeldet und kann das Portal erst nach erneuter Freigabe nutzen. Beiträge und Stimmen bleiben erhalten.</Confirm>}
     {confirm?.kind === 'delete' && <Confirm danger title={`${u.name} löschen?`} confirmLabel="Löschen" busy={action.busy} onCancel={close} onConfirm={() => action.run(async () => { await api(`/admin/users/${u.id}`, json('DELETE')); close(); }, 'Person gelöscht.')} error={action.feedback}>Das Konto wird dauerhaft entfernt. Das kann nicht rückgängig gemacht werden.</Confirm>}
   </li>;
 }
 
-function RowMenu({ u, onRole, onDelete }: { u: User; onRole: (r: Role) => void; onDelete: () => void }) {
-  const [open, setOpen] = useState(false); const [sub, setSub] = useState(false); const box = useRef<HTMLDivElement>(null);
+function RowMenu({ u, onRole, onBlock, onDelete }: { u: User; onRole: (r: Role) => void; onBlock?: () => void; onDelete: () => void }) {
+  const [open, setOpen] = useState(false); const [sub, setSub] = useState(false); const box = useRef<HTMLDivElement>(null); const trigger = useRef<HTMLButtonElement>(null);
   const shut = () => { setOpen(false); setSub(false); };
+  // Focus returns to the trigger before a dialog opens, so the dialog hands it back when it closes.
+  const pick = (then: () => void) => { shut(); trigger.current?.focus(); then(); };
   useEffect(() => {
     if (!open) return;
+    box.current?.querySelector<HTMLElement>('[role^="menuitem"]')?.focus();
     const down = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) shut(); };
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { shut(); box.current?.querySelector('button')?.focus(); } };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === 'Tab') { shut(); trigger.current?.focus(); }
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        const items = [...box.current?.querySelectorAll<HTMLElement>('[role^="menuitem"]') ?? []]; if (!items.length) return;
+        e.preventDefault(); const at = items.indexOf(document.activeElement as HTMLElement);
+        items[(at + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus();
+      }
+    };
     document.addEventListener('mousedown', down); document.addEventListener('keydown', key);
     return () => { document.removeEventListener('mousedown', down); document.removeEventListener('keydown', key); };
   }, [open]);
   return <div ref={box} className="relative flex-none">
-    <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label={`Aktionen für ${u.name}`} title="Aktionen" className="grid size-10 place-items-center rounded-full hover:bg-pill" onClick={() => open ? shut() : setOpen(true)}><MoreHorizontal aria-hidden="true" className="size-5"/></button>
+    <button ref={trigger} type="button" aria-haspopup="menu" aria-expanded={open} aria-label={`Aktionen für ${u.name}`} title="Aktionen" className="grid size-10 place-items-center rounded-full hover:bg-pill" onClick={() => open ? shut() : setOpen(true)}><MoreHorizontal aria-hidden="true" className="size-5"/></button>
     {open && <div role="menu" aria-label={`Aktionen für ${u.name}`} className="absolute right-0 top-full z-20 mt-1 w-56 rounded-ui border-2 border-line bg-white p-1 shadow-lg">
       <button type="button" role="menuitem" aria-haspopup="menu" aria-expanded={sub} className={menuItem} onClick={() => setSub(!sub)}>Rolle ändern<span aria-hidden="true">›</span></button>
-      {sub && <div role="menu" aria-label="Rolle ändern" className="mb-1 ml-3 border-l-2 border-pill pl-1">{roles.map(r => <button key={r} type="button" role="menuitemradio" aria-checked={u.role === r} className={menuItem} onClick={() => { shut(); if (r !== u.role) onRole(r); }}>{roleName(r)}{u.role === r && <Check aria-hidden="true" className="size-4"/>}</button>)}</div>}
-      <button type="button" role="menuitem" className={`${menuItem} text-bad`} onClick={() => { shut(); onDelete(); }}>Löschen</button>
+      {sub && <div role="menu" aria-label="Rolle ändern" className="mb-1 ml-3 border-l-2 border-pill pl-1">{roles.map(r => <button key={r} type="button" role="menuitemradio" aria-checked={u.role === r} className={menuItem} onClick={() => pick(() => { if (r !== u.role) onRole(r); })}>{roleName(r)}{u.role === r && <Check aria-hidden="true" className="size-4"/>}</button>)}</div>}
+      {onBlock && <button type="button" role="menuitem" className={menuItem} onClick={() => pick(onBlock)}>Zugang sperren</button>}
+      <button type="button" role="menuitem" className={`${menuItem} text-bad`} onClick={() => pick(onDelete)}>Löschen</button>
     </div>}
   </div>;
 }
 
 function Confirm({ title, children, confirmLabel = 'Bestätigen', danger = false, busy, error, onConfirm, onCancel }: { title: string; children: ReactNode; confirmLabel?: string; danger?: boolean; busy: boolean; error?: ReactNode; onConfirm: () => void; onCancel: () => void }) {
   const ref = useRef<HTMLDialogElement>(null); const id = useId();
-  useEffect(() => { const d = ref.current!; if (typeof d.showModal === 'function') { if (!d.open) d.showModal(); } else d.setAttribute('open', ''); }, []);
+  // Closing (not just unmounting) the modal lets the browser restore focus to the element that opened it.
+  useLayoutEffect(() => {
+    const d = ref.current!; if (typeof d.showModal === 'function') { if (!d.open) d.showModal(); } else d.setAttribute('open', '');
+    return () => { if (d.open && typeof d.close === 'function') d.close(); };
+  }, []);
   return <dialog ref={ref} aria-labelledby={id} className="m-auto w-[min(92vw,28rem)] rounded-ui bg-white p-6 text-ink backdrop:bg-ink/40" onCancel={e => { e.preventDefault(); onCancel(); }}>
     <h2 id={id} className={heading}>{title}</h2><p className="mt-2 text-sm text-muted">{children}</p>{error && <div className="mt-4">{error}</div>}
     <div className="mt-6 flex flex-wrap items-center justify-end gap-3"><button type="button" className={btn.secondary} onClick={onCancel}>Abbrechen</button><button type="button" disabled={busy} className={danger ? 'inline-flex items-center justify-center rounded-full bg-bad px-5 py-2.5 text-[15px] font-bold text-white' : btn.primary} onClick={onConfirm}>{confirmLabel}</button></div>
