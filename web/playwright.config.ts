@@ -10,5 +10,6 @@ export default defineConfig({
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173',
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  // ponytail: PLAYWRIGHT_CHANNEL=chrome reuses the installed Google Chrome (preinstalled on GitHub runners), skipping the browser download.
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], channel: process.env.PLAYWRIGHT_CHANNEL || undefined } }],
 });
