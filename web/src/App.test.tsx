@@ -226,12 +226,15 @@ describe('navigation by view', () => {
 
     const main = screen.getByRole('main');
     expect(await within(main).findByRole('heading', { level: 1, name: 'Redaktion' })).toBeInTheDocument();
-    expect(await within(main).findByText('3 Beiträge warten auf Prüfung · 1 Abstimmung offen')).toBeInTheDocument();
-    expect(within(main).getByRole('link', { name: /Abimotto/ })).toHaveTextContent(/34\s*Stimmen/);
-    expect(within(main).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent(/3\s*Beiträge.*2 offen/);
-    expect(within(main).getByRole('link', { name: /Zitate/ })).toHaveTextContent(/1\s*Beitrag1 offen/);
+    if (role === 'admin') expect(within(main).getByRole('region', { name: 'Personen' })).toBeInTheDocument();
+    else {
+      expect(await within(main).findByText('3 Beiträge warten auf Prüfung · 1 Abstimmung offen')).toBeInTheDocument();
+      expect(within(main).getByRole('link', { name: /Abimotto/ })).toHaveTextContent(/34\s*Stimmen/);
+      expect(within(main).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent(/3\s*Beiträge.*2 offen/);
+      expect(within(main).getByRole('link', { name: /Zitate/ })).toHaveTextContent(/1\s*Beitrag1 offen/);
+    }
     expect(within(aside).getByRole('link', { name: /Abimotto/ })).toHaveTextContent('34 Stimmen');
-    expect(within(aside).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('3 Beiträge · 2 offen');
+    expect(within(aside).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('3 Beiträge, 2 offen');
     expect(within(aside).getByRole('link', { name: /Erinnerungen/ })).toHaveAttribute('href', '/redaktion?rubrik=memory');
     expect(within(aside).getByRole('link', { name: 'Neue Abstimmung' })).toHaveAttribute('href', '/abstimmungen?neu');
 
@@ -241,5 +244,41 @@ describe('navigation by view', () => {
     expect(within(aside).getByRole('list', { name: 'Offen' })).toBeInTheDocument();
     expect(within(aside).queryByRole('link', { name: 'Neue Abstimmung' })).toBeNull();
     expect(within(aside).queryByRole('link', { name: 'Verwaltung' })).toBeNull();
+  });
+});
+
+describe('admin home', () => {
+  it('shows user and waiting counts, only the three latest polls and open/closed counts per category', async () => {
+    localStorage.clear();
+    const admin = { id: 'admin-1', name: 'Test Admin', role: 'admin', admitted: true, cohort_member: false, category_ids: [] };
+    const people = [admin, ...[1, 2, 3, 4].map(i => ({ ...user, id: `s${i}`, name: `Schüler ${i}`, admitted: i > 2 }))];
+    const day = (n: number) => new Date(Date.UTC(2026, 9, n)).toISOString();
+    const poll = (id: string, categoryId: string, status: string, n: number) => ({
+      id, category_id: categoryId, title: `Titel ${id}`, description: '', kind: 'proposal', format: 'single_choice', status,
+      allow_self_vote: false, options: [], my_option_id: null, version: 1, created_at: day(n), opened_at: day(n), ballot_count: 0,
+    });
+    const polls = [poll('p1', 'memory', 'open', 1), poll('p2', 'memory', 'closed', 2), poll('p3', 'quotes', 'open', 3), poll('p4', 'quotes', 'open', 4), poll('p5', 'memory', 'open', 5)];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/v1/me')) return Response.json({ user: admin, csrf_token: 'csrf' });
+      if (url.endsWith('/api/v1/admin/users')) return Response.json(people);
+      if (url.endsWith('/api/v1/polls')) return Response.json(polls);
+      if (url.endsWith('/api/v1/categories')) return Response.json([category, { id: 'quotes', name: 'Zitate', description: '', kind: 'quote' }]);
+      return Response.json([]);
+    }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><MemoryRouter><App/></MemoryRouter></QueryClientProvider>);
+
+    const people$ = await screen.findByRole('region', { name: 'Personen' });
+    await waitFor(() => expect(within(people$).getByText('Angemeldet').previousElementSibling).toHaveTextContent('5'));
+    expect(within(people$).getByText(/auf Freigabe/).previousElementSibling).toHaveTextContent('2');
+    expect(within(people$).getByRole('link', { name: /Zugänge verwalten/ })).toHaveAttribute('href', '/admin');
+
+    const pollCard = screen.getByRole('region', { name: 'Neueste Abstimmungen' });
+    await waitFor(() => expect(within(pollCard).getByText('Erinnerungen')).toBeInTheDocument());
+    const links = within(pollCard).getAllByRole('link').filter(a => a.getAttribute('href')?.startsWith('/abstimmungen/'));
+    expect(links.map(a => a.getAttribute('href'))).toEqual(['/abstimmungen/p5', '/abstimmungen/p4', '/abstimmungen/p3']);
+    expect(within(pollCard).getByText('Erinnerungen').parentElement).toHaveTextContent('2 offen, 1 beendet');
+    expect(within(pollCard).getByText('Zitate').parentElement).toHaveTextContent('2 offen, 0 beendet');
   });
 });

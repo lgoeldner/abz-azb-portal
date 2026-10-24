@@ -1,7 +1,7 @@
-import { ClipboardList, FileText, House, Plus, Settings, type LucideIcon } from 'lucide-react';
+import { ArrowRight, ClipboardList, FileText, House, Plus, Settings, Users, Vote, type LucideIcon } from 'lucide-react';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { api, ApiError, editorial, json, setCsrf, type Category, type Me, type Poll, type Submission } from './api';
+import { api, ApiError, editorial, json, setCsrf, type Category, type Me, type Poll, type Submission, type User } from './api';
 import { Arrow, Badge, Empty, Failure, Loading, PageHead, Session, SubmissionList, btn, heading, notice, roleName, since, useAction, useData, useSession, useView, type View } from './ui';
 import { Admin, ContributionDetail, Contributions, Editorial, NewContribution, NotFound, PollDetail, Polls } from './pages';
 import { DevDebug } from './DevDebug';
@@ -228,7 +228,7 @@ function RoleGuard({ children, admin = false }: { children: ReactNode; admin?: b
 function Overview() {
   const { user } = useSession();
   const [view] = useContext(ViewContext);
-  return view === 'redaktion' && editorial(user) ? <EditorHome/> : <StudentHome/>;
+  return view === 'redaktion' && editorial(user) ? (user.role === 'admin' ? <AdminHome/> : <EditorHome/>) : <StudentHome/>;
 }
 
 function StudentHome() {
@@ -326,6 +326,43 @@ function ThickRow({ to, title, badge, meta, count, unit, extra, debug }: { to: s
   );
 }
 const rows = 'mt-4 divide-y divide-line overflow-hidden rounded-ui bg-white';
+
+function AdminHome() {
+  const users = useData<User[]>('/admin/users');
+  const polls = useData<Poll[]>('/polls');
+  const categories = useData<Category[]>('/categories');
+  const waiting = (users.data ?? []).filter(u => !u.admitted).length;
+  const latest = [...(polls.data ?? [])].sort(newestOpened).slice(0, 3);
+  const card = 'rounded-ui bg-white p-5';
+  const state = (q: { isPending: boolean; error: Error | null; refetch: () => unknown }) => q.isPending ? <div className="mt-4"><Loading/></div> : q.error ? <div className="mt-4"><Failure error={q.error} retry={() => q.refetch()}/></div> : null;
+  return <>
+    <PageHead title="Redaktion">Zugänge, Abstimmungen und Rubriken im Überblick.</PageHead>
+    <div className="grid gap-4 md:grid-cols-2">
+      <section aria-labelledby="home-personen" className={`${card} min-w-0`}>
+        <h2 id="home-personen" className={`${heading} flex items-center gap-2`}><Users aria-hidden="true" className="size-[18px] shrink-0"/>Personen</h2>
+        {state(users) ?? <>
+          <div className="mt-4 flex flex-wrap gap-x-8 gap-y-3">
+            <p><strong className="block text-3xl font-extrabold tabular-nums leading-none">{users.data?.length}</strong><span className="mt-1 block text-[13px] text-muted">Angemeldet</span></p>
+            <p><strong className="block text-3xl font-extrabold tabular-nums leading-none">{waiting}</strong><span className="mt-1 block text-[13px] text-muted">{waiting === 1 ? 'wartet' : 'warten'} auf Freigabe</span></p>
+          </div>
+          <Link to="/admin" className={`${btn.text} mt-5`}>Zugänge verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0"/></Link>
+          <DevDebug label="Personen" data={{ total: users.data?.length ?? 0, waiting, admins: (users.data ?? []).filter(u => u.role === 'admin').length }}/>
+        </>}
+      </section>
+      <section aria-labelledby="home-abstimmungen" className={`${card} min-w-0`}>
+        <h2 id="home-abstimmungen" className={`${heading} flex items-center gap-2`}><Vote aria-hidden="true" className="size-[18px] shrink-0"/>Neueste Abstimmungen</h2>
+        {state(polls) ?? (latest.length === 0 ? <div className="mt-4"><Empty>Noch keine Abstimmung.</Empty></div> : <ul className="mt-4 divide-y divide-line">
+          {latest.map(p => <li key={p.id} className="min-w-0 py-2"><Link to={`/abstimmungen/${p.id}`} className="flex items-center justify-between gap-3 hover:text-accent-dark"><strong className="min-w-0 break-words text-[15px] font-semibold">{p.title}</strong><Badge status={p.status}/></Link><DevDebug label="Abstimmung" data={{ id: p.id, category: p.category_id, status: p.status, kind: p.kind, version: p.version, options: p.options.length }}/></li>)}
+        </ul>)}
+        <Link to="/abstimmungen" className={`${btn.text} mt-4`}>Alle Abstimmungen <ArrowRight aria-hidden="true" className="size-4 shrink-0"/></Link>
+        <h3 className="mt-6 text-sm font-bold">Pro Rubrik</h3>
+        {state(categories) ?? <ul className="mt-2 divide-y divide-line text-sm">
+          {categories.data?.map(c => { const mine = (polls.data ?? []).filter(p => p.category_id === c.id); return <li key={c.id} className="flex items-baseline justify-between gap-3 py-1.5"><span className="min-w-0 break-words">{c.name}</span><span className="flex-none tabular-nums text-muted">{mine.filter(p => p.status === 'open').length} offen, {mine.filter(p => p.status === 'closed').length} beendet</span></li>; })}
+        </ul>}
+      </section>
+    </div>
+  </>;
+}
 
 function EditorHome() {
   const polls = useData<Poll[]>('/polls');
