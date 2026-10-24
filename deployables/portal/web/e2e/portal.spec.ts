@@ -5,7 +5,7 @@ import { expect, test } from './fixtures';
 async function signInAs(page: Page, role: 'Jahrgang' | 'Redaktion' | 'Administration') {
   await page.goto('/');
   await page.getByRole('link', { name: /Mit Schulkonto anmelden/ }).click();
-  const slug = role === 'Jahrgang' ? 'mia_weber' : role === 'Redaktion' ? 'richie_red' : 'ali_bumbum';
+  const slug = role === 'Jahrgang' ? 'mia_weber' : role === 'Redaktion' ? 'sam_redaktion' : 'alex_admin';
   const access = page.getByRole('button', { name: new RegExp(`\\b${slug}$`) });
   await expect(access, `Development login for ${role} is available (start a seeded development server)`).toBeVisible();
   await access.click();

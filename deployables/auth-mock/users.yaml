@@ -15,3 +15,14 @@ users:
     display_slug: maj_mil
   - name: "Linus"
     display_slug: linus_g
+  # Seeded fixture accounts (portal seed.go fixtureSlugs); e2e and CI log in as these.
+  - name: "Alex (Administration)"
+    display_slug: alex_admin
+  - name: "Sam (Redaktion)"
+    display_slug: sam_redaktion
+  - name: "Leon Fischer"
+    display_slug: leon_fischer
+  - name: "Kim (Gast)"
+    display_slug: kim_gast
+  - name: "Pat (Freigabe ausstehend)"
+    display_slug: pat_ausstehend

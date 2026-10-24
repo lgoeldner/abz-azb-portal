@@ -18,7 +18,7 @@ const GuestID = "00000000-0000-4000-8000-000000000005"
 const PendingID = "00000000-0000-4000-8000-000000000006"
 
 // fixtureSlugs maps seeded accounts to display_slug entries in deployables/auth-mock/users.yaml.
-var fixtureSlugs = map[string]string{AdminID: "ali_bumbum", ManagerID: "richie_red", MiaID: "mia_weber", LeonID: "larry_meer", GuestID: "mimamo", PendingID: "maj_mil"}
+var fixtureSlugs = map[string]string{AdminID: "alex_admin", ManagerID: "sam_redaktion", MiaID: "mia_weber", LeonID: "leon_fischer", GuestID: "kim_gast", PendingID: "pat_ausstehend"}
 
 // FixtureSubject is the OIDC subject the auth mock issues for a seeded account.
 func FixtureSubject(id string) string { return subjectForSlug(fixtureSlugs[id]) }
