@@ -53,83 +53,6 @@ func readable(ctx context.Context, db DB, id string, u User) (Submission, error)
 	}
 	return s, nil
 }
-func (a *App) listCategories(w http.ResponseWriter, r *http.Request) error {
-	rows, e := a.DB.Query(r.Context(), "SELECT id::text,name,description,kind FROM categories ORDER BY name")
-	if e != nil {
-		return e
-	}
-	defer rows.Close()
-	out := []Category{}
-	for rows.Next() {
-		var c Category
-		if e = rows.Scan(&c.ID, &c.Name, &c.Description, &c.Kind); e != nil {
-			return e
-		}
-		out = append(out, c)
-	}
-	if e = rows.Err(); e != nil {
-		return e
-	}
-	jsonOut(w, 200, out)
-	return nil
-}
-func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
-	u := current(r)
-	if u.Role != "admin" {
-		return forbidden()
-	}
-	var in struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		Kind        string `json:"kind"`
-	}
-	if e := decode(w, r, &in); e != nil {
-		return e
-	}
-	in.Name = strings.TrimSpace(in.Name)
-	if in.Name == "" || len(in.Name) > 200 || len(in.Description) > 5000 {
-		return bad("Name oder Beschreibung ungültig.")
-	}
-	if in.Kind != "idea" && in.Kind != "quote" && in.Kind != "memory" && in.Kind != "photo" {
-		return bad("Ungültiger Kategorietyp.")
-	}
-	id := r.PathValue("id")
-	create := id == ""
-	if create {
-		id = ID()
-	} else if !validID(id) {
-		return missing()
-	}
-	tx, e := a.DB.Begin(r.Context())
-	if e != nil {
-		return e
-	}
-	defer tx.Rollback(r.Context())
-	if create {
-		_, e = tx.Exec(r.Context(), "INSERT INTO categories(id,name,description,kind) VALUES($1,$2,$3,$4)", id, in.Name, in.Description, in.Kind)
-	} else {
-		tag, err := tx.Exec(r.Context(), "UPDATE categories SET name=$2,description=$3,kind=$4 WHERE id=$1", id, in.Name, in.Description, in.Kind)
-		e = err
-		if e == nil && tag.RowsAffected() == 0 {
-			return missing()
-		}
-	}
-	if e != nil {
-		return e
-	}
-	if e = audit(r.Context(), tx, u, "category.saved", id); e != nil {
-		return e
-	}
-	if e = tx.Commit(r.Context()); e != nil {
-		return e
-	}
-	code := 200
-	if create {
-		code = 201
-	}
-	jsonOut(w, code, Category{id, in.Name, in.Description, in.Kind})
-	return nil
-}
 func (a *App) listSubmissions(w http.ResponseWriter, r *http.Request) error {
 	u := current(r)
 	q := r.URL.Query()
@@ -211,6 +134,9 @@ func (a *App) createSubmission(w http.ResponseWriter, r *http.Request) error {
 		return bad("Idempotenzschlüssel erforderlich (8–200 Zeichen).")
 	}
 	u := current(r)
+	if e := requireRepeatable(r.Context(), a.DB, in.CategoryID); e != nil {
+		return e
+	}
 	payload, _ := json.Marshal(in)
 	hash := digest(string(payload))
 	tx, e := a.DB.Begin(r.Context())
@@ -280,6 +206,11 @@ func (a *App) editSubmission(w http.ResponseWriter, r *http.Request) error {
 	}
 	if s.Version != in.Version {
 		return conflict()
+	}
+	if in.CategoryID != s.CategoryID {
+		if e = requireRepeatable(r.Context(), tx, in.CategoryID); e != nil {
+			return e
+		}
 	}
 	if in.CategoryID != s.CategoryID && !(u.ID == s.AuthorID && s.Status == "pending") && !canEdit(u, in.CategoryID) {
 		return forbidden()

@@ -37,6 +37,7 @@ func subjectForSlug(slug string) string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
+func pollID(i int) string     { return fmt.Sprintf("30000000-0000-4000-8000-%012d", i) }
 func categoryID(i int) string { return fmt.Sprintf("10000000-0000-4000-8000-%012d", i) }
 func Seed(ctx context.Context, pool *pgxpool.Pool, environment string) error {
 	return SeedWithIssuer(ctx, pool, environment, "http://localhost:9090")
@@ -54,13 +55,13 @@ func SeedWithIssuer(ctx context.Context, pool *pgxpool.Pool, environment, issuer
 	if _, e = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(74120985)"); e != nil {
 		return e
 	}
-	cats := []Category{{categoryID(1), "Ideen", "Vorschläge für unsere Abizeitung", "idea"}, {categoryID(2), "Zitate", "Sprüche, die bleiben", "quote"}, {categoryID(3), "Erinnerungen", "Unsere gemeinsame Schulzeit", "memory"}, {categoryID(4), "Fotos", "Eure schönsten Momente in Originalqualität", "photo"}}
+	cats := []struct{ ID, Name, Description, Kind string }{{categoryID(1), "Ideen", "Vorschläge für unsere Abizeitung", "idea"}, {categoryID(2), "Zitate", "Sprüche, die bleiben", "quote"}, {categoryID(3), "Erinnerungen", "Unsere gemeinsame Schulzeit", "memory"}, {categoryID(4), "Fotos", "Eure schönsten Momente in Originalqualität", "photo"}}
 	for _, c := range cats {
-		if _, e = tx.Exec(ctx, "INSERT INTO categories(id,name,description,kind) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO NOTHING", c.ID, c.Name, c.Description, c.Kind); e != nil {
+		if _, e = tx.Exec(ctx, "INSERT INTO categories(id,name,description,kind,opened_at) VALUES($1,$2,$3,$4,now()) ON CONFLICT(id) DO NOTHING", c.ID, c.Name, c.Description, c.Kind); e != nil {
 			return e
 		}
 	}
-	users := []User{{AdminID, "Alex (Administration)", "admin", true, true, []string{}, time.Time{}}, {ManagerID, "Sam (Redaktion)", "manager", true, true, []string{categoryID(1), categoryID(4)}, time.Time{}}, {MiaID, "Mia Weber", "student", true, true, []string{}, time.Time{}}, {LeonID, "Leon Fischer", "student", true, true, []string{}, time.Time{}}, {GuestID, "Kim (Gast)", "student", true, false, []string{}, time.Time{}}, {PendingID, "Pat (Freigabe ausstehend)", "student", false, false, []string{}, time.Time{}}}
+	users := []User{{AdminID, "Alex (Administration)", "admin", true, true, []string{}, time.Time{}}, {ManagerID, "Sam (Redaktion)", "manager", true, true, []string{categoryID(1), categoryID(4), pollID(1), pollID(2), pollID(3)}, time.Time{}}, {MiaID, "Mia Weber", "student", true, true, []string{}, time.Time{}}, {LeonID, "Leon Fischer", "student", true, true, []string{}, time.Time{}}, {GuestID, "Kim (Gast)", "student", true, false, []string{}, time.Time{}}, {PendingID, "Pat (Freigabe ausstehend)", "student", false, false, []string{}, time.Time{}}}
 	for _, u := range users {
 		if _, e = tx.Exec(ctx, "INSERT INTO users(id,subject,name,role,admitted,cohort_member,category_ids) VALUES($1,$2,$3,$4,$5,$6,$7::uuid[]) ON CONFLICT(id) DO UPDATE SET subject=EXCLUDED.subject WHERE users.subject LIKE 'mock:%' OR starts_with(users.subject, $8) OR users.subject ~ ('^https?://[^/]+/dev/oidc'||chr(31)||'[^'||chr(31)||']+$')", u.ID, issuer+"\x1f"+FixtureSubject(u.ID), u.Name, u.Role, u.Admitted, u.CohortMember, u.CategoryIDs, issuer+"\x1f"); e != nil {
 			return e
@@ -87,7 +88,7 @@ func SeedWithIssuer(ctx context.Context, pool *pgxpool.Pool, environment, issuer
 		}
 	}
 	for i := 1; i <= 3; i++ {
-		id := fmt.Sprintf("30000000-0000-4000-8000-%012d", i)
+		id := pollID(i)
 		title, description, kind, status := "Unser Abimotto", "Welche Idee passt zu uns?", "proposal", "open"
 		labels := []string{"Abizeitbetrug – 13 Jahre abgesessen", "ABIversal – ein Jahrgang, viele Welten", "Abikalypse – wir sind raus"}
 		people := []*string{nil, nil, nil}
@@ -108,12 +109,8 @@ func SeedWithIssuer(ctx context.Context, pool *pgxpool.Pool, environment, issuer
 		}
 		// Stagger the timeline so the frontend shows a meaningful order.
 		createdDays, openedDays := []int{0, 20, 12, 3}[i], []int{0, 18, 9, 0}[i]
-		tag, e := tx.Exec(ctx, "INSERT INTO polls(id,category_id,title,description,kind,status,version,created_at,opened_at) VALUES($1,$2,$3,$4,$5,$6,$7,now()-$8*interval '1 day',CASE WHEN $6<>'draft' THEN now()-$9*interval '1 day' END) ON CONFLICT(id) DO NOTHING", id, categoryID(1), title, description, kind, status, map[bool]int{true: 2, false: 1}[status == "open"], createdDays, openedDays)
+		tag, e := tx.Exec(ctx, "INSERT INTO categories(id,name,description,kind,status,version,created_at,opened_at) VALUES($1,$2,$3,$4,$5,$6,now()-$7*interval '1 day',CASE WHEN $5<>'draft' THEN now()-$8*interval '1 day' END) ON CONFLICT(id) DO NOTHING", id, title, description, kind, status, map[bool]int{true: 2, false: 1}[status == "open"], createdDays, openedDays)
 		if e != nil {
-			return e
-		}
-		// Polls seeded before the timeline migration got opened_at=created_at; spread them out once.
-		if _, e = tx.Exec(ctx, "UPDATE polls SET created_at=now()-$2*interval '1 day',opened_at=now()-$3*interval '1 day' WHERE id=$1 AND status<>'draft' AND opened_at=created_at", id, createdDays, openedDays); e != nil {
 			return e
 		}
 		if tag.RowsAffected() > 0 {

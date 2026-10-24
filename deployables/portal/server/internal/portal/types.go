@@ -12,10 +12,19 @@ type User struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 type Category struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Kind        string `json:"kind"`
+	ID            string       `json:"id"`
+	Name          string       `json:"name"`
+	Description   string       `json:"description"`
+	Kind          string       `json:"kind"`
+	Repeatable    bool         `json:"repeatable"`
+	Status        string       `json:"status"`
+	AllowSelfVote bool         `json:"allow_self_vote"`
+	Options       []PollOption `json:"options"`
+	MyOptionID    *string      `json:"my_option_id"`
+	Version       int          `json:"version"`
+	CreatedAt     time.Time    `json:"created_at"`
+	OpenedAt      *time.Time   `json:"opened_at"`
+	BallotCount   *int         `json:"ballot_count"`
 }
 type Attachment struct {
 	ID         string `json:"id"`
@@ -61,22 +70,6 @@ type PollOption struct {
 	ID     string  `json:"id"`
 	Label  string  `json:"label"`
 	UserID *string `json:"user_id,omitempty"`
-}
-type Poll struct {
-	ID            string       `json:"id"`
-	CategoryID    string       `json:"category_id"`
-	Title         string       `json:"title"`
-	Description   string       `json:"description"`
-	Kind          string       `json:"kind"`
-	Format        string       `json:"format"`
-	Status        string       `json:"status"`
-	AllowSelfVote bool         `json:"allow_self_vote"`
-	Options       []PollOption `json:"options"`
-	MyOptionID    *string      `json:"my_option_id"`
-	Version       int          `json:"version"`
-	CreatedAt     time.Time    `json:"created_at"`
-	OpenedAt      *time.Time   `json:"opened_at"`
-	BallotCount   *int         `json:"ballot_count"`
 }
 type PollResult struct {
 	OptionID string `json:"option_id"`

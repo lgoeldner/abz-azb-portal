@@ -47,7 +47,6 @@ func concretePath(path string) string {
 	ids := map[string]string{
 		"categories":  categoryID(1),
 		"submissions": "20000000-0000-4000-8000-000000000001",
-		"polls":       "30000000-0000-4000-8000-000000000001",
 		"users":       MiaID,
 		"attachments": "50000000-0000-4000-8000-0000000000ff",
 	}
@@ -145,16 +144,14 @@ func TestEveryContractOperationEnforcesSessionAdmissionAndCSRF(t *testing.T) {
 func TestRestrictedOperationsRejectLowerRoles(t *testing.T) {
 	app, _ := timelineApp(t)
 	editorial := []contractOperation{
-		{http.MethodPost, "/api/v1/polls"},
-		{http.MethodPatch, "/api/v1/polls/{id}"},
-		{http.MethodPost, "/api/v1/polls/{id}/status"},
-		{http.MethodGet, "/api/v1/polls/{id}/results"},
+		{http.MethodPost, "/api/v1/categories"},
+		{http.MethodPost, "/api/v1/categories/{id}/status"},
+		{http.MethodGet, "/api/v1/categories/{id}/results"},
 		{http.MethodGet, "/api/v1/categories/{id}/export"},
 	}
 	adminOnly := []contractOperation{
-		{http.MethodPost, "/api/v1/categories"},
-		{http.MethodPatch, "/api/v1/categories/{id}"},
-		{http.MethodGet, "/api/v1/polls/{id}/audit"},
+		{http.MethodPatch, "/api/v1/categories/{id}"}, // the fixture id is a repeatable category
+		{http.MethodGet, "/api/v1/categories/{id}/audit"},
 		{http.MethodGet, "/api/v1/admin/users"},
 		{http.MethodPatch, "/api/v1/admin/users/{id}"},
 		{http.MethodGet, "/api/v1/admin/audit"},

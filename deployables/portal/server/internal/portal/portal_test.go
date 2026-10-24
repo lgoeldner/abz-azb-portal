@@ -76,6 +76,16 @@ func TestProductionRejectsMockAuth(t *testing.T) {
 
 func integrationPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+	pool := emptySchemaPool(t)
+	if err := Migrate(context.Background(), pool); err != nil {
+		t.Fatalf("migrate test schema: %v", err)
+	}
+	return pool
+}
+
+// emptySchemaPool returns a pool on a fresh isolated schema with no tables.
+func emptySchemaPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL is not set; skipped PostgreSQL invariant test")
@@ -107,9 +117,6 @@ func integrationPool(t *testing.T) *pgxpool.Pool {
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if err := Migrate(ctx, pool); err != nil {
-		t.Fatalf("migrate test schema: %v", err)
 	}
 	t.Cleanup(func() {
 		pool.Close()
@@ -300,7 +307,7 @@ func TestPostgresAuthorizationLifecycleAndBallots(t *testing.T) {
 	// A named ballot is visible only to an administrator; self-vote and cross-poll options fail.
 	poll := "30000000-0000-4000-8000-000000000001"
 	option := "40000000-0000-4000-8000-000000000101"
-	proposal := authenticatedRequest(t, app, pool, MiaID, http.MethodPut, "/api/v1/polls/"+poll+"/ballot", fmt.Sprintf(`{"option_id":%q}`, option))
+	proposal := authenticatedRequest(t, app, pool, MiaID, http.MethodPut, "/api/v1/categories/"+poll+"/ballot", fmt.Sprintf(`{"option_id":%q}`, option))
 	if proposal.Code != http.StatusOK {
 		t.Fatalf("vote status=%d: %s", proposal.Code, proposal.Body)
 	}
@@ -310,7 +317,7 @@ func TestPostgresAuthorizationLifecycleAndBallots(t *testing.T) {
 		candidate := candidate
 		go func() {
 			<-startVotes
-			concurrentVotes <- authenticatedRequest(t, app, pool, MiaID, http.MethodPut, "/api/v1/polls/"+poll+"/ballot", fmt.Sprintf(`{"option_id":%q}`, candidate))
+			concurrentVotes <- authenticatedRequest(t, app, pool, MiaID, http.MethodPut, "/api/v1/categories/"+poll+"/ballot", fmt.Sprintf(`{"option_id":%q}`, candidate))
 		}()
 	}
 	close(startVotes)
@@ -328,14 +335,14 @@ func TestPostgresAuthorizationLifecycleAndBallots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := closeTx.Exec(ctx, "SELECT id FROM polls WHERE id=$1 FOR UPDATE", poll); err != nil {
+	if _, err := closeTx.Exec(ctx, "SELECT id FROM categories WHERE id=$1 FOR UPDATE", poll); err != nil {
 		t.Fatal(err)
 	}
 	voteDone := make(chan *httptest.ResponseRecorder, 1)
 	go func() {
-		voteDone <- authenticatedRequest(t, app, pool, LeonID, http.MethodPut, "/api/v1/polls/"+poll+"/ballot", fmt.Sprintf(`{"option_id":%q}`, option))
+		voteDone <- authenticatedRequest(t, app, pool, LeonID, http.MethodPut, "/api/v1/categories/"+poll+"/ballot", fmt.Sprintf(`{"option_id":%q}`, option))
 	}()
-	if _, err := closeTx.Exec(ctx, "UPDATE polls SET status='closed',version=version+1 WHERE id=$1", poll); err != nil {
+	if _, err := closeTx.Exec(ctx, "UPDATE categories SET status='closed',version=version+1 WHERE id=$1", poll); err != nil {
 		t.Fatal(err)
 	}
 	if err := closeTx.Commit(ctx); err != nil {
@@ -345,26 +352,26 @@ func TestPostgresAuthorizationLifecycleAndBallots(t *testing.T) {
 	if concurrentVote.Code != http.StatusConflict {
 		t.Fatalf("vote racing with closure status=%d", concurrentVote.Code)
 	}
-	studentAudit := authenticatedRequest(t, app, pool, MiaID, http.MethodGet, "/api/v1/polls/"+poll+"/audit", "")
+	studentAudit := authenticatedRequest(t, app, pool, MiaID, http.MethodGet, "/api/v1/categories/"+poll+"/audit", "")
 	if studentAudit.Code != http.StatusForbidden {
 		t.Fatalf("student audit status=%d", studentAudit.Code)
 	}
-	closedVote := authenticatedRequest(t, app, pool, LeonID, http.MethodPut, "/api/v1/polls/"+poll+"/ballot", fmt.Sprintf(`{"option_id":%q}`, option))
+	closedVote := authenticatedRequest(t, app, pool, LeonID, http.MethodPut, "/api/v1/categories/"+poll+"/ballot", fmt.Sprintf(`{"option_id":%q}`, option))
 	if closedVote.Code != http.StatusConflict {
 		t.Fatalf("closed poll vote status=%d", closedVote.Code)
 	}
-	adminAudit := authenticatedRequest(t, app, pool, AdminID, http.MethodGet, "/api/v1/polls/"+poll+"/audit", "")
+	adminAudit := authenticatedRequest(t, app, pool, AdminID, http.MethodGet, "/api/v1/categories/"+poll+"/audit", "")
 	if adminAudit.Code != http.StatusOK || !strings.Contains(adminAudit.Body.String(), MiaID) {
 		t.Fatalf("admin audit status=%d body=%s", adminAudit.Code, adminAudit.Body)
 	}
-	selfVote := authenticatedRequest(t, app, pool, MiaID, http.MethodPut, "/api/v1/polls/30000000-0000-4000-8000-000000000002/ballot", `{"option_id":"40000000-0000-4000-8000-000000000201"}`)
+	selfVote := authenticatedRequest(t, app, pool, MiaID, http.MethodPut, "/api/v1/categories/30000000-0000-4000-8000-000000000002/ballot", `{"option_id":"40000000-0000-4000-8000-000000000201"}`)
 	if selfVote.Code != http.StatusBadRequest {
 		t.Fatalf("self-vote status=%d", selfVote.Code)
 	}
 
 	// A non-person poll option cannot be reused across polls due to its composite key.
 	otherPoll := "30000000-0000-4000-8000-000000000002"
-	cross := authenticatedRequest(t, app, pool, MiaID, http.MethodPut, "/api/v1/polls/"+otherPoll+"/ballot", fmt.Sprintf(`{"option_id":%q}`, option))
+	cross := authenticatedRequest(t, app, pool, MiaID, http.MethodPut, "/api/v1/categories/"+otherPoll+"/ballot", fmt.Sprintf(`{"option_id":%q}`, option))
 	if cross.Code != http.StatusBadRequest {
 		t.Fatalf("cross-poll option vote status=%d", cross.Code)
 	}
