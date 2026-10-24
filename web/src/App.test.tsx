@@ -248,11 +248,12 @@ describe('navigation by view', () => {
 });
 
 describe('admin home', () => {
-  it('shows user and waiting counts, only the three latest polls and open/closed counts per category', async () => {
+  it('shows counts, the three newest people awaiting admission, the three latest polls and per-category tallies', async () => {
     localStorage.clear();
     const admin = { id: 'admin-1', name: 'Test Admin', role: 'admin', admitted: true, cohort_member: false, category_ids: [] };
-    const people = [admin, ...[1, 2, 3, 4].map(i => ({ ...user, id: `s${i}`, name: `Schüler ${i}`, admitted: i > 2 }))];
     const day = (n: number) => new Date(Date.UTC(2026, 9, n)).toISOString();
+    // Signup days are shuffled against the name order; s6 is admitted and must not appear.
+    const people = [admin, ...[[1, 3], [2, 7], [3, 1], [4, 5], [5, 2], [6, 9]].map(([i, d]) => ({ ...user, id: `s${i}`, name: `Schüler ${i}`, admitted: i === 6, created_at: day(d) }))];
     const poll = (id: string, categoryId: string, status: string, n: number) => ({
       id, category_id: categoryId, title: `Titel ${id}`, description: '', kind: 'proposal', format: 'single_choice', status,
       allow_self_vote: false, options: [], my_option_id: null, version: 1, created_at: day(n), opened_at: day(n), ballot_count: 0,
@@ -264,21 +265,28 @@ describe('admin home', () => {
       if (url.endsWith('/api/v1/admin/users')) return Response.json(people);
       if (url.endsWith('/api/v1/polls')) return Response.json(polls);
       if (url.endsWith('/api/v1/categories')) return Response.json([category, { id: 'quotes', name: 'Zitate', description: '', kind: 'quote' }]);
+      if (url.endsWith('/api/v1/submissions')) return Response.json([{ category_id: 'memory' }, { category_id: 'memory' }, { category_id: 'memory' }, { category_id: 'quotes' }]);
       return Response.json([]);
     }));
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(<QueryClientProvider client={client}><MemoryRouter><App/></MemoryRouter></QueryClientProvider>);
 
     const people$ = await screen.findByRole('region', { name: 'Personen' });
-    await waitFor(() => expect(within(people$).getByText('Angemeldet').previousElementSibling).toHaveTextContent('5'));
-    expect(within(people$).getByText(/auf Freigabe/).previousElementSibling).toHaveTextContent('2');
+    await waitFor(() => expect(within(people$).getByText('Angemeldet').previousElementSibling).toHaveTextContent('7'));
+    expect(within(people$).getByText(/auf Freigabe/).previousElementSibling).toHaveTextContent('5');
+    const waiting = within(within(people$).getByRole('list', { name: 'Warten auf Freigabe' })).getAllByRole('listitem');
+    expect(waiting.map(li => li.textContent)).toEqual([expect.stringContaining('Schüler 2'), expect.stringContaining('Schüler 4'), expect.stringContaining('Schüler 1')]);
+    expect(within(people$).getByText('und 2 weitere')).toBeInTheDocument();
     expect(within(people$).getByRole('link', { name: /Zugänge verwalten/ })).toHaveAttribute('href', '/admin');
 
     const pollCard = screen.getByRole('region', { name: 'Neueste Abstimmungen' });
     await waitFor(() => expect(within(pollCard).getByText('Erinnerungen')).toBeInTheDocument());
     const links = within(pollCard).getAllByRole('link').filter(a => a.getAttribute('href')?.startsWith('/abstimmungen/'));
     expect(links.map(a => a.getAttribute('href'))).toEqual(['/abstimmungen/p5', '/abstimmungen/p4', '/abstimmungen/p3']);
-    expect(within(pollCard).getByText('Erinnerungen').parentElement).toHaveTextContent('2 offen, 1 beendet');
-    expect(within(pollCard).getByText('Zitate').parentElement).toHaveTextContent('2 offen, 0 beendet');
+    const tile = (name: string) => within(pollCard).getByText(name).closest('a')!;
+    await waitFor(() => expect(tile('Erinnerungen')).toHaveTextContent('3 Beiträge'));
+    expect(tile('Erinnerungen')).toHaveTextContent('2 offen 1 beendet');
+    expect(tile('Zitate')).toHaveTextContent('1 Beitrag');
+    expect(tile('Zitate')).toHaveTextContent('2 offen 0 beendet');
   });
 });

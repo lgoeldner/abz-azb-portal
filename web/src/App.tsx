@@ -1,8 +1,8 @@
-import { ArrowRight, ClipboardList, FileText, House, Plus, Settings, Users, Vote, type LucideIcon } from 'lucide-react';
+import { ArrowRight, ClipboardList, FileText, Hourglass, House, Plus, Settings, UserCheck, Users, Vote, type LucideIcon } from 'lucide-react';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { api, ApiError, editorial, json, setCsrf, type Category, type Me, type Poll, type Submission, type User } from './api';
-import { Arrow, Badge, Empty, Failure, Loading, PageHead, Session, SubmissionList, btn, heading, notice, roleName, since, useAction, useData, useSession, useView, type View } from './ui';
+import { Arrow, Badge, Empty, Failure, KindIcon, Loading, PageHead, Session, SubmissionList, btn, categoryKindIcon, heading, notice, pollKindIcon, roleName, since, useAction, useData, useSession, useView, type View } from './ui';
 import { Admin, ContributionDetail, Contributions, Editorial, NewContribution, NotFound, PollDetail, Polls } from './pages';
 import { DevDebug } from './DevDebug';
 
@@ -140,12 +140,12 @@ function NavItem({ to, icon: Icon, children }: { to: string; icon?: LucideIcon; 
   const active = location.pathname + location.search === to;
   return <Link to={to} aria-current={active ? 'page' : undefined} className={`${navItem} ${active ? 'bg-ink font-bold text-pop' : 'hover:bg-pill'}`}><span className="flex items-center gap-2.5">{Icon && <Icon aria-hidden="true" className="size-[18px] shrink-0"/>}{children}</span></Link>;
 }
-function NavRow({ to, title, sub, end }: { to: string; title: string; sub?: string; end?: string }) {
+function NavRow({ to, icon, title, sub, end }: { to: string; icon?: LucideIcon; title: string; sub?: string; end?: string }) {
   const location = useLocation();
   const active = location.pathname + location.search === to;
   return (
     <Link to={to} aria-current={active ? 'page' : undefined} className={`${navItem} ${active ? 'bg-ink text-white' : 'hover:bg-pill'}`}>
-      <span className="min-w-0"><span className={`block truncate ${active ? 'font-bold text-pop' : ''}`}>{title}</span>{sub && <small className={`block truncate text-[13px] ${active ? 'text-white/80' : 'text-muted'}`}>{sub}</small>}</span>
+      <span className="flex min-w-0 items-start gap-2.5">{icon && <KindIcon icon={icon} className={`mt-[3px] size-4 ${active ? 'text-pop' : 'text-muted'}`}/>}<span className="min-w-0"><span className={`block truncate ${active ? 'font-bold text-pop' : ''}`}>{title}</span>{sub && <small className={`block truncate text-[13px] ${active ? 'text-white/80' : 'text-muted'}`}>{sub}</small>}</span></span>
       {end && <span className={`flex-none text-[13px] tabular-nums ${active ? 'text-white/80' : 'text-muted'}`}>{end}</span>}
     </Link>
   );
@@ -174,7 +174,7 @@ function StudentNav() {
     <NavGroup id="nav-jederzeit" label="Jederzeit">
       {categories.isPending ? <p className={quiet}>Einen Moment …</p> : categories.error ? <p className={quiet}>Rubriken nicht erreichbar.</p> : categories.data?.map(c => {
         const n = own.filter(s => s.category_id === c.id).length;
-        return <NavRow key={c.id} to={`/beitraege/neu?kategorie=${c.id}`} title={c.name} sub={n ? `${n} eingereicht` : 'Noch nichts eingereicht'}/>;
+        return <NavRow key={c.id} to={`/beitraege/neu?kategorie=${c.id}`} icon={categoryKindIcon[c.kind]} title={c.name} sub={n ? `${n} eingereicht` : 'Noch nichts eingereicht'}/>;
       })}
     </NavGroup>
     <div className="flex flex-col gap-1">
@@ -202,7 +202,7 @@ function EditorNav() {
         return items.length > 0 && (
           <div key={status} role="group" aria-labelledby={id} className="mt-1 flex flex-col gap-1">
             <p id={id} className={`${quiet} flex items-center gap-1.5`}>{status === 'open' && <span aria-hidden="true" className="size-1.5 rounded-full bg-accent"/>}{label}</p>
-            {items.map(p => <NavRow key={p.id} to={`/abstimmungen/${p.id}`} title={p.title} end={plural(p.ballot_count ?? 0, 'Stimme', 'Stimmen')}/>)}
+            {items.map(p => <NavRow key={p.id} to={`/abstimmungen/${p.id}`} icon={pollKindIcon[p.kind]} title={p.title} end={plural(p.ballot_count ?? 0, 'Stimme', 'Stimmen')}/>)}
           </div>
         );
       })}
@@ -211,7 +211,7 @@ function EditorNav() {
     <NavGroup id="nav-rubriken" label="Rubriken">
       {categories.isPending ? <p className={quiet}>Einen Moment …</p> : categories.error ? <p className={quiet}>Rubriken nicht erreichbar.</p> : categories.data?.map(c => {
         const mine = (submissions.data ?? []).filter(s => s.category_id === c.id);
-        return <NavRow key={c.id} to={`/redaktion?rubrik=${c.id}`} title={c.name} sub={`${plural(mine.length, 'Beitrag', 'Beiträge')}, ${mine.filter(s => s.status === 'pending').length} offen`}/>;
+        return <NavRow key={c.id} to={`/redaktion?rubrik=${c.id}`} icon={categoryKindIcon[c.kind]} title={c.name} sub={`${plural(mine.length, 'Beitrag', 'Beiträge')}, ${mine.filter(s => s.status === 'pending').length} offen`}/>;
       })}
       <NavItem to="/redaktion" icon={ClipboardList}>Alle Beiträge</NavItem>
     </NavGroup>
@@ -254,7 +254,7 @@ function StudentHome() {
                 <h3 className="text-xl font-extrabold leading-snug">{p.title}</h3>
                 {p.description && <p className="mt-2 text-[15px] text-muted">{p.description}</p>}
                 <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-5">
-                  <span className="text-[13px] text-muted">{[kindLabel(p.kind), plural(p.options.length, 'Option', 'Optionen'), since(p.opened_at)].filter(Boolean).join(', ')}</span>
+                  <span className="flex items-center gap-1.5 text-[13px] text-muted"><KindIcon icon={pollKindIcon[p.kind]}/>{[kindLabel(p.kind), plural(p.options.length, 'Option', 'Optionen'), since(p.opened_at)].filter(Boolean).join(', ')}</span>
                   <Link to={`/abstimmungen/${p.id}`} className={i === 0 ? btn.primary : btn.secondary}>Abstimmen<span className="sr-only"> bei {p.title}</span></Link>
                 </div>
                 <DevDebug label="Abstimmung" data={{ id: p.id, category: p.category_id, status: p.status, kind: p.kind, version: p.version, options: p.options.length, allowSelfVote: p.allow_self_vote, hasVoted: p.my_option_id !== null }}/>
@@ -276,7 +276,7 @@ function StudentHome() {
                 <li key={c.id} className="min-w-0">
                   <div className="flex h-full flex-col">
                   <Link to={`/beitraege/neu?kategorie=${c.id}`} className="flex h-full flex-col rounded-ui bg-white p-5 transition-transform hover:-translate-y-1 hover:bg-pop/40 active:scale-[.99]">
-                    <span className="flex items-start justify-between gap-3"><strong className="text-xl font-extrabold leading-snug">{c.name}</strong><Arrow/></span>
+                    <span className="flex items-start justify-between gap-3"><span className="flex min-w-0 items-center gap-2.5"><KindIcon icon={categoryKindIcon[c.kind]} className="size-5 text-muted"/><strong className="text-xl font-extrabold leading-snug">{c.name}</strong></span><Arrow/></span>
                     {c.description && <span className="mt-2 text-[15px] text-muted">{c.description}</span>}
                     <span className="mt-auto pt-4 text-[13px] text-muted">{n ? `${n} eingereicht` : 'Noch nichts eingereicht'}</span>
                   </Link>
@@ -311,15 +311,16 @@ function StudentHome() {
 }
 
 // ponytail: min-h-28 keeps room for a per-row summary line; nothing generates one yet.
-function ThickRow({ to, title, badge, meta, count, unit, extra, debug }: { to: string; title: string; badge?: ReactNode; meta: string; count: number; unit: [string, string]; extra?: string; debug?: { label: string; data: Record<string, string | number | boolean | null | undefined> } }) {
+function ThickRow({ to, icon, title, badge, meta, count, unit, extra, debug }: { to: string; icon: LucideIcon; title: string; badge?: ReactNode; meta: string; count: number; unit: [string, string]; extra?: string; debug?: { label: string; data: Record<string, string | number | boolean | null | undefined> } }) {
   return (
     <li>
-      <Link to={to} className="flex min-h-28 items-start justify-between gap-6 bg-white p-5 transition-colors hover:bg-pop/30">
+      <Link to={to} className="flex min-h-28 items-start gap-4 bg-white p-5 transition-colors hover:bg-pop/30">
+        <KindIcon icon={icon} className="mt-1 size-5 text-muted"/>
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1"><strong className="text-lg font-extrabold leading-snug">{title}</strong>{badge}</span>
           <small className="mt-1 block text-[13px] text-muted">{meta}</small>
         </span>
-        <span className="flex-none text-right"><strong className="block text-3xl font-extrabold tabular-nums leading-none">{count}</strong><span className="mt-1 block text-[13px] text-muted">{unit[count === 1 ? 0 : 1]}</span>{extra && <span className="block text-[13px] tabular-nums text-muted">{extra}</span>}</span>
+        <span className="ml-2 flex-none text-right"><strong className="block text-3xl font-extrabold tabular-nums leading-none">{count}</strong><span className="mt-1 block text-[13px] text-muted">{unit[count === 1 ? 0 : 1]}</span>{extra && <span className="block text-[13px] tabular-nums text-muted">{extra}</span>}</span>
       </Link>
       {import.meta.env.DEV && debug && <div className="px-5 pb-2"><DevDebug label={debug.label} data={debug.data}/></div>}
     </li>
@@ -331,33 +332,68 @@ function AdminHome() {
   const users = useData<User[]>('/admin/users');
   const polls = useData<Poll[]>('/polls');
   const categories = useData<Category[]>('/categories');
-  const waiting = (users.data ?? []).filter(u => !u.admitted).length;
+  const submissions = useData<Submission[]>('/submissions');
+  const waiting = (users.data ?? []).filter(u => !u.admitted).sort((a, b) => time(b.created_at) - time(a.created_at));
   const latest = [...(polls.data ?? [])].sort(newestOpened).slice(0, 3);
-  const card = 'rounded-ui bg-white p-5';
+  const card = 'flex min-w-0 flex-col rounded-ui bg-white p-5 sm:p-6';
+  const figure = 'block text-4xl font-extrabold tabular-nums leading-none tracking-tight';
   const state = (q: { isPending: boolean; error: Error | null; refetch: () => unknown }) => q.isPending ? <div className="mt-4"><Loading/></div> : q.error ? <div className="mt-4"><Failure error={q.error} retry={() => q.refetch()}/></div> : null;
+  const initials = (name: string) => name.replace(/\(.*?\)/g, '').split(/\s+/).filter(w => /^\p{L}/u.test(w)).map(w => w[0]).slice(0, 2).join('').toUpperCase();
   return <>
     <PageHead title="Redaktion">Zugänge, Abstimmungen und Rubriken im Überblick.</PageHead>
-    <div className="grid gap-4 md:grid-cols-2">
-      <section aria-labelledby="home-personen" className={`${card} min-w-0`}>
+    <div className="grid items-start gap-4 lg:grid-cols-[5fr_7fr]">
+      <section aria-labelledby="home-personen" className={card}>
         <h2 id="home-personen" className={`${heading} flex items-center gap-2`}><Users aria-hidden="true" className="size-[18px] shrink-0"/>Personen</h2>
         {state(users) ?? <>
-          <div className="mt-4 flex flex-wrap gap-x-8 gap-y-3">
-            <p><strong className="block text-3xl font-extrabold tabular-nums leading-none">{users.data?.length}</strong><span className="mt-1 block text-[13px] text-muted">Angemeldet</span></p>
-            <p><strong className="block text-3xl font-extrabold tabular-nums leading-none">{waiting}</strong><span className="mt-1 block text-[13px] text-muted">{waiting === 1 ? 'wartet' : 'warten'} auf Freigabe</span></p>
+          <div className="mt-5 flex flex-wrap gap-x-10 gap-y-3">
+            <p><strong className={figure}>{users.data?.length}</strong><span className="mt-1.5 block text-[13px] text-muted">Angemeldet</span></p>
+            <p><strong className={`${figure} ${waiting.length ? 'text-wait' : ''}`}>{waiting.length}</strong><span className="mt-1.5 block text-[13px] text-muted">{waiting.length === 1 ? 'wartet' : 'warten'} auf Freigabe</span></p>
           </div>
-          <Link to="/admin" className={`${btn.text} mt-5`}>Zugänge verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0"/></Link>
-          <DevDebug label="Personen" data={{ total: users.data?.length ?? 0, waiting, admins: (users.data ?? []).filter(u => u.role === 'admin').length }}/>
+          <h3 className="mt-7 flex items-center gap-2 text-sm font-bold"><Hourglass aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0 text-muted"/>Zuletzt angemeldet, noch nicht freigegeben</h3>
+          {waiting.length === 0 ? <p className="mt-2 flex items-center gap-2 text-[15px] text-muted"><UserCheck aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0"/>Alle sind freigegeben.</p> : (
+            <ul aria-label="Warten auf Freigabe" className="mt-2 divide-y divide-line">
+              {waiting.slice(0, 3).map(u => (
+                <li key={u.id}>
+                  <Link to="/admin" className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30">
+                    <span aria-hidden="true" className="grid size-8 flex-none place-items-center rounded-full bg-soft text-xs font-bold text-ink">{initials(u.name) || '?'}</span>
+                    <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{u.name}</span>
+                    <span className="flex-none text-[13px] text-muted">{since(u.created_at)}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+          {waiting.length > 3 && <p className="mt-1 text-[13px] text-muted">und {waiting.length - 3} weitere</p>}
+          <Link to="/admin" className={`${btn.text} mt-5 self-start`}>Zugänge verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0"/></Link>
+          <DevDebug label="Personen" data={{ total: users.data?.length ?? 0, waiting: waiting.length, admins: (users.data ?? []).filter(u => u.role === 'admin').length }}/>
         </>}
       </section>
-      <section aria-labelledby="home-abstimmungen" className={`${card} min-w-0`}>
-        <h2 id="home-abstimmungen" className={`${heading} flex items-center gap-2`}><Vote aria-hidden="true" className="size-[18px] shrink-0"/>Neueste Abstimmungen</h2>
-        {state(polls) ?? (latest.length === 0 ? <div className="mt-4"><Empty>Noch keine Abstimmung.</Empty></div> : <ul className="mt-4 divide-y divide-line">
-          {latest.map(p => <li key={p.id} className="min-w-0 py-2"><Link to={`/abstimmungen/${p.id}`} className="flex items-center justify-between gap-3 hover:text-accent-dark"><strong className="min-w-0 break-words text-[15px] font-semibold">{p.title}</strong><Badge status={p.status}/></Link><DevDebug label="Abstimmung" data={{ id: p.id, category: p.category_id, status: p.status, kind: p.kind, version: p.version, options: p.options.length }}/></li>)}
+      <section aria-labelledby="home-abstimmungen" className={card}>
+        <div className="flex items-baseline justify-between gap-4">
+          <h2 id="home-abstimmungen" className={`${heading} flex items-center gap-2`}><Vote aria-hidden="true" className="size-[18px] shrink-0"/>Neueste Abstimmungen</h2>
+          <Link to="/abstimmungen" className={btn.text}>Alle <ArrowRight aria-hidden="true" className="size-4 shrink-0"/></Link>
+        </div>
+        {state(polls) ?? (latest.length === 0 ? <div className="mt-4"><Empty>Noch keine Abstimmung.</Empty></div> : <ul className="mt-3 divide-y divide-line">
+          {latest.map(p => <li key={p.id} className="min-w-0"><Link to={`/abstimmungen/${p.id}`} className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30"><KindIcon icon={pollKindIcon[p.kind]} className="size-4 text-muted"/><span className="min-w-0 flex-1"><strong className="block truncate text-[15px] font-semibold">{p.title}</strong><span className="block text-[13px] text-muted">{[kindLabel(p.kind), p.status === 'open' ? since(p.opened_at) : ''].filter(Boolean).join(', ')}</span></span><Badge status={p.status}/></Link><DevDebug label="Abstimmung" data={{ id: p.id, category: p.category_id, status: p.status, kind: p.kind, version: p.version, options: p.options.length }}/></li>)}
         </ul>)}
-        <Link to="/abstimmungen" className={`${btn.text} mt-4`}>Alle Abstimmungen <ArrowRight aria-hidden="true" className="size-4 shrink-0"/></Link>
-        <h3 className="mt-6 text-sm font-bold">Pro Rubrik</h3>
-        {state(categories) ?? <ul className="mt-2 divide-y divide-line text-sm">
-          {categories.data?.map(c => { const mine = (polls.data ?? []).filter(p => p.category_id === c.id); return <li key={c.id} className="flex items-baseline justify-between gap-3 py-1.5"><span className="min-w-0 break-words">{c.name}</span><span className="flex-none tabular-nums text-muted">{mine.filter(p => p.status === 'open').length} offen, {mine.filter(p => p.status === 'closed').length} beendet</span></li>; })}
+        <h3 className="mt-6 text-sm font-bold">Beiträge und Abstimmungen pro Rubrik</h3>
+        {state(categories) ?? <ul className="mt-3 grid grid-cols-2 gap-2 sm:gap-3">
+          {categories.data?.map(c => {
+            const mine = (polls.data ?? []).filter(p => p.category_id === c.id);
+            const n = (submissions.data ?? []).filter(s => s.category_id === c.id).length;
+            return (
+              <li key={c.id} className="min-w-0">
+                <Link to={`/redaktion?rubrik=${c.id}`} className="flex h-full flex-col rounded-xl bg-soft p-3.5 transition-colors hover:bg-pop/40 sm:p-4">
+                  <span className="flex items-center gap-2"><KindIcon icon={categoryKindIcon[c.kind]} className="size-4 text-muted"/><strong className="min-w-0 truncate text-[15px] font-bold">{c.name}</strong></span>
+                  <span className="mt-4 flex items-baseline gap-2"><strong className={figure}>{submissions.isPending ? '–' : n}</strong> <span className="text-[13px] text-muted">{n === 1 ? 'Beitrag' : 'Beiträge'}</span></span>
+                  <span className="mt-4 grid grid-cols-2 gap-2 text-[13px] text-muted">
+                    <span><strong className="block text-lg font-extrabold tabular-nums leading-tight text-ink">{mine.filter(p => p.status === 'open').length}</strong> offen</span>{' '}
+                    <span><strong className="block text-lg font-extrabold tabular-nums leading-tight text-ink">{mine.filter(p => p.status === 'closed').length}</strong> beendet</span>
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
         </ul>}
       </section>
     </div>
@@ -378,7 +414,7 @@ function EditorHome() {
       <h2 id="home-abstimmungen" className={heading}>Abstimmungen</h2>
       {polls.isPending ? <div className="mt-4"><Loading/></div> : polls.error ? <div className="mt-4"><Failure error={polls.error} retry={() => polls.refetch()}/></div> : sorted.length === 0 ? <div className="mt-4"><Empty>Noch keine Abstimmung. <Link to="/abstimmungen?neu">Neue Abstimmung anlegen →</Link></Empty></div> : (
         <ul className={rows}>
-          {sorted.map(p => <ThickRow key={p.id} to={`/abstimmungen/${p.id}`} title={p.title} badge={<Badge status={p.status}/>} meta={[kindLabel(p.kind), plural(p.options.length, 'Option', 'Optionen'), p.status === 'open' ? since(p.opened_at) : ''].filter(Boolean).join(', ')} count={p.ballot_count ?? 0} unit={['Stimme', 'Stimmen']} debug={{ label: 'Abstimmung', data: { id: p.id, category: p.category_id, status: p.status, kind: p.kind, version: p.version, options: p.options.length, allowSelfVote: p.allow_self_vote, hasVoted: p.my_option_id !== null } }}/>) }
+          {sorted.map(p => <ThickRow key={p.id} to={`/abstimmungen/${p.id}`} icon={pollKindIcon[p.kind]} title={p.title} badge={<Badge status={p.status}/>} meta={[kindLabel(p.kind), plural(p.options.length, 'Option', 'Optionen'), p.status === 'open' ? since(p.opened_at) : ''].filter(Boolean).join(', ')} count={p.ballot_count ?? 0} unit={['Stimme', 'Stimmen']} debug={{ label: 'Abstimmung', data: { id: p.id, category: p.category_id, status: p.status, kind: p.kind, version: p.version, options: p.options.length, allowSelfVote: p.allow_self_vote, hasVoted: p.my_option_id !== null } }}/>) }
         </ul>
       )}
     </section>
@@ -388,7 +424,7 @@ function EditorHome() {
         <ul className={rows}>
           {categories.data?.map(c => {
             const mine = (submissions.data ?? []).filter(s => s.category_id === c.id);
-            return <ThickRow key={c.id} to={`/redaktion?rubrik=${c.id}`} title={c.name} meta={c.description || 'Rubrik'} count={mine.length} unit={['Beitrag', 'Beiträge']} extra={`${mine.filter(s => s.status === 'pending').length} offen`} debug={{ label: 'Rubrik', data: { id: c.id, kind: c.kind, submissions: mine.length, pending: mine.filter(s => s.status === 'pending').length } }}/>;
+            return <ThickRow key={c.id} to={`/redaktion?rubrik=${c.id}`} icon={categoryKindIcon[c.kind]} title={c.name} meta={c.description || 'Rubrik'} count={mine.length} unit={['Beitrag', 'Beiträge']} extra={`${mine.filter(s => s.status === 'pending').length} offen`} debug={{ label: 'Rubrik', data: { id: c.id, kind: c.kind, submissions: mine.length, pending: mine.filter(s => s.status === 'pending').length } }}/>;
           })}
         </ul>
       )}
