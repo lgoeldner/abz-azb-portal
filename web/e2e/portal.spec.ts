@@ -1,13 +1,16 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
-async function signInAs(page: Page, role: 'Jahrgang' | 'Redaktion' | 'Administration', name?: string) {
+// Identities are picked by display_slug, which (unlike display names) is stable.
+async function signInAs(page: Page, role: 'Jahrgang' | 'Redaktion' | 'Administration') {
   await page.goto('/');
   await page.getByRole('link', { name: /Mit Schulkonto anmelden/ }).click();
-  const identity = name ?? (role === 'Jahrgang' ? 'Mia Weber' : role === 'Redaktion' ? 'Sam (Redaktion)' : 'Alex (Administration)');
-  const access = page.getByRole('button', { name: identity, exact: true });
+  const slug = role === 'Jahrgang' ? 'mia_weber' : role === 'Redaktion' ? 'sam_redaktion' : 'alex_admin';
+  const access = page.getByRole('button', { name: new RegExp(`\\b${slug}$`) });
   await expect(access, `Development login for ${role} is available (start a seeded development server)`).toBeVisible();
   await access.click();
-  await expect(page.getByRole('link', { name: 'AbiZeitBetrug Startseite' })).toBeVisible();
+  // The sidebar brand link is hidden on mobile, so wait for the page heading instead.
+  await expect(page.getByRole('main').getByRole('heading', { level: 1 })).toBeVisible();
 }
 
 // Students reach polls from the sidebar: open ones under "Offen", answered or finished ones under "Erledigt".
@@ -22,7 +25,7 @@ async function openFirstPoll(page: Page) {
 }
 
 test('student signs in, submits a contribution, and can access polls', async ({ page }) => {
-  await signInAs(page, 'Jahrgang', 'Mia Weber');
+  await signInAs(page, 'Jahrgang');
   await page.getByRole('complementary', { name: 'Seitenleiste' }).getByRole('link', { name: /^Ideen/ }).click();
   await page.getByPlaceholder('Gib deiner Erinnerung einen Namen').fill(`E2E Erinnerung ${Date.now()}`);
   await page.getByPlaceholder('Was ist passiert? Welcher Spruch darf nicht fehlen?').fill('Eine Geschichte aus dem Testlauf.');
@@ -36,8 +39,8 @@ test('student signs in, submits a contribution, and can access polls', async ({ 
 });
 
 test('student casts a ballot in the seeded open poll', async ({ page }) => {
-  await signInAs(page, 'Jahrgang', 'Mia Weber');
-  await openFirstPoll(page);
+  await signInAs(page, 'Jahrgang');
+  await page.goto('/abstimmungen/30000000-0000-4000-8000-000000000001'); // seeded open proposal poll
   const option = page.locator('input[name="ballot"]:enabled').first();
   await expect(option, 'the seeded poll has an eligible option').toBeVisible();
   await option.check();
@@ -46,7 +49,7 @@ test('student casts a ballot in the seeded open poll', async ({ page }) => {
 });
 
 test('editor reviews and accepts an assigned contribution, exports it, and sees poll results', async ({ page }) => {
-  await signInAs(page, 'Jahrgang', 'Mia Weber');
+  await signInAs(page, 'Jahrgang');
   const title = `E2E Redaktion ${Date.now()}`;
   await page.getByRole('complementary', { name: 'Seitenleiste' }).getByRole('link', { name: /^Ideen/ }).click();
   await page.getByPlaceholder('Gib deiner Erinnerung einen Namen').fill(title);
@@ -66,7 +69,7 @@ test('editor reviews and accepts an assigned contribution, exports it, and sees 
   await page.getByRole('button', { name: /Für die Zeitung annehmen/ }).click();
   await expect(page.getByText('Angenommen').first()).toBeVisible();
   await page.getByRole('complementary', { name: 'Seitenleiste' }).getByRole('link', { name: 'Alle Beiträge' }).click();
-  await page.getByLabel('Rubrik').last().selectOption({ label: 'Ideen' });
+  await page.getByRole('combobox', { name: 'Rubrik' }).last().selectOption('10000000-0000-4000-8000-000000000001'); // export picker, seeded "Ideen"
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('link', { name: /ZIP herunterladen/ }).click();
   await expect(downloadPromise).resolves.toBeTruthy();
@@ -74,7 +77,7 @@ test('editor reviews and accepts an assigned contribution, exports it, and sees 
   await page.getByRole('complementary', { name: 'Seitenleiste' }).getByRole('link', { name: /Unser Abimotto/ }).click();
   await expect(page.getByRole('heading', { name: /Unser Abimotto/ })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Gesamtergebnisse' })).toBeVisible();
-  await expect(page.getByText(/Nur für die Redaktion, \d+ abgegebene Stimme/)).toBeVisible();
+  await expect(page.getByText(/Nur für die Redaktion\W+\d+ abgegebene Stimme/)).toBeVisible();
 });
 
 test('admin opens access management and activity log on mobile', async ({ page }) => {

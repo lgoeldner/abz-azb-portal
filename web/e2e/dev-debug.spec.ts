@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const production = process.env.DEBUG_EXPECT_PRODUCTION === '1';
 test.beforeEach(async ({ page }) => {
@@ -94,7 +95,8 @@ test('editor and admin diagnostics preserve short-screen navigation', async ({ p
     await fixtures(page, role);
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(debugMenus(page).filter({ hasText: poll.id })).toHaveCount(1);
-    await expect(debugMenus(page).filter({ has: page.getByText('Debug: Rubrik', { exact: true }) }).filter({ hasText: category.id })).toHaveCount(1);
+    // The admin home is a dashboard without category cards; admin category diagnostics are checked under /admin below.
+    if (role === 'manager') await expect(debugMenus(page).filter({ has: page.getByText('Debug: Rubrik', { exact: true }) }).filter({ hasText: category.id })).toHaveCount(1);
     await page.locator('summary').filter({ hasText: 'Debug: Sitzung' }).click();
     await page.getByRole('button', { name: 'Menü öffnen' }).click();
     const aside = page.getByRole('complementary', { name: 'Seitenleiste' });

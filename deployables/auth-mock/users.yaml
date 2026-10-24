@@ -1,17 +1,17 @@
 # Mock identities. The OIDC subject is derived from display_slug (UUIDv5), never typed.
 # Roles and admission live in the portal database.
 users:
-  - name: "Alex (Administration)"
-    display_slug: alex_admin
-  - name: "Sam (Redaktion)"
-    display_slug: sam_redaktion
-  - name: "Mia Weber"
+  - name: "Ali Bumaye"
+    display_slug: ali_bumbum
+  - name: "Richard Redakteur"
+    display_slug: richie_red
+  - name: "Jan Roswadofski"
     display_slug: mia_weber
-  - name: "Leon Fischer"
-    display_slug: leon_fischer
-  - name: "Kim (Gast)"
-    display_slug: kim_gast
-  - name: "Pat (Freigabe ausstehend)"
-    display_slug: pat_ausstehend
+  - name: "Larissa Meerjunker"
+    display_slug: larry_meer
+  - name: "Moniii"
+    display_slug: mimamo
+  - name: "Maja Mille"
+    display_slug: maj_mil
   - name: "Linus"
     display_slug: linus_g

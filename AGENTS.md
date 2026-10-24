@@ -23,6 +23,6 @@ Give each worker file ownership, an API contract, and acceptance tests. Do not l
 
 - Split larger changes into sensible commits.
 - Commit everything that belongs in the repository and push at the end of the task. Do not ask whether to commit or push.
-- Work done in a worktree is merged into main once it is finished and checks pass; then push main and remove the worktree. Do not leave finished worktree branches unmerged.
+- Work done in a worktree is merged into main once it is finished and checks pass; then push main and remove the worktree. Do not leave finished worktree branches unmerged. Do not push the worktree.
 - Proceed autonomously within the authorized task. Avoid unnecessary questions and permission prompts; use required approvals only when needed.
 - Do not be afraid to work on the running development system.
