@@ -49,7 +49,7 @@ Endpoints:
 - `GET /polls/{id}/results` -> PollResult[] editors only. `GET /polls/{id}/audit` -> BallotAudit[] admins only, includes changes. Never in generic poll payload.
 - `GET /roster` -> `{id,name}[]` admitted cohort only (minimal candidate names required for polling).
 - `GET /categories/{id}/export?status=accepted` -> ZIP, editors all categories. Status 'all' explicitly includes other statuses. CSV and originals plus JSON manifest. No ballots.
-- Admin: `GET /admin/users` -> User[]; `PATCH /admin/users/{id}` `{name,role,admitted,cohort_member,category_ids}`. Do not allow removal of the last admitted admin.
+- Admin: `GET /admin/users` -> User[]; `PATCH /admin/users/{id}` `{name,role,admitted,cohort_member,category_ids}`. Do not allow removal of the last admitted admin. `DELETE /admin/users/{id}` -> 204; 404 unknown id; 409 `self_delete`, `last_admin`, or `has_content` (any submissions, revisions, corrections, ballots, ballot audit, audit events or poll-option links; block access instead). Deletes sessions and writes `user.deleted`.
 - Admin: `GET /admin/audit` -> AuditEvent[] (recent 200); `GET /admin/status` -> `{backup_last_success: string|null, backup_stale:boolean, upload_bytes:number}`.
 
 ## Ownership and quality

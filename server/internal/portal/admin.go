@@ -31,6 +31,67 @@ func (a *App) users(w http.ResponseWriter, r *http.Request) error {
 	jsonOut(w, 200, out)
 	return nil
 }
+func (a *App) deleteUser(w http.ResponseWriter, r *http.Request) error {
+	actor := current(r)
+	if actor.Role != "admin" {
+		return forbidden()
+	}
+	id := r.PathValue("id")
+	if !validID(id) {
+		return missing()
+	}
+	if id == actor.ID {
+		return fail(409, "self_delete", "Du kannst dich nicht selbst löschen.")
+	}
+	tx, e := a.DB.Begin(r.Context())
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback(r.Context())
+	if _, e = tx.Exec(r.Context(), "SELECT pg_advisory_xact_lock(74120984)"); e != nil {
+		return e
+	}
+	target, e := scanUser(tx.QueryRow(r.Context(), "SELECT "+userCols+" FROM users WHERE id=$1 FOR UPDATE", id))
+	if e != nil {
+		return e
+	}
+	if target.Role == "admin" && target.Admitted {
+		var count int
+		if e = tx.QueryRow(r.Context(), "SELECT count(*) FROM users WHERE role='admin' AND admitted").Scan(&count); e != nil {
+			return e
+		}
+		if count <= 1 {
+			return fail(409, "last_admin", "Die letzte zugelassene Administration kann nicht entfernt werden.")
+		}
+	}
+	var used bool
+	if e = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM submissions WHERE author_id=$1)
+ OR EXISTS(SELECT 1 FROM revisions WHERE actor_id=$1)
+ OR EXISTS(SELECT 1 FROM corrections WHERE author_id=$1)
+ OR EXISTS(SELECT 1 FROM ballots WHERE user_id=$1)
+ OR EXISTS(SELECT 1 FROM ballot_audit WHERE user_id=$1)
+ OR EXISTS(SELECT 1 FROM audit_events WHERE actor_id=$1)
+ OR EXISTS(SELECT 1 FROM poll_options WHERE user_id=$1)`, id).Scan(&used); e != nil {
+		return e
+	}
+	if used {
+		return fail(409, "has_content", "Die Person hat bereits Beiträge, Stimmen oder Aktivitäten und kann nicht gelöscht werden. Zugang stattdessen sperren.")
+	}
+	if _, e = tx.Exec(r.Context(), "DELETE FROM sessions WHERE user_id=$1", id); e != nil {
+		return e
+	}
+	if _, e = tx.Exec(r.Context(), "DELETE FROM users WHERE id=$1", id); e != nil {
+		return e
+	}
+	if e = audit(r.Context(), tx, actor, "user.deleted", id); e != nil {
+		return e
+	}
+	if e = tx.Commit(r.Context()); e != nil {
+		return e
+	}
+	w.WriteHeader(204)
+	return nil
+}
 func (a *App) editUser(w http.ResponseWriter, r *http.Request) error {
 	actor := current(r)
 	if actor.Role != "admin" {
