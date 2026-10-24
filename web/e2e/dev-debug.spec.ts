@@ -94,8 +94,8 @@ test('editor and admin diagnostics preserve short-screen navigation', async ({ p
     await fixtures(page, role);
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(debugMenus(page).filter({ hasText: poll.id })).toHaveCount(1);
-    await expect(debugMenus(page).filter({ has: page.getByText('Debug · Rubrik', { exact: true }) }).filter({ hasText: category.id })).toHaveCount(1);
-    await page.getByText('Debug · Sitzung', { exact: true }).click();
+    await expect(debugMenus(page).filter({ has: page.getByText('Debug: Rubrik', { exact: true }) }).filter({ hasText: category.id })).toHaveCount(1);
+    await page.locator('summary').filter({ hasText: 'Debug: Sitzung' }).click();
     await page.getByRole('button', { name: 'Menü öffnen' }).click();
     const aside = page.getByRole('complementary', { name: 'Seitenleiste' });
     await expect(aside.getByRole('link', { name: 'Überblick', exact: true })).toBeVisible();

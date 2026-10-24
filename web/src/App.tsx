@@ -1,3 +1,4 @@
+import { ClipboardList, FileText, House, Plus, Settings, type LucideIcon } from 'lucide-react';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { api, ApiError, editorial, json, setCsrf, type Category, type Me, type Poll, type Submission } from './api';
@@ -101,7 +102,7 @@ function Layout() {
       <aside aria-label="Seitenleiste" className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col bg-chrome max-[651px]:top-12 max-[651px]:w-[min(86vw,320px)] max-[651px]:transition-transform ${menu ? '' : 'max-[651px]:invisible max-[651px]:-translate-x-full'}`}>
         <Link to="/" className="flex-none rounded-full px-5 pb-4 pt-5 max-[651px]:hidden" aria-label="AbiZeitBetrug Startseite" onClick={() => setMenu(false)}><Brand/></Link>
         <nav aria-label="Hauptnavigation" className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-3 py-2 max-[651px]:pt-4" onClick={e => { if ((e.target as Element).closest('a')) setMenu(false); }}>
-          <NavItem to="/">Überblick</NavItem>
+          <NavItem to="/" icon={House}>Überblick</NavItem>
           {view[0] === 'redaktion' && editorial(user) ? <EditorNav/> : <StudentNav/>}
         </nav>
         <div className="flex flex-none flex-col gap-3 bg-pill px-3 py-4">
@@ -134,10 +135,10 @@ function ViewSwitch({ onSwitch }: { onSwitch: () => void }) {
   );
 }
 
-function NavItem({ to, children }: { to: string; children: ReactNode }) {
+function NavItem({ to, icon: Icon, children }: { to: string; icon?: LucideIcon; children: ReactNode }) {
   const location = useLocation();
   const active = location.pathname + location.search === to;
-  return <Link to={to} aria-current={active ? 'page' : undefined} className={`${navItem} ${active ? 'bg-ink font-bold text-pop' : 'hover:bg-pill'}`}>{children}</Link>;
+  return <Link to={to} aria-current={active ? 'page' : undefined} className={`${navItem} ${active ? 'bg-ink font-bold text-pop' : 'hover:bg-pill'}`}><span className="flex items-center gap-2.5">{Icon && <Icon aria-hidden="true" className="size-[18px] shrink-0"/>}{children}</span></Link>;
 }
 function NavRow({ to, title, sub, end }: { to: string; title: string; sub?: string; end?: string }) {
   const location = useLocation();
@@ -183,7 +184,7 @@ function StudentNav() {
           {done.length === 0 ? <p className={quiet}>Noch nichts erledigt.</p> : done.map(p => <NavRow key={p.id} to={`/abstimmungen/${p.id}`} title={p.title} sub={p.my_option_id ? '✓ abgestimmt' : 'beendet'}/>)}
         </div>
       </details>
-      <NavItem to="/beitraege">Meine Beiträge</NavItem>
+      <NavItem to="/beitraege" icon={FileText}>Meine Beiträge</NavItem>
     </div>
   </>;
 }
@@ -205,16 +206,16 @@ function EditorNav() {
           </div>
         );
       })}
-      <NavItem to="/abstimmungen?neu">Neue Abstimmung</NavItem>
+      <NavItem to="/abstimmungen?neu" icon={Plus}>Neue Abstimmung</NavItem>
     </NavGroup>
     <NavGroup id="nav-rubriken" label="Rubriken">
       {categories.isPending ? <p className={quiet}>Einen Moment …</p> : categories.error ? <p className={quiet}>Rubriken nicht erreichbar.</p> : categories.data?.map(c => {
         const mine = (submissions.data ?? []).filter(s => s.category_id === c.id);
         return <NavRow key={c.id} to={`/redaktion?rubrik=${c.id}`} title={c.name} sub={`${plural(mine.length, 'Beitrag', 'Beiträge')} · ${mine.filter(s => s.status === 'pending').length} offen`}/>;
       })}
-      <NavItem to="/redaktion">Alle Beiträge</NavItem>
+      <NavItem to="/redaktion" icon={ClipboardList}>Alle Beiträge</NavItem>
     </NavGroup>
-    {user.role === 'admin' && <NavItem to="/admin">Verwaltung</NavItem>}
+    {user.role === 'admin' && <NavItem to="/admin" icon={Settings}>Verwaltung</NavItem>}
   </>;
 }
 

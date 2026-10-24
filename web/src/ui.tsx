@@ -1,3 +1,4 @@
+import { ArrowUpRight } from 'lucide-react';
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -50,7 +51,7 @@ export function Loading() { return <div className="flex min-h-36 items-center ju
 export function Empty({ children }: { children: ReactNode }) { return <div className="flex min-h-32 flex-col items-center justify-center rounded-ui border-2 border-dashed border-pill px-6 py-8 text-center text-sm text-muted [&_a]:font-semibold [&_a]:text-ink [&_a]:underline">{children}</div>; }
 const badgeTone: Record<keyof typeof statusLabels, string> = { pending: 'bg-wait-tint text-wait', accepted: 'bg-ok-tint text-ok', open: 'bg-ok-tint text-ok', rejected: 'bg-bad-tint text-bad', withdrawn: 'bg-pill text-muted', closed: 'bg-pill text-muted', draft: 'bg-pill text-muted' };
 export function Badge({ status }: { status: keyof typeof statusLabels }) { return <span className={`inline-flex flex-none items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${badgeTone[status]}`}><span className="size-1.5 rounded-full bg-current"/>{statusLabels[status]}</span>; }
-export function Arrow() { return <span aria-hidden="true">↗</span>; }
+export function Arrow() { return <ArrowUpRight aria-hidden="true" className="size-4 shrink-0"/>; }
 export function PageHead({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
   return <header className="mb-10 flex flex-wrap items-start justify-between gap-4"><div className="min-w-0"><h1 className="text-4xl font-extrabold leading-[1.05] tracking-tighter sm:text-5xl">{title}</h1>{children && <p className="mt-2 max-w-2xl text-[15px] text-muted">{children}</p>}</div>{action}</header>;
 }
