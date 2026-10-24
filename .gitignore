@@ -13,7 +13,7 @@ tmp/
 *.tsbuildinfo
 .DS_Store
 .playwright-mcp/
-server/portal
-server/bin/
+deployables/portal/server/portal
+deployables/portal/server/bin/
 .taste-skill/
 .claude/worktrees/

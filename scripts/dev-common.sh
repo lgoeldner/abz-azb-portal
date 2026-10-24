@@ -13,7 +13,7 @@ export OIDC_CLIENT_SECRET=dev-only
 unset OIDC_BACKCHANNEL_URL
 export PUBLIC_URL=http://localhost:5173
 export DATABASE_URL='postgres://portal:portal-dev@localhost:5432/portal?sslmode=disable'
-export UPLOAD_DIR="$ROOT_DIR/server/data/uploads"
+export UPLOAD_DIR="$ROOT_DIR/deployables/portal/server/data/uploads"
 export SESSION_SECRET=development-only-secret-change-for-production
 
 start_dev_services() {
@@ -32,5 +32,5 @@ start_dev_services() {
 }
 
 prepare_dev_database() {
-  (cd server && go run ./cmd/portal migrate && go run ./cmd/portal seed)
+  (cd deployables/portal/server && go run ./cmd/portal migrate && go run ./cmd/portal seed)
 }

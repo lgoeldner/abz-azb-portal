@@ -7,7 +7,7 @@ if [[ "${SKIP_DEV_DB_SETUP:-0}" != 1 ]]; then
   prepare_dev_database
 fi
 printf 'Starting Go API at http://localhost:8080 (PUBLIC_URL=%s)\n' "$PUBLIC_URL"
-cd server
+cd deployables/portal/server
 mkdir -p tmp
 go build -o tmp/portal-dev ./cmd/portal
 exec ./tmp/portal-dev serve

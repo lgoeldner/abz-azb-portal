@@ -19,8 +19,7 @@ services:
 
   portal:
     build:
-      context: .
-      dockerfile: deployables/portal/Dockerfile
+      context: ./deployables/portal
     image: abizeitung-portal:${APP_VERSION:-local}
     restart: unless-stopped
     command: ["serve"]
@@ -65,8 +64,7 @@ services:
 
   backup:
     build:
-      context: .
-      dockerfile: deployables/backup/Dockerfile
+      context: ./deployables/backup
     image: abizeitung-portal-backup:${APP_VERSION:-local}
     restart: unless-stopped
     profiles: [production]

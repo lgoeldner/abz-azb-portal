@@ -15,7 +15,7 @@ Uploads are private and immutable, and removal is soft deletion. There are no pu
 
 ## Stack
 
-React, TypeScript and Vite in `web/`; Go (`net/http`) and PostgreSQL in `server/`; Caddy and Docker Compose for deployment. Go serves the production frontend and owns authentication and application rules.
+React, TypeScript and Vite in `deployables/portal/web/`; Go (`net/http`) and PostgreSQL in `deployables/portal/server/`; Caddy and Docker Compose for deployment. Go serves the production frontend and owns authentication and application rules.
 
 The API is described by [`docs/openapi.json`](docs/openapi.json), which generates the frontend types. See also [`docs/implementation-contract.md`](docs/implementation-contract.md).
 
@@ -53,10 +53,13 @@ Database integration tests need `TEST_DATABASE_URL` pointing to a **disposable**
 
 ```sh
 TEST_DATABASE_URL='postgres://portal:portal-dev@localhost:5432/portal_test?sslmode=disable' make check
-cd web && npm run test:e2e
+cd deployables/portal/web && npm run test:e2e
 bash scripts/test-recovery.sh   # backup/restore against throwaway containers
 ```
 
 ## Production
 
 Production uses configurable OIDC and refuses mock login. New accounts stay pending until an admin admits them. Nightly encrypted Restic backups cover the database and uploads. See [`ops/README.md`](ops/README.md) for operations and restore, and [`docs/school-login.md`](docs/school-login.md) for login integration.
+
+## Design
+use the taste skill direction in the repo to keep a consistent, user friendly UX

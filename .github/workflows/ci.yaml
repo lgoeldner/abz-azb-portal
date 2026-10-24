@@ -22,23 +22,31 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          go-version-file: deployables/portal/server/go.mod
+          cache-dependency-path: |
+            deployables/portal/server/go.sum
+            deployables/auth-mock/go.sum
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: deployables/portal/web/package-lock.json
       - name: Go lint
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.15.0
           install-mode: goinstall # built with go.mod's Go, so new language versions never break the linter
-          working-directory: server
+          working-directory: deployables/portal/server
+      - name: Go lint (auth-mock)
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15.0
+          install-mode: goinstall
+          working-directory: deployables/auth-mock
       - name: Shell lint
         run: shellcheck -S warning scripts/*.sh deployables/backup/*.sh
       - name: Frontend lint and types
-        run: cd web && npm ci && npm run lint && npm run typecheck
+        run: cd deployables/portal/web && npm ci && npm run lint && npm run typecheck
       - name: API contract
         run: node scripts/check-contract.mjs
 
@@ -49,15 +57,18 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          go-version-file: deployables/portal/server/go.mod
+          cache-dependency-path: |
+            deployables/portal/server/go.sum
+            deployables/auth-mock/go.sum
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: Go vulnerabilities reachable from our code (incl. standard library)
-        run: cd server && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: cd deployables/portal/server && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+          cd ../../auth-mock && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
       - name: npm advisories
-        run: cd web && npm audit --audit-level=high
+        run: cd deployables/portal/web && npm audit --audit-level=high
 
   test:
     runs-on: ubuntu-latest
@@ -80,19 +91,23 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          go-version-file: deployables/portal/server/go.mod
+          cache-dependency-path: |
+            deployables/portal/server/go.sum
+            deployables/auth-mock/go.sum
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: deployables/portal/web/package-lock.json
       - name: Go tests and vet
         env:
           TEST_DATABASE_URL: postgres://portal:portal_test@localhost:5432/portal_test?sslmode=disable
-        run: cd server && go test -race ./... && go vet ./...
+        run: |
+          cd deployables/portal/server && go test -race ./... && go vet ./...
+          cd ../../auth-mock && go test -race ./... && go vet ./...
       - name: Frontend tests and production build
-        run: cd web && npm ci && npm test -- --run && npm run build
+        run: cd deployables/portal/web && npm ci && npm test -- --run && npm run build
       - name: Ops shell and restore safety checks
         run: |
           bash deployables/backup/test-backup-lock.sh
@@ -107,19 +122,18 @@ jobs:
           OIDC_ISSUER: http://localhost:9090
           OIDC_CLIENT_ID: portal-dev
           OIDC_CLIENT_SECRET: dev-only
-          AUTH_MOCK_USERS: ../deployables/auth-mock/users.yaml
+          AUTH_MOCK_USERS: ${{ github.workspace }}/deployables/auth-mock/users.yaml
           AUTH_MOCK_REDIRECT_URIS: http://127.0.0.1:8080/auth/callback
           SESSION_SECRET: ci-only-secret-at-least-32-bytes-long
           UPLOAD_DIR: /tmp/portal-uploads
-          STATIC_DIR: ../web/dist
+          STATIC_DIR: ${{ github.workspace }}/deployables/portal/web/dist
           BACKUP_STATUS_FILE: /tmp/portal-backup-status.json
         run: |
           mkdir -p /tmp/portal-uploads
-          cd server
-          go build -o /tmp/portal ./cmd/portal
+          (cd deployables/portal/server && go build -o /tmp/portal ./cmd/portal)
           /tmp/portal migrate
           /tmp/portal seed
-          go build -o /tmp/auth-mock ./cmd/auth-mock
+          (cd deployables/auth-mock && go build -o /tmp/auth-mock .)
           ADDR=:9090 /tmp/auth-mock >/tmp/auth-mock.log 2>&1 &
           for _ in $(seq 1 30); do
             if curl --fail --silent http://localhost:9090/healthz; then break; fi
@@ -140,13 +154,13 @@ jobs:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:8080
           PLAYWRIGHT_CHANNEL: chrome
           DEBUG_EXPECT_PRODUCTION: '1'
-        run: cd web && npm run test:e2e
+        run: cd deployables/portal/web && npm run test:e2e
       - name: Playwright traces
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: playwright-traces
-          path: web/test-results/
+          path: deployables/portal/web/test-results/
           retention-days: 7
       - name: App logs
         if: failure()

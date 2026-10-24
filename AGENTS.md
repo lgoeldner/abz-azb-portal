@@ -6,7 +6,7 @@ German private portal for LMGU Jahrgang 2027. June 2027 does not automatically c
 
 ## Agent tiers
 
-Use bounded delegation for implementation, as requested by the owner. Coordinate at most three workers with one lead. Model assignments: GPT-6 Astra/high for architecture and critical independent review; GPT-6.1 Sol/high for feature implementation; GPT-6 Luna/medium for routine fixtures, UI work under fixed contracts, and documentation. Escalate ambiguous security or data-integrity work to the architecture tier.
+Use bounded delegation for implementation, as requested by the owner. Coordinate at most three workers with one lead. Model assignments: GPT-6.1 Sol/high or Opus 5.5 for architecture and critical independent review; GPT-6 Luna xhigh / Sonnet 5.5 for feature implementation; GPT-6 Luna/medium / Haiku 5.5 xhigh for routine fixtures, UI work under fixed contracts, and documentation. Escalate ambiguous security or data-integrity work to the architecture tier.
 
 Give each worker file ownership, an API contract, and acceptance tests. Do not let two workers edit the same files concurrently. The lead owns integration and changes to shared contracts. Reviewers must be independent of the code they approve.
 

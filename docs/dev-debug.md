@@ -14,7 +14,7 @@ Vite development mode shows the same small **Debug** disclosure beside each supp
 
 These are read-only diagnostics of data already loaded for the normal view. Opening a disclosure makes no API requests and grants no access. Existing server permissions continue to control which records the browser receives.
 
-The browser checks in `web/e2e/dev-debug.spec.ts` run against the Vite dev server by default. Keep trace output outside Vite's watched source tree, for example `npm run test:e2e -- e2e/dev-debug.spec.ts --output=/tmp/portal-debug-results`. For a production build served by Vite preview or Go, set `DEBUG_EXPECT_PRODUCTION=1` along with `PLAYWRIGHT_BASE_URL`; CI sets this flag for its built frontend.
+The browser checks in `deployables/portal/web/e2e/dev-debug.spec.ts` run against the Vite dev server by default. Keep trace output outside Vite's watched source tree, for example `npm run test:e2e -- e2e/dev-debug.spec.ts --output=/tmp/portal-debug-results`. For a production build served by Vite preview or Go, set `DEBUG_EXPECT_PRODUCTION=1` along with `PLAYWRIGHT_BASE_URL`; CI sets this flag for its built frontend.
 
 ## Adding a menu
 

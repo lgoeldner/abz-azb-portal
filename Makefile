@@ -27,20 +27,23 @@ check:
 	bash -n scripts/*.sh deployables/backup/*.sh
 	bash deployables/backup/test-backup-lock.sh
 	bash deployables/backup/test-restore-safety.sh
-	cd server && go test -race ./... && go vet ./...
-	cd web && npm ci && npm run typecheck && npm test -- --run && npm run build
+	cd deployables/portal/server && go test -race ./... && go vet ./...
+	cd deployables/auth-mock && go test -race ./... && go vet ./...
+	cd deployables/portal/web && npm ci && npm run typecheck && npm test -- --run && npm run build
 	node scripts/check-contract.mjs
 	$(MAKE) lint
 
 # The linter is built with go.mod's Go, matching CI.
 lint:
 	shellcheck -S warning scripts/*.sh deployables/backup/*.sh
-	cd server && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...
-	cd web && npm run lint
+	cd deployables/portal/server && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...
+	cd deployables/auth-mock && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...
+	cd deployables/portal/web && npm run lint
 
 audit:
-	cd server && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
-	cd web && npm audit --audit-level=high
+	cd deployables/portal/server && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	cd deployables/auth-mock && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	cd deployables/portal/web && npm audit --audit-level=high
 
 migrate:
 	$(COMPOSE) run --rm --no-deps portal migrate

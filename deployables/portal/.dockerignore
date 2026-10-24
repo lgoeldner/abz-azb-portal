@@ -1,9 +1,4 @@
 .git
-.playwright-mcp
-.github
-.agents
-.codex
-node_modules
 web/node_modules
 web/dist
 server/tmp
@@ -36,4 +31,3 @@ web/playwright-report
 .env
 .env.*
 !.env.example
-compose*.yaml

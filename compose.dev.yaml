@@ -1,8 +1,7 @@
 services:
   auth-mock:
     build:
-      context: .
-      dockerfile: deployables/auth-mock/Dockerfile
+      context: ./deployables/auth-mock
     environment:
       APP_ENV: development
       ADDR: :9090
@@ -31,8 +30,7 @@ services:
 
   portal:
     build:
-      context: .
-      dockerfile: deployables/portal/Dockerfile
+      context: ./deployables/portal
     restart: "no"
     entrypoint: ["/bin/sh", "-c"]
     command: ["portal migrate && portal seed && exec portal serve"]
@@ -51,7 +49,7 @@ services:
       BACKUP_STATUS_FILE: /var/lib/portal/status/status.json
     # No host port: the host Go API owns 8080; this container is reached through caddy.
     volumes:
-      - ./server/data/uploads:/var/lib/portal/uploads
+      - ./deployables/portal/server/data/uploads:/var/lib/portal/uploads
       - backup_status:/var/lib/portal/status:ro
     depends_on:
       auth-mock: { condition: service_healthy }
@@ -67,7 +65,7 @@ services:
     restart: "no"
     entrypoint: ["/bin/sh", "-c", "restic cat config >/dev/null 2>&1 || restic init; exec /usr/local/bin/backup.sh"]
     volumes:
-      - ./server/data/uploads:/uploads:ro
+      - ./deployables/portal/server/data/uploads:/uploads:ro
       - restic_dev:/restic
 
 volumes:
