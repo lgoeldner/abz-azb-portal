@@ -61,13 +61,17 @@ func TestExternalOIDCTrustAndEnrollment(t *testing.T) {
 					rec := httptest.NewRecorder()
 					handler.ServeHTTP(rec, r)
 					var response map[string]any
-					json.Unmarshal(rec.Body.Bytes(), &response)
+					if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+						t.Fatal(err)
+					}
 					original, err := jose.ParseSigned(response["id_token"].(string), []jose.SignatureAlgorithm{jose.RS256})
 					if err != nil {
 						t.Fatal(err)
 					}
 					var claims map[string]any
-					json.Unmarshal(original.UnsafePayloadWithoutVerification(), &claims)
+					if err := json.Unmarshal(original.UnsafePayloadWithoutVerification(), &claims); err != nil {
+						t.Fatal(err)
+					}
 					switch scenario {
 					case "nonce":
 						claims["nonce"] = "wrong"
@@ -145,7 +149,9 @@ func TestExternalOIDCTrustAndEnrollment(t *testing.T) {
 					t.Fatalf("invalid identity accepted: %d %s", res.StatusCode, body)
 				}
 				var count int
-				pool.QueryRow(context.Background(), "SELECT count(*) FROM sessions").Scan(&count)
+				if err := pool.QueryRow(context.Background(), "SELECT count(*) FROM sessions").Scan(&count); err != nil {
+					t.Fatal(err)
+				}
 				if count != 0 {
 					t.Fatal("invalid identity created session")
 				}
