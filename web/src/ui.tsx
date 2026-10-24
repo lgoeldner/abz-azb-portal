@@ -45,7 +45,7 @@ export function since(value: string | null | undefined) {
 }
 
 export function Failure({ error, retry }: { error: Error; retry?: () => void }) {
-  const stale = error instanceof ApiError && error.status === 409;
+  const stale = error instanceof ApiError && error.status === 409 && !['self_delete', 'last_admin', 'has_content'].includes(error.code);
   return <div className="rounded-ui bg-bad-tint px-4 py-3 text-sm text-bad" role="alert"><strong>{stale ? 'Eine neuere Version liegt vor.' : 'Das hat noch nicht geklappt.'}</strong><p className="mt-1">{stale ? 'Deine Eingaben bleiben erhalten. Lade die aktuelle Version, prüfe die Änderungen und versuche es erneut.' : error.message}</p>{error instanceof ApiError && error.status === 401 ? <a className="mt-2 inline-block underline" href="/auth/login">Erneut anmelden →</a> : retry && <button type="button" className={`${btn.text} mt-2 text-bad`} onClick={retry}>Erneut versuchen</button>}</div>;
 }
 export function Loading() { return <div className="flex min-h-36 items-center justify-center gap-3 text-sm text-muted" role="status"><span className="size-5 animate-spin rounded-full border-2 border-line border-t-accent"/> Einen Moment …</div>; }
