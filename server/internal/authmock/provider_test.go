@@ -227,7 +227,7 @@ func TestLoadUsersStrictConfigurationAndFixtures(t *testing.T) {
 	}
 	defer file.Close()
 	users, err := LoadUsers(file)
-	if err != nil || len(users) != 6 {
+	if err != nil || len(users) != 7 {
 		t.Fatalf("fixture identities: %d %v", len(users), err)
 	}
 	for _, input := range []string{
