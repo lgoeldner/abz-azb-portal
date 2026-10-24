@@ -625,5 +625,5 @@ function actionName(action: string) {
     'correction.created': 'Korrektur angefragt',
     'correction.resolved': 'Korrektur erledigt',
   };
-  return names[action] ?? action.replaceAll('_', ' ').replaceAll('.', ' · ');
+  return names[action] ?? action.replaceAll('_', ' ').replaceAll('.', ' ');
 }

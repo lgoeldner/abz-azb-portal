@@ -207,7 +207,7 @@ export function NewContribution() {
             <label className={label}>
               Fotos{' '}
               <small className="block font-normal text-muted">
-                JPEG, PNG oder WebP · höchstens 10 Bilder · je 20 MiB · höchstens 24 Megapixel
+                JPEG, PNG oder WebP, höchstens 10 Bilder, je 20 MiB und höchstens 24 Megapixel.
               </small>
               <input
                 className="mt-2 block w-full text-sm text-muted file:mr-3 file:rounded-ui file:border file:border-line file:bg-white file:px-3 file:py-2 file:text-sm file:font-semibold file:text-ink hover:file:bg-soft"
@@ -336,8 +336,12 @@ export function ContributionDetail() {
         ← {own ? 'Meine Beiträge' : 'Redaktion'}
       </Link>
       <PageHead title={s.title} action={<Badge status={s.status} />}>
-        {categoryName && `${categoryName} · `}Von {s.author_name} · Aktualisiert am {date(s.updated_at)} · Version{' '}
-        {s.version}
+        <span className="flex flex-wrap gap-x-2">
+          {categoryName && <span>{categoryName}</span>}
+          <span>Von {s.author_name}</span>
+          <span>Aktualisiert am {date(s.updated_at)}</span>
+          <span>Version {s.version}</span>
+        </span>
       </PageHead>
       <DevDebug
         label="Beitrag"
@@ -361,7 +365,7 @@ export function ContributionDetail() {
               if (latest.data) setBaseVersion(latest.data.version);
             }}
           >
-            Aktuelle Version laden · Eingaben behalten
+            Aktuelle Version laden (Eingaben behalten)
           </button>
           <p>Vergleiche den aktuellen Beitrag unter dem Formular mit deinem Entwurf, bevor du erneut speicherst.</p>
         </div>
@@ -468,7 +472,7 @@ export function ContributionDetail() {
                 <label className={`${label} min-w-0 flex-1 basis-64`}>
                   Foto hinzufügen{' '}
                   <small className="block font-normal text-muted">
-                    JPEG, PNG oder WebP · höchstens 10 Bilder · je 20 MiB · höchstens 24 Megapixel
+                    JPEG, PNG oder WebP, höchstens 10 Bilder, je 20 MiB und höchstens 24 Megapixel.
                   </small>
                   <input
                     className="mt-2 block w-full text-sm text-muted file:mr-3 file:rounded-ui file:border file:border-line file:bg-white file:px-3 file:py-2 file:text-sm file:font-semibold file:text-ink hover:file:bg-soft"
@@ -497,7 +501,10 @@ export function ContributionDetail() {
                   <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                     <strong>{c.author_name}</strong>
                     <small className="text-muted">
-                      {date(c.created_at)} · {c.resolved ? 'Erledigt' : 'Offen'}
+                      <span className="flex flex-wrap gap-x-2">
+                        <span>{date(c.created_at)}</span>
+                        <span>{c.resolved ? 'Erledigt' : 'Offen'}</span>
+                      </span>
                     </small>
                   </div>
                   <p className="mt-1 whitespace-pre-wrap break-words">{c.body}</p>
@@ -585,7 +592,7 @@ export function ContributionDetail() {
               ))}
             {editorial(user) && !canEdit(user, s.category_id) && (
               <p className="text-sm text-muted">
-                Leserechte · Zum Bearbeiten brauchst du eine Zuweisung zu dieser Sammlung.
+                Du hast Leserechte. Zum Bearbeiten brauchst du eine Zuweisung zu dieser Sammlung.
               </p>
             )}
           </section>
@@ -601,7 +608,10 @@ export function ContributionDetail() {
                   <summary className="cursor-pointer">
                     <strong>Version {r.version}</strong>{' '}
                     <small className="text-muted">
-                      {r.actor_name} · {date(r.created_at)}
+                      <span className="flex flex-wrap gap-x-2">
+                        <span>{r.actor_name}</span>
+                        <span>{date(r.created_at)}</span>
+                      </span>
                     </small>
                   </summary>
                   <div className="mt-3 space-y-2">
@@ -683,7 +693,7 @@ export function Editorial() {
             {sammlungen.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
-                {canEdit(user, c.id) ? ' · zugewiesen' : ''}
+                {canEdit(user, c.id) ? ' (zugewiesen)' : ''}
               </option>
             ))}
           </select>

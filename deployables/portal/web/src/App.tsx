@@ -963,7 +963,6 @@ function AdminHome() {
           <h2 id="home-sammlungen" className={heading}>
             Sammlungen
           </h2>
-          <span className="text-sm text-muted">Eine Kachel pro Klasse</span>
         </div>
         {state(categories) ?? (
           <ul className="mt-4 grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">
@@ -1137,7 +1136,7 @@ function EditorHome() {
   const fact =
     !categories.data || !submissions.data
       ? ''
-      : `${pending === 0 ? 'Keine Beiträge warten auf Prüfung' : pending === 1 ? '1 Beitrag wartet auf Prüfung' : `${pending} Beiträge warten auf Prüfung`} · ${open === 0 ? 'keine Wahl offen' : plural(open, 'Wahl', 'Wahlen') + ' offen'}`;
+      : `${pending === 0 ? 'Keine Beiträge warten auf Prüfung' : pending === 1 ? '1 Beitrag wartet auf Prüfung' : `${pending} Beiträge warten auf Prüfung`}, ${open === 0 ? 'keine Wahl offen' : plural(open, 'Wahl', 'Wahlen') + ' offen'}`;
   const ballots = (categories.data ?? [])
     .filter((c) => !c.repeatable)
     .sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || newestOpened(a, b));

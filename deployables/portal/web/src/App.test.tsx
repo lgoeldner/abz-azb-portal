@@ -643,7 +643,7 @@ describe('navigation by view', () => {
     expect(await within(main).findByRole('heading', { level: 1, name: 'Redaktion' })).toBeInTheDocument();
     if (role === 'admin') expect(within(main).getByRole('region', { name: 'Personen' })).toBeInTheDocument();
     else {
-      expect(await within(main).findByText('3 Beiträge warten auf Prüfung · 1 Wahl offen')).toBeInTheDocument();
+      expect(await within(main).findByText('3 Beiträge warten auf Prüfung, 1 Wahl offen')).toBeInTheDocument();
       expect(within(main).getByRole('link', { name: /Abimotto/ })).toHaveTextContent(/34\s*Stimmen/);
       expect(within(main).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent(/3\s*Beiträge.*2 offen/);
       expect(within(main).getByRole('link', { name: /Zitate/ })).toHaveTextContent(/1\s*Beitrag1 offen/);

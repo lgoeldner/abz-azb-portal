@@ -306,7 +306,7 @@ export function SammlungForm({
           </label>
         ) : (
           <fieldset className="min-w-0 space-y-3">
-            <legend className={label}>Kandidat:innen · mindestens zwei</legend>
+            <legend className={label}>Kandidat:innen (mindestens zwei)</legend>
             {roster.isPending ? (
               <Loading />
             ) : roster.error ? (
@@ -605,7 +605,7 @@ function Ballot({ sammlung: poll }: { sammlung: Category }) {
                   <Failure error={results.error} retry={() => results.refetch()} />
                 ) : (
                   <>
-                    <p className="mt-1 text-sm text-muted">Nur für die Redaktion · {total} abgegebene Stimme(n)</p>
+                    <p className="mt-1 text-sm text-muted">Nur für die Redaktion. {total} abgegebene Stimme(n).</p>
                     <div className="mt-4 space-y-4">
                       {results.data?.map((r) => (
                         <div className="min-w-0" key={r.option_id}>
@@ -638,9 +638,7 @@ function Ballot({ sammlung: poll }: { sammlung: Category }) {
           </button>
           {auditOpen && (
             <>
-              <p className="text-sm text-muted">
-                Vertraulich · Enthält die Zuordnung von Stimmen und deren Änderungen.
-              </p>
+              <p className="text-sm text-muted">Vertraulich. Enthält die Zuordnung von Stimmen und deren Änderungen.</p>
               {audit.isPending ? (
                 <Loading />
               ) : audit.error ? (
