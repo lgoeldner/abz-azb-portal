@@ -81,9 +81,12 @@ test('admin opens access management and activity log on mobile', async ({ page }
   await page.setViewportSize({ width: 390, height: 844 });
   await signInAs(page, 'Administration');
   await page.getByRole('button', { name: 'Menü öffnen' }).click();
-  await page.getByRole('link', { name: 'Verwaltung' }).click();
-  await expect(page.getByRole('heading', { name: 'Verwaltung' })).toBeVisible();
+  const aside = page.getByRole('complementary', { name: 'Seitenleiste' });
+  await expect(aside.getByRole('button', { name: 'Verwaltung' })).toHaveAttribute('aria-expanded', 'true');
+  await aside.getByRole('link', { name: 'Personen' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Personen' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Unser Jahrgang & Team' })).toBeVisible();
-  await page.getByRole('tab', { name: 'Aktivitätsprotokoll' }).click();
+  await page.getByRole('button', { name: 'Menü öffnen' }).click();
+  await aside.getByRole('link', { name: 'Aktivitätsprotokoll' }).click();
   await expect(page.getByRole('heading', { name: 'Letzte Aktivitäten' })).toBeVisible();
 });
