@@ -86,7 +86,7 @@ export function Categories() {
   return <>
     <PageHead title="Rubriken">Rubriken der Zeitung anlegen und festlegen, wer sie bearbeiten darf.</PageHead>
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className={heading}>Rubriken der Zeitung</h2><button className={categoryForm ? btn.secondary : btn.primary} onClick={() => { setEditCategory(null); setCategoryForm(true); }}>Neue Rubrik <Plus aria-hidden="true" className="size-4 shrink-0"/></button></div>
-    {categoryForm && <CategoryForm category={editCategory} onSaved={() => setCategoryForm(false)}/>}
+    {categoryForm && <CategoryForm key={editCategory?.id ?? 'new'} category={editCategory} onSaved={() => setCategoryForm(false)}/>}
     {categories.isPending ? <Loading/> : categories.error ? <Failure error={categories.error}/> : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{categories.data?.map(c => { const [Icon, kind] = kindMeta[c.kind]; return <article className="flex min-w-0 flex-col gap-2 rounded-ui bg-white p-5" key={c.id}>
       <div className="flex items-center justify-between gap-3"><span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted"><Icon aria-hidden="true" className="size-4 shrink-0"/>{kind}</span><button type="button" className="grid size-9 place-items-center rounded-full hover:bg-pill" aria-label={`Rubrik bearbeiten: ${c.name}`} title="Rubrik bearbeiten" onClick={() => { setEditCategory(c); setCategoryForm(true); }}><Pencil aria-hidden="true" className="size-4"/></button></div>
       <h3 className={heading}>{c.name}</h3><p className="text-sm text-muted">{c.description}</p><DevDebug label="Rubrik" data={{ id: c.id, kind: c.kind }}/>
@@ -95,12 +95,16 @@ export function Categories() {
 }
 
 function CategoryForm({ category, onSaved }: { category: Category | null; onSaved: () => void }) {
-  const action = useAction(); const users = useData<User[]>('/admin/users'); const [grants, setGrants] = useState<Record<string, boolean>>({});
+  const action = useAction(); const users = useData<User[]>('/admin/users'); const [grants, setGrants] = useState<Record<string, boolean>>({}); const created = useRef<string | null>(null);
   const managers = (users.data ?? []).filter(u => u.role === 'manager'); const has = (m: User) => !!category && m.category_ids.includes(category.id);
-  return <form key={category?.id ?? 'new'} className={`${panel} mb-8 space-y-5`} onSubmit={e => { e.preventDefault(); const data = new FormData(e.currentTarget); action.run(async () => {
-    const saved = await api<Category>(category ? `/categories/${category.id}` : '/categories', json(category ? 'PATCH' : 'POST', { name: data.get('name'), description: data.get('description'), kind: data.get('kind') }));
-    const id = category?.id ?? saved.id;
-    for (const m of managers) { const want = grants[m.id] ?? has(m); if (want !== m.category_ids.includes(id)) await patchUser(m, { category_ids: want ? [...m.category_ids, id] : m.category_ids.filter(c => c !== id) }); }
+  return <form className={`${panel} mb-8 space-y-5`} onSubmit={e => { e.preventDefault(); const data = new FormData(e.currentTarget); action.run(async () => {
+    // A retry after a failed grant must update the Rubrik created by the first attempt, not create another.
+    const target = category?.id ?? created.current;
+    const saved = await api<Category>(target ? `/categories/${target}` : '/categories', json(target ? 'PATCH' : 'POST', { name: data.get('name'), description: data.get('description'), kind: data.get('kind') }));
+    const id = created.current = target ?? saved.id;
+    // PATCH replaces category_ids, so apply only the ticked changes onto freshly loaded grants.
+    const current = await api<User[]>('/admin/users');
+    for (const m of current.filter(u => u.role === 'manager')) { const now = m.category_ids.includes(id); const want = grants[m.id] ?? now; if (want !== now) await patchUser(m, { category_ids: want ? [...m.category_ids, id] : m.category_ids.filter(c => c !== id) }); }
     onSaved();
   }, 'Rubrik gespeichert.'); }}>
     <h2 className={heading}>{category ? 'Rubrik bearbeiten' : 'Neue Rubrik'}</h2>

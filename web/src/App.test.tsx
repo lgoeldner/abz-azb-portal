@@ -115,14 +115,14 @@ describe('verwaltung', () => {
   const editor = { id: 'mgr-1', name: 'Sam Redaktion', role: 'manager', admitted: true, cohort_member: true, category_ids: ['memory'] };
   const everyone = [admin, guest, waiting, editor];
   type Call = { url: string; method: string; body: Record<string, unknown> | undefined };
-  function mount(path: string, me: Record<string, unknown> = admin, onWrite: (c: Call) => Response | undefined = () => undefined) {
+  function mount(path: string, me: Record<string, unknown> = admin, onWrite: (c: Call) => Response | undefined = () => undefined, people: () => unknown[] = () => everyone, categories: unknown[] = [category]) {
     const calls: Call[] = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input).replace('/api/v1', ''); const method = init?.method ?? 'GET';
       if (url === '/me') return Response.json({ user: me, csrf_token: 'csrf' });
       if (method !== 'GET') { const c = { url, method, body: init?.body ? JSON.parse(String(init.body)) : undefined }; calls.push(c); return onWrite(c) ?? Response.json({ id: 'new-cat' }); }
-      if (url === '/admin/users') return Response.json(everyone);
-      if (url === '/categories') return Response.json([category]);
+      if (url === '/admin/users') return Response.json(people());
+      if (url === '/categories') return Response.json(categories);
       if (url === '/admin/status') return Response.json({ backup_last_success: null, backup_stale: false, upload_bytes: 0 });
       return Response.json([]);
     }));
@@ -234,6 +234,44 @@ describe('verwaltung', () => {
     await waitFor(() => expect(calls).toHaveLength(2));
     expect(calls[0]).toMatchObject({ url: '/categories', method: 'POST' });
     expect(calls[1]).toEqual({ url: '/admin/users/mgr-1', method: 'PATCH', body: { name: 'Sam Redaktion', role: 'manager', admitted: true, cohort_member: true, category_ids: ['memory', 'new-cat'] } });
+  });
+
+  it('does not carry unsaved grant changes over to another Rubrik', async () => {
+    const quotes = { id: 'quotes', name: 'Zitate', description: '', kind: 'quote' };
+    const photos = { id: 'photos', name: 'Fotos', description: '', kind: 'photo' };
+    const calls = mount('/verwaltung/rubriken', admin, undefined, undefined, [category, quotes, photos]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Rubrik bearbeiten: Zitate' }));
+    fireEvent.click(await screen.findByLabelText('Sam Redaktion'));
+    expect(screen.getByLabelText('Sam Redaktion')).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Rubrik bearbeiten: Fotos' }));
+    await waitFor(() => expect(screen.getByLabelText('Name')).toHaveValue('Fotos'));
+    expect(screen.getByLabelText('Sam Redaktion')).not.toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Rubrik speichern' }));
+    await waitFor(() => expect(calls.some(c => c.url === '/categories/photos')).toBe(true));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Rubrik speichern' })).toBeNull());
+    expect(calls.filter(c => c.url.startsWith('/admin/users'))).toEqual([]);
+  });
+
+  it('merges grants into the current server state and retries a failed save without a second Rubrik', async () => {
+    let server = { ...editor, category_ids: ['memory'] };
+    let failGrant = true;
+    const calls = mount('/verwaltung/rubriken', admin, c => {
+      if (c.url === '/admin/users/mgr-1') {
+        if (failGrant) { failGrant = false; return Response.json({ error: { code: 'unavailable', message: 'Kurz nicht erreichbar.' } }, { status: 503 }); }
+        server = { ...server, ...(c.body as object) };
+      }
+      return undefined;
+    }, () => [admin, server]);
+    fireEvent.click(await screen.findByRole('button', { name: /Neue Rubrik/ }));
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Neu' } });
+    fireEvent.click(await screen.findByLabelText('Sam Redaktion'));
+    // Another admin grants a further Rubrik while this form is open.
+    server = { ...server, category_ids: ['memory', 'quotes'] };
+    fireEvent.click(screen.getByRole('button', { name: 'Rubrik speichern' }));
+    expect(await screen.findByText('Kurz nicht erreichbar.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Rubrik speichern' }));
+    await waitFor(() => expect(server.category_ids).toEqual(['memory', 'quotes', 'new-cat']));
+    expect(calls.filter(c => c.url === '/categories' && c.method === 'POST')).toHaveLength(1);
   });
 });
 
