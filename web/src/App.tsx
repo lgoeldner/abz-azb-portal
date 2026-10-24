@@ -68,7 +68,7 @@ function Login() {
           <h1 className="mt-8 text-5xl font-extrabold leading-[1.02] tracking-tighter sm:text-7xl">Die beste Zeit.<br/><span className="text-muted">Zum Festhalten.</span></h1>
           <p className="mt-4 max-w-md text-[17px] text-muted">13 Jahre Schule. Unzählige Geschichten.<br/>Hier entsteht unsere Abizeitung.</p>
         </div>
-        <p className="text-sm text-muted">LMGU 2027 · Unser Jahrgang, unsere Geschichten.</p>
+        <p className="text-sm text-muted">LMGU 2027. Unser Jahrgang, unsere Geschichten.</p>
       </section>
       <section className="flex items-center bg-chrome p-6 sm:p-10 lg:p-14">
         <div className="w-full max-w-md rounded-ui bg-white p-6 sm:p-8">
@@ -116,7 +116,7 @@ function Layout() {
       </aside>
       <div className="flex min-h-screen flex-col bg-paper max-[651px]:pt-12 min-[651px]:pl-[260px]">
         <main id="inhalt" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-8 sm:py-10"><Outlet/>{import.meta.env.DEV && <div className="mt-8"><DevDebug label="Sitzung" data={{ role: user.role, view: view[0], admitted: user.admitted, cohort: user.cohort_member, grants: user.category_ids.length, route: location.pathname }}/></div>}</main>
-        <footer className="px-4 pb-6 text-[13px] text-muted sm:px-8">AbiZeitBetrug. · Privater Jahrgangsbereich LMGU 2027</footer>
+        <footer className="px-4 pb-6 text-[13px] text-muted sm:px-8">AbiZeitBetrug. Privater Jahrgangsbereich LMGU 2027</footer>
       </div>
     </ViewContext.Provider>
   );
@@ -211,7 +211,7 @@ function EditorNav() {
     <NavGroup id="nav-rubriken" label="Rubriken">
       {categories.isPending ? <p className={quiet}>Einen Moment …</p> : categories.error ? <p className={quiet}>Rubriken nicht erreichbar.</p> : categories.data?.map(c => {
         const mine = (submissions.data ?? []).filter(s => s.category_id === c.id);
-        return <NavRow key={c.id} to={`/redaktion?rubrik=${c.id}`} title={c.name} sub={`${plural(mine.length, 'Beitrag', 'Beiträge')} · ${mine.filter(s => s.status === 'pending').length} offen`}/>;
+        return <NavRow key={c.id} to={`/redaktion?rubrik=${c.id}`} title={c.name} sub={`${plural(mine.length, 'Beitrag', 'Beiträge')}, ${mine.filter(s => s.status === 'pending').length} offen`}/>;
       })}
       <NavItem to="/redaktion" icon={ClipboardList}>Alle Beiträge</NavItem>
     </NavGroup>
@@ -254,7 +254,7 @@ function StudentHome() {
                 <h3 className="text-xl font-extrabold leading-snug">{p.title}</h3>
                 {p.description && <p className="mt-2 text-[15px] text-muted">{p.description}</p>}
                 <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-5">
-                  <span className="text-[13px] text-muted">{[kindLabel(p.kind), plural(p.options.length, 'Option', 'Optionen'), since(p.opened_at)].filter(Boolean).join(' · ')}</span>
+                  <span className="text-[13px] text-muted">{[kindLabel(p.kind), plural(p.options.length, 'Option', 'Optionen'), since(p.opened_at)].filter(Boolean).join(', ')}</span>
                   <Link to={`/abstimmungen/${p.id}`} className={i === 0 ? btn.primary : btn.secondary}>Abstimmen<span className="sr-only"> bei {p.title}</span></Link>
                 </div>
                 <DevDebug label="Abstimmung" data={{ id: p.id, category: p.category_id, status: p.status, kind: p.kind, version: p.version, options: p.options.length, allowSelfVote: p.allow_self_vote, hasVoted: p.my_option_id !== null }}/>
@@ -378,7 +378,7 @@ function EditorHome() {
       <h2 id="home-abstimmungen" className={heading}>Abstimmungen</h2>
       {polls.isPending ? <div className="mt-4"><Loading/></div> : polls.error ? <div className="mt-4"><Failure error={polls.error} retry={() => polls.refetch()}/></div> : sorted.length === 0 ? <div className="mt-4"><Empty>Noch keine Abstimmung. <Link to="/abstimmungen?neu">Neue Abstimmung anlegen →</Link></Empty></div> : (
         <ul className={rows}>
-          {sorted.map(p => <ThickRow key={p.id} to={`/abstimmungen/${p.id}`} title={p.title} badge={<Badge status={p.status}/>} meta={[kindLabel(p.kind), plural(p.options.length, 'Option', 'Optionen'), p.status === 'open' ? since(p.opened_at) : ''].filter(Boolean).join(' · ')} count={p.ballot_count ?? 0} unit={['Stimme', 'Stimmen']} debug={{ label: 'Abstimmung', data: { id: p.id, category: p.category_id, status: p.status, kind: p.kind, version: p.version, options: p.options.length, allowSelfVote: p.allow_self_vote, hasVoted: p.my_option_id !== null } }}/>) }
+          {sorted.map(p => <ThickRow key={p.id} to={`/abstimmungen/${p.id}`} title={p.title} badge={<Badge status={p.status}/>} meta={[kindLabel(p.kind), plural(p.options.length, 'Option', 'Optionen'), p.status === 'open' ? since(p.opened_at) : ''].filter(Boolean).join(', ')} count={p.ballot_count ?? 0} unit={['Stimme', 'Stimmen']} debug={{ label: 'Abstimmung', data: { id: p.id, category: p.category_id, status: p.status, kind: p.kind, version: p.version, options: p.options.length, allowSelfVote: p.allow_self_vote, hasVoted: p.my_option_id !== null } }}/>) }
         </ul>
       )}
     </section>
