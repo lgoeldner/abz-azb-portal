@@ -65,12 +65,14 @@ Database integration tests require `TEST_DATABASE_URL` pointing to a disposable 
 ```sh
 TEST_DATABASE_URL='postgres://portal:portal-dev@localhost:5432/portal_test?sslmode=disable' make check
 cd web
-npm run test:e2e
+PLAYWRIGHT_CHANNEL=chrome npm run test:e2e   # installed Google Chrome; omit to use Playwright's bundled browser
 ```
+
+`make lint` runs golangci-lint, ESLint and shellcheck; `make audit` runs govulncheck and `npm audit`. CI runs lint, audit, tests and browser checks on every branch, and the audit weekly.
 
 To exercise backup and restore end to end against disposable containers, run `bash scripts/test-recovery.sh`. The script builds the portal and backup images, creates temporary database, upload, and repository volumes, verifies restored contents, then removes the resources it created.
 
-Tests focus on ownership, category permissions, accepted-content immutability, idempotent retries, concurrent voting, private files, real OIDC mock flow, and backup/restore safety. CI also builds the production artifacts and runs browser journeys.
+Tests focus on ownership, category permissions, a route-by-route session/admission/CSRF matrix derived from `docs/openapi.json`, accepted-content immutability, idempotent retries, concurrent voting, private files, real OIDC mock flow, and backup/restore safety. CI also builds the production artifacts and runs browser journeys plus layout checks (no horizontal overflow, no uncaught page errors) against them. There is deliberately no pixel-snapshot testing.
 
 ## Production and recovery
 
