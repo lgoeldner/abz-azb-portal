@@ -5,6 +5,7 @@ import {
   FileText,
   Hourglass,
   House,
+  Library,
   Plus,
   ScrollText,
   Settings,
@@ -15,19 +16,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import {
-  api,
-  ApiError,
-  editorial,
-  json,
-  setCsrf,
-  type Category,
-  type Me,
-  type Poll,
-  type Submission,
-  type User,
-} from './api';
+import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { api, ApiError, editorial, json, setCsrf, type Category, type Me, type Submission, type User } from './api';
 import {
   Arrow,
   Badge,
@@ -39,10 +29,14 @@ import {
   Session,
   SubmissionList,
   btn,
-  categoryKindIcon,
+  allKinds,
   heading,
+  kindIcon,
+  kindLabel,
+  newestOpened,
   notice,
-  pollKindIcon,
+  plural,
+  repeatableKinds,
   roleName,
   since,
   useAction,
@@ -52,7 +46,8 @@ import {
   type View,
 } from './ui';
 import { ActivityLog, Categories, People } from './admin';
-import { ContributionDetail, Contributions, Editorial, NewContribution, NotFound, PollDetail, Polls } from './pages';
+import { ContributionDetail, Contributions, Editorial, NewContribution, NotFound } from './pages';
+import { SammlungDetail, Sammlungen } from './sammlungen';
 import { DevDebug } from './DevDebug';
 
 export function App() {
@@ -100,8 +95,10 @@ export function App() {
           <Route path="beitraege" element={<Contributions />} />
           <Route path="beitraege/neu" element={<NewContribution />} />
           <Route path="beitraege/:id" element={<ContributionDetail />} />
-          <Route path="abstimmungen" element={<Polls />} />
-          <Route path="abstimmungen/:id" element={<PollDetail />} />
+          <Route path="sammlungen" element={<Sammlungen />} />
+          <Route path="sammlungen/:id" element={<SammlungDetail />} />
+          <Route path="abstimmungen" element={<RedirectKeepSearch to="/sammlungen" />} />
+          <Route path="abstimmungen/:id" element={<RedirectToSammlung />} />
           <Route
             path="redaktion"
             element={
@@ -120,13 +117,14 @@ export function App() {
             }
           />
           <Route
-            path="verwaltung/rubriken"
+            path="verwaltung/sammlungen"
             element={
               <RoleGuard admin>
                 <Categories />
               </RoleGuard>
             }
           />
+          <Route path="verwaltung/rubriken" element={<Navigate to="/verwaltung/sammlungen" replace />} />
           <Route
             path="verwaltung/protokoll"
             element={
@@ -143,10 +141,16 @@ export function App() {
 }
 
 // ---------- small helpers ----------
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+// Old bookmarks: /abstimmungen[/:id] now live under /sammlungen.
+function RedirectKeepSearch({ to }: { to: string }) {
+  const { search } = useLocation();
+  return <Navigate to={`${to}${search}`} replace />;
+}
+function RedirectToSammlung() {
+  const { id } = useParams();
+  return <Navigate to={`/sammlungen/${id}`} replace />;
+}
 const time = (value: string | null | undefined) => (value ? new Date(value).getTime() : 0);
-const newestOpened = (a: Poll, b: Poll) => time(b.opened_at ?? b.created_at) - time(a.opened_at ?? a.created_at);
-const kindLabel = (kind: Poll['kind']) => (kind === 'person' ? 'Personenwahl' : 'Vorschlag');
 const statusOrder = { open: 0, draft: 1, closed: 2 } as const;
 
 // The sidebar switch and the home page must agree on the view, so Layout owns the single hook instance.
@@ -236,7 +240,7 @@ function Login() {
         <div className="w-full max-w-md rounded-ui bg-white p-6 sm:p-8">
           <h2 className="text-3xl font-extrabold tracking-tight">Schön, dass du da bist.</h2>
           <p className="mt-3 text-[15px] text-muted">
-            Melde dich an, um Erinnerungen einzureichen und bei unseren Abstimmungen mitzumachen.
+            Melde dich an, um Erinnerungen einzureichen und bei unseren Sammlungen mitzumachen.
           </p>
           <a className={`${btn.primary} mt-6 w-full`} href="/auth/login">
             Mit Schulkonto anmelden <Arrow />
@@ -457,8 +461,8 @@ function AdminNav({ onNavigate }: { onNavigate: () => void }) {
           <NavItem to="/verwaltung/personen" icon={Users}>
             Personen
           </NavItem>
-          <NavItem to="/verwaltung/rubriken" icon={Tags}>
-            Rubriken
+          <NavItem to="/verwaltung/sammlungen" icon={Tags}>
+            Sammlungen
           </NavItem>
           <NavItem to="/verwaltung/protokoll" icon={ScrollText}>
             Aktivitätsprotokoll
@@ -518,55 +522,55 @@ const quiet = 'px-3.5 text-[13px] text-muted';
 
 function StudentNav() {
   const { user } = useSession();
-  const polls = useData<Poll[]>('/polls');
   const categories = useData<Category[]>('/categories');
   const submissions = useData<Submission[]>('/submissions');
-  const todo = (polls.data ?? []).filter((p) => p.status === 'open' && p.my_option_id === null).sort(newestOpened);
-  const done = (polls.data ?? [])
-    .filter((p) => p.status === 'closed' || (p.status === 'open' && p.my_option_id !== null))
+  const ballots = (categories.data ?? []).filter((c) => !c.repeatable);
+  const todo = ballots.filter((c) => c.status === 'open' && c.my_option_id === null).sort(newestOpened);
+  const done = ballots
+    .filter((c) => c.status === 'closed' || (c.status === 'open' && c.my_option_id !== null))
     .sort(newestOpened);
   const own = (submissions.data ?? []).filter((s) => s.author_id === user.id);
   return (
     <>
       <NavGroup id="nav-offen" label="Offen">
-        {polls.isPending ? (
+        {categories.isPending ? (
           <p className={quiet}>Einen Moment …</p>
-        ) : polls.error ? (
-          <p className={quiet}>Abstimmungen nicht erreichbar.</p>
+        ) : categories.error ? (
+          <p className={quiet}>Sammlungen nicht erreichbar.</p>
         ) : todo.length === 0 ? (
           <p className={quiet}>Gerade ist nichts offen.</p>
         ) : (
           <ol aria-labelledby="nav-offen" className="ml-3 flex flex-col border-l-2 border-pill">
-            {todo.map((p) => (
-              <li key={p.id} className="relative pl-3">
+            {todo.map((c) => (
+              <li key={c.id} className="relative pl-3">
                 <span
                   aria-hidden="true"
                   className="absolute left-0 top-[17px] size-2 -translate-x-1/2 rounded-full bg-accent"
                 />
-                <NavRow to={`/abstimmungen/${p.id}`} title={p.title} sub={since(p.opened_at)} />
+                <NavRow to={`/sammlungen/${c.id}`} title={c.name} sub={since(c.opened_at)} />
               </li>
             ))}
           </ol>
         )}
       </NavGroup>
-      <NavGroup id="nav-jederzeit" label="Jederzeit">
+      <NavGroup id="nav-fortlaufend" label="Fortlaufend">
         {categories.isPending ? (
           <p className={quiet}>Einen Moment …</p>
-        ) : categories.error ? (
-          <p className={quiet}>Rubriken nicht erreichbar.</p>
-        ) : (
-          categories.data?.map((c) => {
-            const n = own.filter((s) => s.category_id === c.id).length;
-            return (
-              <NavRow
-                key={c.id}
-                to={`/beitraege/neu?kategorie=${c.id}`}
-                icon={categoryKindIcon[c.kind]}
-                title={c.name}
-                sub={n ? `${n} eingereicht` : 'Noch nichts eingereicht'}
-              />
-            );
-          })
+        ) : categories.error ? null : (
+          categories.data
+            ?.filter((c) => c.repeatable)
+            .map((c) => {
+              const n = own.filter((s) => s.category_id === c.id).length;
+              return (
+                <NavRow
+                  key={c.id}
+                  to={`/sammlungen/${c.id}`}
+                  icon={kindIcon[c.kind]}
+                  title={c.name}
+                  sub={n ? `${n} eingereicht` : 'Noch nichts eingereicht'}
+                />
+              );
+            })
         )}
       </NavGroup>
       <div className="flex flex-col gap-1">
@@ -583,17 +587,20 @@ function StudentNav() {
             {done.length === 0 ? (
               <p className={quiet}>Noch nichts erledigt.</p>
             ) : (
-              done.map((p) => (
+              done.map((c) => (
                 <NavRow
-                  key={p.id}
-                  to={`/abstimmungen/${p.id}`}
-                  title={p.title}
-                  sub={p.my_option_id ? '✓ abgestimmt' : 'beendet'}
+                  key={c.id}
+                  to={`/sammlungen/${c.id}`}
+                  title={c.name}
+                  sub={c.my_option_id ? '✓ abgestimmt' : 'beendet'}
                 />
               ))
             )}
           </div>
         </details>
+        <NavItem to="/sammlungen" icon={Library}>
+          Alle Sammlungen
+        </NavItem>
         <NavItem to="/beitraege" icon={FileText}>
           Meine Beiträge
         </NavItem>
@@ -603,26 +610,26 @@ function StudentNav() {
 }
 
 function EditorNav() {
-  const polls = useData<Poll[]>('/polls');
   const categories = useData<Category[]>('/categories');
   const submissions = useData<Submission[]>('/submissions');
-  const groups: [Poll['status'], string, string][] = [
-    ['open', 'Offen', 'nav-poll-offen'],
-    ['draft', 'Entwürfe', 'nav-poll-entwuerfe'],
-    ['closed', 'Beendet', 'nav-poll-beendet'],
+  const groups: [Category['status'], string, string][] = [
+    ['open', 'Offen', 'nav-sammlung-offen'],
+    ['draft', 'Entwürfe', 'nav-sammlung-entwuerfe'],
+    ['closed', 'Beendet', 'nav-sammlung-beendet'],
   ];
+  const ballots = (categories.data ?? []).filter((c) => !c.repeatable);
   return (
     <>
-      <NavGroup id="nav-abstimmungen" label="Abstimmungen">
-        {polls.isPending ? (
+      <NavGroup id="nav-sammlungen" label="Sammlungen">
+        {categories.isPending ? (
           <p className={quiet}>Einen Moment …</p>
-        ) : polls.error ? (
-          <p className={quiet}>Abstimmungen nicht erreichbar.</p>
-        ) : polls.data?.length === 0 ? (
-          <p className={quiet}>Noch keine Abstimmung.</p>
+        ) : categories.error ? (
+          <p className={quiet}>Sammlungen nicht erreichbar.</p>
+        ) : ballots.length === 0 ? (
+          <p className={quiet}>Noch keine Wahl angelegt.</p>
         ) : (
           groups.map(([status, label, id]) => {
-            const items = (polls.data ?? []).filter((p) => p.status === status).sort(newestOpened);
+            const items = ballots.filter((c) => c.status === status).sort(newestOpened);
             return (
               items.length > 0 && (
                 <div key={status} role="group" aria-labelledby={id} className="mt-1 flex flex-col gap-1">
@@ -630,13 +637,13 @@ function EditorNav() {
                     {status === 'open' && <span aria-hidden="true" className="size-1.5 rounded-full bg-accent" />}
                     {label}
                   </p>
-                  {items.map((p) => (
+                  {items.map((c) => (
                     <NavRow
-                      key={p.id}
-                      to={`/abstimmungen/${p.id}`}
-                      icon={pollKindIcon[p.kind]}
-                      title={p.title}
-                      end={plural(p.ballot_count ?? 0, 'Stimme', 'Stimmen')}
+                      key={c.id}
+                      to={`/sammlungen/${c.id}`}
+                      icon={kindIcon[c.kind]}
+                      title={c.name}
+                      end={plural(c.ballot_count ?? 0, 'Stimme', 'Stimmen')}
                     />
                   ))}
                 </div>
@@ -644,28 +651,31 @@ function EditorNav() {
             );
           })
         )}
-        <NavItem to="/abstimmungen?neu" icon={Plus}>
-          Neue Abstimmung
+        <NavItem to="/sammlungen?neu" icon={Plus}>
+          Neue Sammlung
+        </NavItem>
+        <NavItem to="/sammlungen" icon={Library}>
+          Alle Sammlungen
         </NavItem>
       </NavGroup>
-      <NavGroup id="nav-rubriken" label="Rubriken">
+      <NavGroup id="nav-fortlaufend" label="Fortlaufend">
         {categories.isPending ? (
           <p className={quiet}>Einen Moment …</p>
-        ) : categories.error ? (
-          <p className={quiet}>Rubriken nicht erreichbar.</p>
-        ) : (
-          categories.data?.map((c) => {
-            const mine = (submissions.data ?? []).filter((s) => s.category_id === c.id);
-            return (
-              <NavRow
-                key={c.id}
-                to={`/redaktion?rubrik=${c.id}`}
-                icon={categoryKindIcon[c.kind]}
-                title={c.name}
-                sub={`${plural(mine.length, 'Beitrag', 'Beiträge')}, ${mine.filter((s) => s.status === 'pending').length} offen`}
-              />
-            );
-          })
+        ) : categories.error ? null : (
+          categories.data
+            ?.filter((c) => c.repeatable)
+            .map((c) => {
+              const mine = (submissions.data ?? []).filter((s) => s.category_id === c.id);
+              return (
+                <NavRow
+                  key={c.id}
+                  to={`/sammlungen/${c.id}`}
+                  icon={kindIcon[c.kind]}
+                  title={c.name}
+                  sub={`${plural(mine.length, 'Beitrag', 'Beiträge')}, ${mine.filter((s) => s.status === 'pending').length} offen`}
+                />
+              );
+            })
         )}
         <NavItem to="/redaktion" icon={ClipboardList}>
           Alle Beiträge
@@ -697,19 +707,19 @@ function Overview() {
 
 function StudentHome() {
   const { user } = useSession();
-  const polls = useData<Poll[]>('/polls');
   const categories = useData<Category[]>('/categories');
   const submissions = useData<Submission[]>('/submissions');
   const first = user.name.split(' ')[0];
-  const todo = (polls.data ?? []).filter((p) => p.status === 'open' && p.my_option_id === null).sort(newestOpened);
-  const done = (polls.data ?? [])
-    .filter((p) => p.status === 'closed' || (p.status === 'open' && p.my_option_id !== null))
+  const ballots = (categories.data ?? []).filter((c) => !c.repeatable);
+  const todo = ballots.filter((c) => c.status === 'open' && c.my_option_id === null).sort(newestOpened);
+  const done = ballots
+    .filter((c) => c.status === 'closed' || (c.status === 'open' && c.my_option_id !== null))
     .sort(newestOpened);
   const own = (submissions.data ?? []).filter((s) => s.author_id === user.id);
-  const title = polls.data
+  const title = categories.data
     ? todo.length === 0
       ? `Hey ${first}. Gerade ist alles erledigt.`
-      : `Hey ${first}. ${todo.length === 1 ? '1 Abstimmung wartet' : `${todo.length} Abstimmungen warten`} auf dich.`
+      : `Hey ${first}. ${todo.length === 1 ? '1 Sammlung wartet' : `${todo.length} Sammlungen warten`} auf deine Stimme.`
     : `Hey ${first}.`;
   return (
     <>
@@ -724,34 +734,33 @@ function StudentHome() {
           Jetzt dran
         </h2>
         <div className="mt-4">
-          {polls.isPending ? (
+          {categories.isPending ? (
             <Loading />
-          ) : polls.error ? (
-            <Failure error={polls.error} retry={() => polls.refetch()} />
+          ) : categories.error ? (
+            <Failure error={categories.error} retry={() => categories.refetch()} />
           ) : todo.length === 0 ? (
-            <Empty>Gerade ist nichts offen. Sobald die Redaktion eine Abstimmung öffnet, steht sie hier.</Empty>
+            <Empty>Gerade ist nichts offen. Sobald die Redaktion eine Sammlung öffnet, steht sie hier.</Empty>
           ) : (
             <ul className="grid gap-4 md:grid-cols-2">
               {todo.map((p, i) => (
                 <li key={p.id} className="flex min-w-0 flex-col rounded-ui bg-white p-5">
-                  <h3 className="text-xl font-extrabold leading-snug">{p.title}</h3>
+                  <h3 className="text-xl font-extrabold leading-snug">{p.name}</h3>
                   {p.description && <p className="mt-2 text-[15px] text-muted">{p.description}</p>}
                   <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-5">
                     <span className="flex items-center gap-1.5 text-[13px] text-muted">
-                      <KindIcon icon={pollKindIcon[p.kind]} />
-                      {[kindLabel(p.kind), plural(p.options.length, 'Option', 'Optionen'), since(p.opened_at)]
+                      <KindIcon icon={kindIcon[p.kind]} />
+                      {[kindLabel[p.kind], plural(p.options.length, 'Option', 'Optionen'), since(p.opened_at)]
                         .filter(Boolean)
                         .join(', ')}
                     </span>
-                    <Link to={`/abstimmungen/${p.id}`} className={i === 0 ? btn.primary : btn.secondary}>
-                      Abstimmen<span className="sr-only"> bei {p.title}</span>
+                    <Link to={`/sammlungen/${p.id}`} className={i === 0 ? btn.primary : btn.secondary}>
+                      Abstimmen<span className="sr-only"> bei {p.name}</span>
                     </Link>
                   </div>
                   <DevDebug
-                    label="Abstimmung"
+                    label="Sammlung"
                     data={{
                       id: p.id,
-                      category: p.category_id,
                       status: p.status,
                       kind: p.kind,
                       version: p.version,
@@ -767,9 +776,9 @@ function StudentHome() {
         </div>
       </section>
 
-      <section aria-labelledby="home-jederzeit" className="mt-10">
-        <h2 id="home-jederzeit" className={heading}>
-          Jederzeit
+      <section aria-labelledby="home-fortlaufend" className="mt-10">
+        <h2 id="home-fortlaufend" className={heading}>
+          Fortlaufend
         </h2>
         <div className="mt-4">
           {categories.isPending ? (
@@ -778,36 +787,38 @@ function StudentHome() {
             <Failure error={categories.error} retry={() => categories.refetch()} />
           ) : (
             <ul className="grid gap-4 md:grid-cols-2">
-              {categories.data?.map((c) => {
-                const n = own.filter((s) => s.category_id === c.id).length;
-                return (
-                  <li key={c.id} className="min-w-0">
-                    <div className="flex h-full flex-col">
-                      <Link
-                        to={`/beitraege/neu?kategorie=${c.id}`}
-                        className="flex h-full flex-col rounded-ui bg-white p-5 transition-transform hover:-translate-y-1 hover:bg-pop/40 active:scale-[.99]"
-                      >
-                        <span className="flex items-start justify-between gap-3">
-                          <span className="flex min-w-0 items-center gap-2.5">
-                            <KindIcon icon={categoryKindIcon[c.kind]} className="size-5 text-muted" />
-                            <strong className="text-xl font-extrabold leading-snug">{c.name}</strong>
+              {categories.data
+                ?.filter((c) => c.repeatable)
+                .map((c) => {
+                  const n = own.filter((s) => s.category_id === c.id).length;
+                  return (
+                    <li key={c.id} className="min-w-0">
+                      <div className="flex h-full flex-col">
+                        <Link
+                          to={`/sammlungen/${c.id}`}
+                          className="flex h-full flex-col rounded-ui bg-white p-5 transition-transform hover:-translate-y-1 hover:bg-pop/40 active:scale-[.99]"
+                        >
+                          <span className="flex items-start justify-between gap-3">
+                            <span className="flex min-w-0 items-center gap-2.5">
+                              <KindIcon icon={kindIcon[c.kind]} className="size-5 text-muted" />
+                              <strong className="text-xl font-extrabold leading-snug">{c.name}</strong>
+                            </span>
+                            <Arrow />
                           </span>
-                          <Arrow />
-                        </span>
-                        {c.description && <span className="mt-2 text-[15px] text-muted">{c.description}</span>}
-                        <span className="mt-auto pt-4 text-[13px] text-muted">
-                          {n ? `${n} eingereicht` : 'Noch nichts eingereicht'}
-                        </span>
-                      </Link>
-                      {import.meta.env.DEV && (
-                        <div className="px-5">
-                          <DevDebug label="Rubrik" data={{ id: c.id, kind: c.kind, ownSubmissions: n }} />
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
+                          {c.description && <span className="mt-2 text-[15px] text-muted">{c.description}</span>}
+                          <span className="mt-auto pt-4 text-[13px] text-muted">
+                            {n ? `${n} eingereicht` : 'Noch nichts eingereicht'}
+                          </span>
+                        </Link>
+                        {import.meta.env.DEV && (
+                          <div className="px-5">
+                            <DevDebug label="Sammlung" data={{ id: c.id, kind: c.kind, ownSubmissions: n }} />
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
             </ul>
           )}
         </div>
@@ -832,7 +843,7 @@ function StudentHome() {
           ) : own.length ? (
             <SubmissionList items={own.slice(0, 5)} categories={categories.data ?? []} />
           ) : (
-            <Empty>Die erste Geschichte wartet auf dich. Such dir oben eine Rubrik aus.</Empty>
+            <Empty>Die erste Geschichte wartet auf dich. Such dir oben eine Sammlung aus.</Empty>
           )}
         </div>
       </section>
@@ -840,16 +851,16 @@ function StudentHome() {
       {done.length > 0 && (
         <details className="mt-10 rounded-ui bg-white">
           <summary className="cursor-pointer px-5 py-4 text-[15px] font-semibold">
-            Erledigte Abstimmungen ({done.length})
+            Erledigte Sammlungen ({done.length})
           </summary>
           <ul className="divide-y divide-line border-t border-line">
             {done.map((p) => (
               <li key={p.id}>
                 <Link
-                  to={`/abstimmungen/${p.id}`}
+                  to={`/sammlungen/${p.id}`}
                   className="flex items-center justify-between gap-4 px-5 py-3 text-[15px] hover:bg-pop/30"
                 >
-                  <span className="min-w-0">{p.title}</span>
+                  <span className="min-w-0">{p.name}</span>
                   <span className="flex-none text-[13px] text-muted">
                     {p.my_option_id ? '✓ abgestimmt' : 'beendet'}
                   </span>
@@ -919,11 +930,10 @@ const rows = 'mt-4 divide-y divide-line overflow-hidden rounded-ui bg-white';
 
 function AdminHome() {
   const users = useData<User[]>('/admin/users');
-  const polls = useData<Poll[]>('/polls');
   const categories = useData<Category[]>('/categories');
   const submissions = useData<Submission[]>('/submissions');
   const waiting = (users.data ?? []).filter((u) => !u.admitted).sort((a, b) => time(b.created_at) - time(a.created_at));
-  const latest = [...(polls.data ?? [])].sort(newestOpened).slice(0, 3);
+  const latest = [...(categories.data ?? [])].sort(newestOpened).slice(0, 4);
   const card = 'flex min-w-0 flex-col rounded-ui bg-white p-5 sm:p-6';
   const figure = 'block text-4xl font-extrabold tabular-nums leading-none tracking-tight';
   const state = (q: { isPending: boolean; error: Error | null; refetch: () => unknown }) =>
@@ -947,47 +957,58 @@ function AdminHome() {
       .toUpperCase();
   return (
     <>
-      <PageHead title="Redaktion">Zugänge, Abstimmungen und Rubriken im Überblick.</PageHead>
-      <section aria-labelledby="home-rubriken" className="mb-10">
+      <PageHead title="Redaktion">Zugänge und Sammlungen im Überblick.</PageHead>
+      <section aria-labelledby="home-sammlungen" className="mb-10">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h2 id="home-rubriken" className={heading}>
-            Rubriken
+          <h2 id="home-sammlungen" className={heading}>
+            Sammlungen
           </h2>
-          <span className="text-sm text-muted">Beiträge und Abstimmungen pro Rubrik</span>
+          <span className="text-sm text-muted">Eine Kachel pro Klasse</span>
         </div>
         {state(categories) ?? (
-          <ul className="mt-4 grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
-            {categories.data?.map((c) => {
-              const mine = (polls.data ?? []).filter((p) => p.category_id === c.id);
-              const n = (submissions.data ?? []).filter((s) => s.category_id === c.id).length;
+          <ul className="mt-4 grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">
+            {allKinds.map((kind) => {
+              const mine = (categories.data ?? []).filter((c) => c.kind === kind);
+              const ids = new Set(mine.map((c) => c.id));
+              const n = (submissions.data ?? []).filter((s) => ids.has(s.category_id)).length;
+              const repeatable = repeatableKinds.includes(kind);
               return (
-                <li key={c.id} className="min-w-0">
+                <li key={kind} className="min-w-0">
                   <Link
-                    to={`/redaktion?rubrik=${c.id}`}
+                    to={`/sammlungen?klasse=${kind}`}
                     className="flex h-full flex-col rounded-ui bg-white p-4 transition-transform hover:-translate-y-0.5 hover:bg-pop/40 active:scale-[.99] sm:p-5"
                   >
                     <span className="flex items-center gap-2">
-                      <KindIcon icon={categoryKindIcon[c.kind]} className="size-4 text-muted" />
-                      <strong className="min-w-0 truncate text-[15px] font-bold">{c.name}</strong>
+                      <KindIcon icon={kindIcon[kind]} className="size-4 text-muted" />
+                      <strong className="min-w-0 truncate text-[15px] font-bold">{kindLabel[kind]}</strong>
                     </span>
                     <span className="mt-5 flex items-baseline gap-2">
-                      <strong className={figure}>{submissions.isPending ? '–' : n}</strong>{' '}
-                      <span className="text-[13px] text-muted">{n === 1 ? 'Beitrag' : 'Beiträge'}</span>
+                      <strong className={figure}>{categories.isPending ? '–' : mine.length}</strong>{' '}
+                      <span className="text-[13px] text-muted">{mine.length === 1 ? 'Sammlung' : 'Sammlungen'}</span>
                     </span>
-                    <span className="mt-4 grid grid-cols-2 gap-2 text-[13px] text-muted">
-                      <span>
-                        <strong className="block text-lg font-extrabold tabular-nums leading-tight text-ink">
-                          {mine.filter((p) => p.status === 'open').length}
+                    {repeatable ? (
+                      <span className="mt-4 text-[13px] text-muted">
+                        <strong className="text-lg font-extrabold tabular-nums leading-tight text-ink">
+                          {submissions.isPending ? '–' : n}
                         </strong>{' '}
-                        offen
-                      </span>{' '}
-                      <span>
-                        <strong className="block text-lg font-extrabold tabular-nums leading-tight text-ink">
-                          {mine.filter((p) => p.status === 'closed').length}
-                        </strong>{' '}
-                        beendet
+                        {n === 1 ? 'Beitrag' : 'Beiträge'}
                       </span>
-                    </span>
+                    ) : (
+                      <span className="mt-4 grid grid-cols-2 gap-2 text-[13px] text-muted">
+                        <span>
+                          <strong className="block text-lg font-extrabold tabular-nums leading-tight text-ink">
+                            {mine.filter((c) => c.status === 'open').length}
+                          </strong>{' '}
+                          offen
+                        </span>{' '}
+                        <span>
+                          <strong className="block text-lg font-extrabold tabular-nums leading-tight text-ink">
+                            {mine.filter((c) => c.status === 'closed').length}
+                          </strong>{' '}
+                          beendet
+                        </span>
+                      </span>
+                    )}
                   </Link>
                 </li>
               );
@@ -1060,50 +1081,43 @@ function AdminHome() {
             </>
           )}
         </section>
-        <section aria-labelledby="home-abstimmungen" className={card}>
+        <section aria-labelledby="home-neueste" className={card}>
           <div className="flex items-baseline justify-between gap-4">
-            <h2 id="home-abstimmungen" className={`${heading} flex items-center gap-2`}>
+            <h2 id="home-neueste" className={`${heading} flex items-center gap-2`}>
               <Vote aria-hidden="true" className="size-[18px] shrink-0" />
-              Neueste Abstimmungen
+              Neueste Sammlungen
             </h2>
-            <Link to="/abstimmungen" className={btn.text}>
+            <Link to="/sammlungen" className={btn.text}>
               Alle <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
             </Link>
           </div>
-          {state(polls) ??
+          {state(categories) ??
             (latest.length === 0 ? (
               <div className="mt-4">
-                <Empty>Noch keine Abstimmung.</Empty>
+                <Empty>Noch keine Sammlung.</Empty>
               </div>
             ) : (
               <ul className="mt-3 divide-y divide-line">
-                {latest.map((p) => (
-                  <li key={p.id} className="min-w-0">
+                {latest.map((c) => (
+                  <li key={c.id} className="min-w-0">
                     <Link
-                      to={`/abstimmungen/${p.id}`}
+                      to={`/sammlungen/${c.id}`}
                       className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30"
                     >
-                      <KindIcon icon={pollKindIcon[p.kind]} className="size-4 text-muted" />
+                      <KindIcon icon={kindIcon[c.kind]} className="size-4 text-muted" />
                       <span className="min-w-0 flex-1">
-                        <strong className="block truncate text-[15px] font-semibold">{p.title}</strong>
+                        <strong className="block truncate text-[15px] font-semibold">{c.name}</strong>
                         <span className="block text-[13px] text-muted">
-                          {[kindLabel(p.kind), p.status === 'open' ? since(p.opened_at) : '']
+                          {[kindLabel[c.kind], c.status === 'open' && !c.repeatable ? since(c.opened_at) : '']
                             .filter(Boolean)
                             .join(', ')}
                         </span>
                       </span>
-                      <Badge status={p.status} />
+                      {!c.repeatable && <Badge status={c.status} />}
                     </Link>
                     <DevDebug
-                      label="Abstimmung"
-                      data={{
-                        id: p.id,
-                        category: p.category_id,
-                        status: p.status,
-                        kind: p.kind,
-                        version: p.version,
-                        options: p.options.length,
-                      }}
+                      label="Sammlung"
+                      data={{ id: c.id, status: c.status, kind: c.kind, version: c.version, options: c.options.length }}
                     />
                   </li>
                 ))}
@@ -1116,50 +1130,50 @@ function AdminHome() {
 }
 
 function EditorHome() {
-  const polls = useData<Poll[]>('/polls');
   const categories = useData<Category[]>('/categories');
   const submissions = useData<Submission[]>('/submissions');
   const pending = (submissions.data ?? []).filter((s) => s.status === 'pending').length;
-  const open = (polls.data ?? []).filter((p) => p.status === 'open').length;
+  const open = (categories.data ?? []).filter((c) => !c.repeatable && c.status === 'open').length;
   const fact =
-    !polls.data || !submissions.data
+    !categories.data || !submissions.data
       ? ''
-      : `${pending === 0 ? 'Keine Beiträge warten auf Prüfung' : pending === 1 ? '1 Beitrag wartet auf Prüfung' : `${pending} Beiträge warten auf Prüfung`} · ${open === 0 ? 'keine Abstimmung offen' : plural(open, 'Abstimmung', 'Abstimmungen') + ' offen'}`;
-  const sorted = [...(polls.data ?? [])].sort(
-    (a, b) => statusOrder[a.status] - statusOrder[b.status] || newestOpened(a, b),
-  );
+      : `${pending === 0 ? 'Keine Beiträge warten auf Prüfung' : pending === 1 ? '1 Beitrag wartet auf Prüfung' : `${pending} Beiträge warten auf Prüfung`} · ${open === 0 ? 'keine Wahl offen' : plural(open, 'Wahl', 'Wahlen') + ' offen'}`;
+  const ballots = (categories.data ?? [])
+    .filter((c) => !c.repeatable)
+    .sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || newestOpened(a, b));
+  const fortlaufend = (categories.data ?? []).filter((c) => c.repeatable);
   return (
     <>
       <PageHead title="Redaktion">{fact || 'Einen Moment …'}</PageHead>
-      <section aria-labelledby="home-abstimmungen">
-        <h2 id="home-abstimmungen" className={heading}>
-          Abstimmungen
+      <section aria-labelledby="home-sammlungen">
+        <h2 id="home-sammlungen" className={heading}>
+          Sammlungen
         </h2>
-        {polls.isPending ? (
+        {categories.isPending ? (
           <div className="mt-4">
             <Loading />
           </div>
-        ) : polls.error ? (
+        ) : categories.error ? (
           <div className="mt-4">
-            <Failure error={polls.error} retry={() => polls.refetch()} />
+            <Failure error={categories.error} retry={() => categories.refetch()} />
           </div>
-        ) : sorted.length === 0 ? (
+        ) : ballots.length === 0 ? (
           <div className="mt-4">
             <Empty>
-              Noch keine Abstimmung. <Link to="/abstimmungen?neu">Neue Abstimmung anlegen →</Link>
+              Noch keine Wahl. <Link to="/sammlungen?neu">Neue Sammlung anlegen →</Link>
             </Empty>
           </div>
         ) : (
           <ul className={rows}>
-            {sorted.map((p) => (
+            {ballots.map((p) => (
               <ThickRow
                 key={p.id}
-                to={`/abstimmungen/${p.id}`}
-                icon={pollKindIcon[p.kind]}
-                title={p.title}
+                to={`/sammlungen/${p.id}`}
+                icon={kindIcon[p.kind]}
+                title={p.name}
                 badge={<Badge status={p.status} />}
                 meta={[
-                  kindLabel(p.kind),
+                  kindLabel[p.kind],
                   plural(p.options.length, 'Option', 'Optionen'),
                   p.status === 'open' ? since(p.opened_at) : '',
                 ]
@@ -1168,16 +1182,14 @@ function EditorHome() {
                 count={p.ballot_count ?? 0}
                 unit={['Stimme', 'Stimmen']}
                 debug={{
-                  label: 'Abstimmung',
+                  label: 'Sammlung',
                   data: {
                     id: p.id,
-                    category: p.category_id,
                     status: p.status,
                     kind: p.kind,
                     version: p.version,
                     options: p.options.length,
                     allowSelfVote: p.allow_self_vote,
-                    hasVoted: p.my_option_id !== null,
                   },
                 }}
               />
@@ -1185,9 +1197,9 @@ function EditorHome() {
           </ul>
         )}
       </section>
-      <section aria-labelledby="home-rubriken" className="mt-10">
-        <h2 id="home-rubriken" className={heading}>
-          Rubriken
+      <section aria-labelledby="home-fortlaufend" className="mt-10">
+        <h2 id="home-fortlaufend" className={heading}>
+          Fortlaufend
         </h2>
         {categories.isPending || submissions.isPending ? (
           <div className="mt-4">
@@ -1205,20 +1217,20 @@ function EditorHome() {
           </div>
         ) : (
           <ul className={rows}>
-            {categories.data?.map((c) => {
+            {fortlaufend.map((c) => {
               const mine = (submissions.data ?? []).filter((s) => s.category_id === c.id);
               return (
                 <ThickRow
                   key={c.id}
-                  to={`/redaktion?rubrik=${c.id}`}
-                  icon={categoryKindIcon[c.kind]}
+                  to={`/sammlungen/${c.id}`}
+                  icon={kindIcon[c.kind]}
                   title={c.name}
-                  meta={c.description || 'Rubrik'}
+                  meta={c.description || kindLabel[c.kind]}
                   count={mine.length}
                   unit={['Beitrag', 'Beiträge']}
                   extra={`${mine.filter((s) => s.status === 'pending').length} offen`}
                   debug={{
-                    label: 'Rubrik',
+                    label: 'Sammlung',
                     data: {
                       id: c.id,
                       kind: c.kind,

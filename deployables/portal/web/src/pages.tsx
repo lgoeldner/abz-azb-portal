@@ -1,4 +1,3 @@
-import { Plus } from 'lucide-react';
 import { useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -10,11 +9,8 @@ import {
   json,
   statusLabels,
   type Attachment,
-  type BallotAudit,
   type Category,
   type Correction,
-  type Poll,
-  type PollResult,
   type Revision,
   type Submission,
 } from './api';
@@ -23,7 +19,6 @@ import {
   Badge,
   Empty,
   Failure,
-  KindIcon,
   Loading,
   PageHead,
   SubmissionList,
@@ -33,7 +28,6 @@ import {
   label,
   notice,
   panel,
-  pollKindIcon,
   useAction,
   useData,
   useSession,
@@ -57,7 +51,8 @@ function photoValidationError(files: File[]) {
     return 'Bitte wähle nur JPEG-, PNG- oder WebP-Bilder aus.';
   return '';
 }
-const kindName = (kind: Poll['kind']) => (kind === 'person' ? 'Personenwahl' : 'Vorschläge & Ideen');
+// Submissions live only in repeatable Sammlungen.
+const submittable = (c: Category) => c.repeatable;
 export function Contributions() {
   const { user } = useSession();
   const categories = useData<Category[]>('/categories');
@@ -107,7 +102,7 @@ export function Contributions() {
         <SubmissionList items={own} categories={categories.data ?? []} />
       ) : (
         <Empty>
-          Noch keine Beiträge. <Link to="/">Wähle auf der Startseite eine Rubrik aus.</Link>
+          Noch keine Beiträge. <Link to="/">Wähle auf der Startseite eine Sammlung aus.</Link>
         </Empty>
       )}
     </>
@@ -121,7 +116,7 @@ export function NewContribution() {
   const key = useRef(crypto.randomUUID());
   const [saved, setSaved] = useState<Submission | null>(null);
   const [files, setFiles] = useState<File[]>([]);
-  const category = categories.data?.find((c) => c.id === params.get('kategorie'));
+  const category = categories.data?.find((c) => c.id === params.get('kategorie') && submittable(c));
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -170,7 +165,7 @@ export function NewContribution() {
       ) : categories.error ? (
         <Failure error={categories.error} retry={() => categories.refetch()} />
       ) : !categories.data?.length ? (
-        <Empty>Das Team richtet die Rubriken gerade ein.</Empty>
+        <Empty>Das Team richtet die Sammlungen gerade ein.</Empty>
       ) : !category ? (
         <Navigate to="/" replace />
       ) : (
@@ -386,14 +381,14 @@ export function ContributionDetail() {
                 />
               </label>
               <label className={label}>
-                Rubrik
+                Sammlung
                 <select
                   className={field}
                   value={draft.category_id}
                   onChange={(e) => setDraft({ ...draft, category_id: e.target.value })}
                 >
                   {categories.data
-                    ?.filter((c) => own || canEdit(user, c.id))
+                    ?.filter((c) => submittable(c) && (own || canEdit(user, c.id)))
                     .map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
@@ -590,7 +585,7 @@ export function ContributionDetail() {
               ))}
             {editorial(user) && !canEdit(user, s.category_id) && (
               <p className="text-sm text-muted">
-                Leserechte · Zum Bearbeiten brauchst du eine Zuweisung zu dieser Rubrik.
+                Leserechte · Zum Bearbeiten brauchst du eine Zuweisung zu dieser Sammlung.
               </p>
             )}
           </section>
@@ -662,8 +657,9 @@ function AttachmentCard({
 export function Editorial() {
   const categories = useData<Category[]>('/categories');
   const [params, setParams] = useSearchParams();
-  const category = params.get('rubrik') ?? '';
-  const setCategory = (id: string) => setParams(id ? { rubrik: id } : {}, { replace: true });
+  const category = params.get('sammlung') ?? '';
+  const setCategory = (id: string) => setParams(id ? { sammlung: id } : {}, { replace: true });
+  const sammlungen = categories.data?.filter(submittable) ?? [];
   const [status, setStatus] = useState('pending');
   const [search, setSearch] = useState('');
   const { user } = useSession();
@@ -677,14 +673,14 @@ export function Editorial() {
   return (
     <>
       <PageHead title="Aus Geschichten wird Zeitung.">
-        Alle Beiträge im Blick. Du bearbeitest die Rubriken, die dir zugewiesen sind.
+        Alle Beiträge im Blick. Du bearbeitest die Sammlungen, die dir zugewiesen sind.
       </PageHead>
       <div className="mb-6 flex flex-wrap items-end gap-3">
         <label className={`${label} min-w-0 w-full sm:w-56`}>
-          Rubrik
+          Sammlung
           <select className={field} value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="">Alle Rubriken</option>
-            {categories.data?.map((c) => (
+            <option value="">Alle Sammlungen</option>
+            {sammlungen.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
                 {canEdit(user, c.id) ? ' · zugewiesen' : ''}
@@ -725,17 +721,17 @@ export function Editorial() {
       )}
       <section className={`${panel} mt-10 flex flex-wrap items-end justify-between gap-6`}>
         <div className="min-w-0 max-w-md">
-          <h2 className={heading}>Eine Rubrik exportieren</h2>
+          <h2 className={heading}>Eine Sammlung exportieren</h2>
           <p className="mt-1 text-sm text-muted">
-            ZIP mit CSV, Originaldateien und Manifest. Abstimmungsdaten sind nicht enthalten.
+            ZIP mit CSV, Originaldateien und Manifest. Stimmdaten sind nicht enthalten.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <label className={`${label} min-w-0 w-full sm:w-56`}>
-            Rubrik
+            Sammlung
             <select className={field} value={category} onChange={(e) => setCategory(e.target.value)}>
-              <option value="">Rubrik auswählen</option>
-              {categories.data?.map((c) => (
+              <option value="">Sammlung auswählen</option>
+              {sammlungen.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
@@ -755,502 +751,11 @@ export function Editorial() {
             </a>
           ) : (
             <button className={btn.primary} disabled>
-              Rubrik auswählen
+              Sammlung auswählen
             </button>
           )}
         </div>
       </section>
-    </>
-  );
-}
-export function Polls() {
-  const { user } = useSession();
-  const [params, setParams] = useSearchParams();
-  const polls = useData<Poll[]>('/polls');
-  const creating = editorial(user) && params.has('neu');
-  const setCreating = (open: boolean) => setParams(open ? { neu: '' } : {}, { replace: true });
-  return (
-    <>
-      <PageHead
-        title="Der Jahrgang entscheidet."
-        action={
-          editorial(user) && (
-            <button className={creating ? btn.secondary : btn.primary} onClick={() => setCreating(!creating)}>
-              {creating ? (
-                'Formular schließen'
-              ) : (
-                <>
-                  Neue Abstimmung <Plus aria-hidden="true" className="size-4 shrink-0" />
-                </>
-              )}
-            </button>
-          )
-        }
-      >
-        Wer bleibt uns in Erinnerung? Welche Idee schafft es ins Heft? Stimme mit ab.
-      </PageHead>
-      <div className={`${notice} mb-8 space-y-1`}>
-        <strong className="block">Transparent abgestimmt.</strong>
-        <p>
-          Deine Stimme wird deinem Namen zugeordnet. Die Administration kann Stimmen und Änderungen nachvollziehen. Die
-          Redaktion sieht nur Gesamtergebnisse. Als Schüler:in siehst du keine Ergebnisse. Du kannst deine Stimme
-          ändern, solange die Abstimmung offen ist.
-        </p>
-      </div>
-      {creating && <PollForm onSaved={() => setCreating(false)} />}
-      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className={heading}>Unsere Abstimmungen</h2>
-        <span className="text-sm text-muted">Eine Auswahl pro Person</span>
-      </div>
-      {polls.isPending ? (
-        <Loading />
-      ) : polls.error ? (
-        <Failure error={polls.error} retry={() => polls.refetch()} />
-      ) : polls.data?.length ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {polls.data.map((p) => (
-            <div className={import.meta.env.DEV ? 'flex h-full min-w-0 flex-col' : 'contents'} key={p.id}>
-              <Link
-                className="flex min-w-0 flex-1 flex-col gap-3 rounded-ui bg-white p-5 transition-colors hover:border-muted"
-                to={`/abstimmungen/${p.id}`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <h2 className={`${heading} min-w-0`}>{p.title}</h2>
-                  <Badge status={p.status} />
-                </div>
-                <p className="text-sm text-muted">{p.description}</p>
-                <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line pt-3 text-sm text-muted">
-                  <span className="flex min-w-0 flex-1 items-start gap-1.5">
-                    <KindIcon icon={pollKindIcon[p.kind]} className="mt-[3px] size-4" />
-                    <span>
-                      {kindName(p.kind)},{' '}
-                      {p.my_option_id ? '✓ Deine Stimme ist gespeichert' : `${p.options.length} Optionen`}
-                    </span>
-                  </span>
-                  <span className="inline-flex flex-none items-center gap-1 whitespace-nowrap font-semibold text-ink">
-                    {p.status === 'open' ? 'Abstimmen' : 'Ansehen'} <Arrow />
-                  </span>
-                </div>
-              </Link>
-              <DevDebug
-                label="Abstimmung"
-                data={{
-                  id: p.id,
-                  category: p.category_id,
-                  status: p.status,
-                  kind: p.kind,
-                  version: p.version,
-                  options: p.options.length,
-                  allowSelfVote: p.allow_self_vote,
-                  hasVoted: p.my_option_id !== null,
-                }}
-              />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <Empty>Hier geht’s bald los. Aktuell gibt es keine Abstimmungen.</Empty>
-      )}
-    </>
-  );
-}
-function PollForm({ poll, onSaved }: { poll?: Poll; onSaved: () => void }) {
-  const { user } = useSession();
-  const categories = useData<Category[]>('/categories');
-  const roster = useData<{ id: string; name: string }[]>('/roster');
-  const action = useAction();
-  const [kind, setKind] = useState<Poll['kind']>(poll?.kind ?? 'proposal');
-  const [selected, setSelected] = useState<string[]>(
-    poll?.options.flatMap((o) => (o.user_id ? [o.user_id] : [])) ?? [],
-  );
-  const [options, setOptions] = useState(poll?.options.map((o) => o.label).join('\n') ?? '');
-  function save(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const data = new FormData(e.currentTarget);
-    const choices =
-      kind === 'person'
-        ? selected.map((id) => ({
-            label: roster.data?.find((u) => u.id === id)?.name ?? '',
-            user_id: id,
-          }))
-        : options
-            .split('\n')
-            .map((s) => s.trim())
-            .filter(Boolean)
-            .map((text) => ({ label: text }));
-    action.run(async () => {
-      if (choices.length < 2) throw new Error('Bitte mindestens zwei Optionen auswählen.');
-      await api(
-        poll ? `/polls/${poll.id}` : '/polls',
-        json(poll ? 'PATCH' : 'POST', {
-          ...(poll ? { version: poll.version } : {}),
-          category_id: data.get('category_id'),
-          title: data.get('title'),
-          description: data.get('description'),
-          kind,
-          allow_self_vote: data.get('allow_self_vote') === 'on',
-          options: choices,
-        }),
-      );
-      onSaved();
-    }, 'Abstimmung gespeichert.');
-  }
-  return (
-    <form className={`${panel} mb-10 space-y-5`} onSubmit={save}>
-      <h2 className={heading}>{poll ? 'Entwurf bearbeiten' : 'Eine neue Abstimmung'}</h2>
-      <label className={label}>
-        Rubrik
-        <select className={field} name="category_id" required defaultValue={poll?.category_id}>
-          <option value="">Bitte auswählen</option>
-          {categories.data
-            ?.filter((c) => canEdit(user, c.id))
-            .map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-        </select>
-      </label>
-      <label className={label}>
-        Titel
-        <input className={field} name="title" defaultValue={poll?.title} maxLength={200} required />
-      </label>
-      <label className={label}>
-        Beschreibung
-        <textarea className={field} name="description" defaultValue={poll?.description} rows={3} />
-      </label>
-      <label className={label}>
-        Art
-        <select className={field} value={kind} onChange={(e) => setKind(e.target.value as Poll['kind'])}>
-          <option value="proposal">Vorschläge & Ideen</option>
-          <option value="person">Personenwahl</option>
-        </select>
-      </label>
-      {kind === 'proposal' ? (
-        <label className={label}>
-          Antwortoptionen <small className="font-normal text-muted">eine Option pro Zeile</small>
-          <textarea
-            className={field}
-            rows={5}
-            value={options}
-            onChange={(e) => setOptions(e.target.value)}
-            required
-            placeholder={'Option A\nOption B'}
-          />
-        </label>
-      ) : (
-        <fieldset className="min-w-0 space-y-3">
-          <legend className={label}>Kandidat:innen · mindestens zwei</legend>
-          {roster.isPending ? (
-            <Loading />
-          ) : roster.error ? (
-            <Failure error={roster.error} />
-          ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {roster.data?.map((u) => (
-                <label className="flex items-center gap-2.5 text-[15px]" key={u.id}>
-                  <input
-                    className="size-4 shrink-0 accent-[var(--color-accent)]"
-                    type="checkbox"
-                    checked={selected.includes(u.id)}
-                    onChange={(e) =>
-                      setSelected(e.target.checked ? [...selected, u.id] : selected.filter((id) => id !== u.id))
-                    }
-                  />
-                  {u.name}
-                </label>
-              ))}
-            </div>
-          )}
-        </fieldset>
-      )}
-      <label className="flex items-center gap-2.5 text-[15px]">
-        <input
-          className="size-4 shrink-0 accent-[var(--color-accent)]"
-          type="checkbox"
-          name="allow_self_vote"
-          defaultChecked={poll?.allow_self_vote}
-        />
-        Stimme für die eigene Person erlauben
-      </label>
-      <p className="text-sm text-muted">Format: Eine Auswahl. Nach dem Öffnen ist die Definition gesperrt.</p>
-      {action.feedback}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <button type="button" className={btn.secondary} onClick={onSaved}>
-          Abbrechen
-        </button>
-        <button className={btn.primary} disabled={action.busy}>
-          Entwurf speichern
-        </button>
-      </div>
-    </form>
-  );
-}
-export function PollDetail() {
-  const { id } = useParams();
-  const { user } = useSession();
-  const polls = useData<Poll[]>('/polls');
-  const poll = polls.data?.find((p) => p.id === id);
-  const action = useAction();
-  const savedChoice = poll?.my_option_id ?? null;
-  const [choice, setChoice] = useState<string | null>(savedChoice);
-  const [syncedChoice, setSyncedChoice] = useState(savedChoice);
-  const [editing, setEditing] = useState(false);
-  const results = useData<PollResult[]>(`/polls/${id}/results`, !!poll && editorial(user));
-  const [auditOpen, setAuditOpen] = useState(false);
-  const audit = useData<BallotAudit[]>(`/polls/${id}/audit`, auditOpen && user.role === 'admin');
-  if (syncedChoice !== savedChoice) {
-    setSyncedChoice(savedChoice);
-    setChoice(savedChoice);
-  } // reset the selection when the saved ballot changes
-  if (polls.isPending) return <Loading />;
-  if (polls.error) return <Failure error={polls.error} retry={() => polls.refetch()} />;
-  if (!poll) return <NotFound />;
-  const writable = canEdit(user, poll.category_id);
-  const eligible = user.admitted && user.cohort_member;
-  const total = results.data?.reduce((n, r) => n + r.count, 0) ?? 0;
-  return (
-    <>
-      <Link
-        className="mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink"
-        to={editorial(user) ? '/abstimmungen' : '/'}
-      >
-        {editorial(user) ? '← Abstimmungen' : '← Zurück'}
-      </Link>
-      <PageHead title={poll.title} action={<Badge status={poll.status} />}>
-        <span className="inline-flex items-center gap-1.5 align-[-3px]">
-          <KindIcon icon={pollKindIcon[poll.kind]} />
-          {kindName(poll.kind)}
-        </span>
-        {poll.description && `. ${poll.description}`}
-      </PageHead>
-      <DevDebug
-        label="Abstimmung"
-        data={{
-          id: poll.id,
-          category: poll.category_id,
-          status: poll.status,
-          kind: poll.kind,
-          version: poll.version,
-          options: poll.options.length,
-          allowSelfVote: poll.allow_self_vote,
-          hasVoted: poll.my_option_id !== null,
-        }}
-      />
-      {action.feedback}
-      {editing ? (
-        <PollForm poll={poll} onSaved={() => setEditing(false)} />
-      ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start">
-          <section className={`${panel} min-w-0 space-y-5`}>
-            <h2 className={heading}>
-              {poll.status === 'open'
-                ? 'Wem gibst du deine Stimme?'
-                : poll.status === 'closed'
-                  ? 'Die Abstimmung ist beendet.'
-                  : 'Diese Abstimmung ist ein Entwurf.'}
-            </h2>
-            <form
-              className="space-y-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                action.run(async () => {
-                  await api(`/polls/${id}/ballot`, json('PUT', { option_id: choice }));
-                }, 'Deine Stimme wurde gespeichert.');
-              }}
-            >
-              <fieldset className="min-w-0 space-y-2" disabled={poll.status !== 'open' || !eligible || action.busy}>
-                <legend className="sr-only">Eine Option auswählen</legend>
-                {poll.options.map((o) => {
-                  const self = o.user_id === user.id && !poll.allow_self_vote;
-                  return (
-                    <label
-                      className={`flex cursor-pointer items-center gap-3 rounded-ui border-2 bg-white px-4 py-3 text-[15px] ${
-                        choice === o.id ? 'border-ink' : 'border-line'
-                      }`}
-                      key={o.id}
-                    >
-                      <input
-                        className="size-4 shrink-0 accent-[var(--color-accent)]"
-                        type="radio"
-                        name="ballot"
-                        value={o.id}
-                        checked={choice === o.id}
-                        onChange={() => setChoice(o.id)}
-                        disabled={self}
-                      />
-                      <span className="min-w-0 flex-1 break-words">
-                        {o.label}
-                        {self && (
-                          <small className="block text-sm text-muted">
-                            Eine Stimme für dich selbst ist hier nicht erlaubt.
-                          </small>
-                        )}
-                      </span>
-                      {choice === o.id && <span className="font-semibold text-ink">✓</span>}
-                    </label>
-                  );
-                })}
-              </fieldset>
-              {poll.status === 'open' && (
-                <button
-                  className={btn.primary}
-                  disabled={
-                    action.busy ||
-                    !choice ||
-                    !eligible ||
-                    poll.options.some((o) => o.id === choice && o.user_id === user.id && !poll.allow_self_vote)
-                  }
-                >
-                  {poll.my_option_id ? 'Stimme ändern' : 'Stimme speichern'} <Arrow />
-                </button>
-              )}
-              {!eligible && <p className={notice}>Nur freigegebene Mitglieder des Jahrgangs dürfen abstimmen.</p>}
-              {poll.my_option_id && (
-                <p className="text-sm font-semibold text-ok">
-                  ✓ Gespeicherte Stimme: {poll.options.find((o) => o.id === poll.my_option_id)?.label}
-                </p>
-              )}
-            </form>
-            <p className="text-sm text-muted">
-              Namentliche Abstimmung: Die Administration kann deine Stimme und Änderungen zuordnen. Während der Öffnung
-              kannst du deine Auswahl ändern. Ergebnisse sind für Schüler:innen nicht sichtbar.
-            </p>
-          </section>
-          <aside className="min-w-0 space-y-6">
-            {writable && (
-              <section className={panel}>
-                <h3 className={heading}>Abstimmung verwalten</h3>
-                <div className="mt-4 flex flex-col gap-3">
-                  {poll.status === 'draft' && (
-                    <>
-                      <button className={btn.secondary} onClick={() => setEditing(true)}>
-                        Definition bearbeiten
-                      </button>
-                      <button
-                        className={btn.primary}
-                        disabled={action.busy}
-                        onClick={() =>
-                          action.run(
-                            () =>
-                              api(
-                                `/polls/${id}/status`,
-                                json('POST', {
-                                  version: poll.version,
-                                  status: 'open',
-                                }),
-                              ),
-                            'Abstimmung geöffnet.',
-                          )
-                        }
-                      >
-                        Abstimmung öffnen
-                      </button>
-                      <p className="text-sm text-muted">
-                        Die Definition kann nach dem Öffnen nicht mehr geändert werden.
-                      </p>
-                    </>
-                  )}
-                  {poll.status === 'open' && (
-                    <button
-                      className={btn.secondary}
-                      disabled={action.busy}
-                      onClick={() =>
-                        action.run(
-                          () =>
-                            api(
-                              `/polls/${id}/status`,
-                              json('POST', {
-                                version: poll.version,
-                                status: 'closed',
-                              }),
-                            ),
-                          'Abstimmung beendet.',
-                        )
-                      }
-                    >
-                      Abstimmung beenden
-                    </button>
-                  )}
-                </div>
-              </section>
-            )}
-            {editorial(user) && (
-              <section className={panel}>
-                <h3 className={heading}>Gesamtergebnisse</h3>
-                {results.isPending ? (
-                  <Loading />
-                ) : results.error ? (
-                  <Failure error={results.error} retry={() => results.refetch()} />
-                ) : (
-                  <>
-                    <p className="mt-1 text-sm text-muted">Nur für die Redaktion · {total} abgegebene Stimme(n)</p>
-                    <div className="mt-4 space-y-4">
-                      {results.data?.map((r) => (
-                        <div className="min-w-0" key={r.option_id}>
-                          <div className="flex items-baseline justify-between gap-3">
-                            <strong className="min-w-0 break-words">{r.label}</strong>
-                            <span className="tabular-nums">{r.count}</span>
-                          </div>
-                          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-pill">
-                            <span
-                              className="block h-full rounded-full bg-ink"
-                              style={{
-                                width: `${total ? (r.count / total) * 100 : 0}%`,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </section>
-            )}
-          </aside>
-        </div>
-      )}
-      {user.role === 'admin' && (
-        <section className={`${panel} mt-6 space-y-4`}>
-          <button className={btn.secondary} aria-expanded={auditOpen} onClick={() => setAuditOpen(!auditOpen)}>
-            {auditOpen ? 'Stimmprotokoll schließen' : 'Namentliches Stimmprotokoll öffnen'}
-          </button>
-          {auditOpen && (
-            <>
-              <p className="text-sm text-muted">
-                Vertraulich · Enthält die Zuordnung von Stimmen und deren Änderungen.
-              </p>
-              {audit.isPending ? (
-                <Loading />
-              ) : audit.error ? (
-                <Failure error={audit.error} />
-              ) : (
-                <div className="relative overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="text-[13px] text-muted">
-                        <th className="py-2 pr-4 font-normal">Name</th>
-                        <th className="py-2 pr-4 font-normal">Auswahl</th>
-                        <th className="py-2 text-right font-normal">Zeitpunkt</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {audit.data?.map((a, i) => (
-                        <tr className="border-t border-line" key={`${a.user_id}-${i}`}>
-                          <td className="py-3 pr-4 align-top">{a.user_name}</td>
-                          <td className="py-3 pr-4 align-top">{a.option_label}</td>
-                          <td className="py-3 text-right align-top tabular-nums">{date(a.created_at)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {!audit.data?.length && <p className="mt-3 text-sm text-muted">Noch keine Stimmen.</p>}
-                </div>
-              )}
-            </>
-          )}
-        </section>
-      )}
     </>
   );
 }
