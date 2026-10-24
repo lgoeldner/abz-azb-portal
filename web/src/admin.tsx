@@ -1,6 +1,6 @@
 import { BookHeart, Check, GraduationCap, Image, Lightbulb, MoreHorizontal, Pencil, PenLine, Plus, Quote, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { api, date, json, type AuditEvent, type Category, type SystemStatus, type User } from './api';
+import { api, ApiError, date, json, type AuditEvent, type Category, type SystemStatus, type User } from './api';
 import { Empty, Failure, Loading, PageHead, btn, field, heading, label, panel, roleName, useAction, useData } from './ui';
 import { DevDebug } from './DevDebug';
 
@@ -12,6 +12,12 @@ const chip = 'inline-flex items-center gap-1 whitespace-nowrap rounded px-2 py-0
 const chipAction = 'cursor-pointer ring-1 ring-transparent transition-shadow hover:ring-current focus-visible:ring-current disabled:opacity-60';
 const menuItem = 'flex w-full items-center justify-between gap-3 rounded px-3 py-2 text-left text-sm hover:bg-pill';
 const patchUser = (u: User, change: Partial<User>) => api(`/admin/users/${u.id}`, json('PATCH', { name: u.name, role: u.role, admitted: u.admitted, cohort_member: u.cohort_member, category_ids: u.category_ids, ...change }));
+// PATCH replaces every field, so build it from the current server record instead of the possibly stale list.
+const updateUser = async (u: User, change: Partial<User>) => {
+  const now = (await api<User[]>('/admin/users')).find(x => x.id === u.id);
+  if (!now) throw new ApiError(404, 'not_found', 'Diese Person gibt es nicht mehr.');
+  return patchUser(now, change);
+};
 
 // ---------- Personen ----------
 const filters: [string, string, (u: User) => boolean][] = [
@@ -39,14 +45,14 @@ function PersonRow({ u }: { u: User }) {
     <div className="flex items-center gap-3">
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1">
         <strong className="min-w-0 break-words text-[15px] font-semibold">{u.name}</strong>
-        {!u.cohort_member && <button type="button" disabled={action.busy} className={`${chip} bg-pill text-muted ${chipAction}`} aria-label={`Zum Jahrgangsmitglied machen: ${u.name}`} title="Zum Jahrgangsmitglied machen" onClick={() => action.run(() => patchUser(u, { cohort_member: true }), 'Zum Jahrgangsmitglied gemacht.')}>Gast</button>}
+        {!u.cohort_member && <button type="button" disabled={action.busy} className={`${chip} bg-pill text-muted ${chipAction}`} aria-label={`Zum Jahrgangsmitglied machen: ${u.name}`} title="Zum Jahrgangsmitglied machen" onClick={() => action.run(() => updateUser(u, { cohort_member: true }), 'Zum Jahrgangsmitglied gemacht.')}>Gast</button>}
         <span role="img" aria-label={roleName(u.role)} title={roleName(u.role)} className="text-muted"><RoleIcon aria-hidden="true" className="size-[18px]"/></span>
-        {u.admitted ? <span className={`${chip} bg-ok-tint text-ok`}>Freigegeben</span> : <button type="button" disabled={action.busy} className={`${chip} bg-wait-tint text-wait ${chipAction}`} aria-label={`Zugang freigeben: ${u.name}`} title="Zugang freigeben" onClick={() => action.run(() => patchUser(u, { admitted: true }), 'Zugang freigegeben.')}>Wartet</button>}
+        {u.admitted ? <span className={`${chip} bg-ok-tint text-ok`}>Freigegeben</span> : <button type="button" disabled={action.busy} className={`${chip} bg-wait-tint text-wait ${chipAction}`} aria-label={`Zugang freigeben: ${u.name}`} title="Zugang freigeben" onClick={() => action.run(() => updateUser(u, { admitted: true }), 'Zugang freigegeben.')}>Wartet</button>}
       </div>
       <RowMenu u={u} onRole={role => setConfirm({ kind: 'role', role })} onDelete={() => setConfirm({ kind: 'delete' })}/>
     </div>
     {!confirm && action.feedback && <div className="mt-2">{action.feedback}</div>}
-    {confirm?.kind === 'role' && <Confirm title={`${u.name} wird zu ${roleName(confirm.role)}?`} busy={action.busy} onCancel={close} onConfirm={() => action.run(async () => { await patchUser(u, { role: confirm.role }); close(); }, 'Rolle geändert.')} error={action.feedback}>Die Rolle ändert sich sofort. Die Administration kann Rollen jederzeit wieder ändern.</Confirm>}
+    {confirm?.kind === 'role' && <Confirm title={`${u.name} wird zu ${roleName(confirm.role)}?`} busy={action.busy} onCancel={close} onConfirm={() => action.run(async () => { await updateUser(u, { role: confirm.role }); close(); }, 'Rolle geändert.')} error={action.feedback}>Die Rolle ändert sich sofort. Die Administration kann Rollen jederzeit wieder ändern.</Confirm>}
     {confirm?.kind === 'delete' && <Confirm danger title={`${u.name} löschen?`} confirmLabel="Löschen" busy={action.busy} onCancel={close} onConfirm={() => action.run(async () => { await api(`/admin/users/${u.id}`, json('DELETE')); close(); }, 'Person gelöscht.')} error={action.feedback}>Das Konto wird dauerhaft entfernt. Das kann nicht rückgängig gemacht werden.</Confirm>}
   </li>;
 }

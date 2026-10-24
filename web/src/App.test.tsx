@@ -176,6 +176,18 @@ describe('verwaltung', () => {
     expect(calls[0]).toEqual({ url: '/admin/users/guest-1', method: 'PATCH', body: { name: 'Gast Gerda', role: 'student', admitted: true, cohort_member: true, category_ids: [] } });
   });
 
+  it('keeps grants another admin added after the list loaded when changing a role', async () => {
+    let server = everyone;
+    const calls = mount('/verwaltung/personen', admin, undefined, () => server);
+    await openMenu('Sam Redaktion');
+    server = everyone.map(u => u.id === editor.id ? { ...editor, category_ids: ['memory', 'quotes'] } : u);
+    fireEvent.click(screen.getByRole('menuitem', { name: /Rolle ändern/ }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Administration' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Bestätigen' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0].body).toEqual({ name: 'Sam Redaktion', role: 'admin', admitted: true, cohort_member: true, category_ids: ['memory', 'quotes'] });
+  });
+
   it('admits a waiting person with one click', async () => {
     const calls = mount('/verwaltung/personen');
     fireEvent.click(await screen.findByRole('button', { name: 'Zugang freigeben: Warte Willi' }));
