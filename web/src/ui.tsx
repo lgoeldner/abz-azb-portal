@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError, canEdit, date, editorial, statusLabels, type Category, type Me, type Submission, type User } from './api';
 import { DevDebug } from './DevDebug';
+import { toast } from 'sonner';
 
 // Shared class strings. Pages compose these with layout utilities; no component CSS exists.
 export const btn = {
@@ -22,9 +23,9 @@ export const Session = createContext<Me>(null!);
 export const useSession = () => useContext(Session);
 export function useData<T>(path: string, enabled = true) { return useQuery({ queryKey: [path], queryFn: () => api<T>(path), enabled }); }
 export function useAction() {
-  const client = useQueryClient(); const [busy, setBusy] = useState(false); const [error, setError] = useState<Error|null>(null); const [success, setSuccess] = useState('');
-  async function run(fn: () => Promise<unknown>, message = '') { setBusy(true); setError(null); setSuccess(''); try { await fn(); await client.invalidateQueries(); setSuccess(message); } catch (e) { setError(e as Error); } finally { setBusy(false); } }
-  return { busy, error, success, run, feedback: <>{error && <Failure error={error}/>} {success && <p className={`${notice} text-ok`} role="status">{success}</p>}</> };
+  const client = useQueryClient(); const [busy, setBusy] = useState(false); const [error, setError] = useState<Error|null>(null);
+  async function run(fn: () => Promise<unknown>, message = '') { setBusy(true); setError(null); try { await fn(); await client.invalidateQueries(); if (message) toast.success(message); } catch (e) { setError(e as Error); } finally { setBusy(false); } }
+  return { busy, error, run, feedback: error && <Failure error={error}/> };
 }
 
 // View mode is a per-browser preference; only editors can leave the student view.

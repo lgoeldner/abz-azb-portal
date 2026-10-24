@@ -42,7 +42,7 @@ test('student casts a ballot in the seeded open poll', async ({ page }) => {
   await expect(option, 'the seeded poll has an eligible option').toBeVisible();
   await option.check();
   await page.getByRole('button', { name: /Stimme speichern|Stimme ändern/ }).click();
-  await expect(page.getByRole('status')).toContainText('Deine Stimme wurde gespeichert.');
+  await expect(page.getByText('Deine Stimme wurde gespeichert.')).toBeVisible();
 });
 
 test('editor reviews and accepts an assigned contribution, exports it, and sees poll results', async ({ page }) => {
