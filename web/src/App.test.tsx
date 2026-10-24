@@ -280,10 +280,12 @@ describe('admin home', () => {
     expect(within(people$).getByRole('link', { name: /Zugänge verwalten/ })).toHaveAttribute('href', '/admin');
 
     const pollCard = screen.getByRole('region', { name: 'Neueste Abstimmungen' });
-    await waitFor(() => expect(within(pollCard).getByText('Erinnerungen')).toBeInTheDocument());
+    await waitFor(() => expect(within(pollCard).getAllByRole('listitem')).toHaveLength(3));
+    expect(within(pollCard).queryByText('Erinnerungen')).toBeNull();
     const links = within(pollCard).getAllByRole('link').filter(a => a.getAttribute('href')?.startsWith('/abstimmungen/'));
     expect(links.map(a => a.getAttribute('href'))).toEqual(['/abstimmungen/p5', '/abstimmungen/p4', '/abstimmungen/p3']);
-    const tile = (name: string) => within(pollCard).getByText(name).closest('a')!;
+    const rubriken = screen.getByRole('region', { name: 'Rubriken' });
+    const tile = (name: string) => within(rubriken).getByText(name).closest('a')!;
     await waitFor(() => expect(tile('Erinnerungen')).toHaveTextContent('3 Beiträge'));
     expect(tile('Erinnerungen')).toHaveTextContent('2 offen 1 beendet');
     expect(tile('Zitate')).toHaveTextContent('1 Beitrag');

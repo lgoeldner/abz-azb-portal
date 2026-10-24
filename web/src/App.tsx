@@ -341,6 +341,30 @@ function AdminHome() {
   const initials = (name: string) => name.replace(/\(.*?\)/g, '').split(/\s+/).filter(w => /^\p{L}/u.test(w)).map(w => w[0]).slice(0, 2).join('').toUpperCase();
   return <>
     <PageHead title="Redaktion">Zugänge, Abstimmungen und Rubriken im Überblick.</PageHead>
+    <section aria-labelledby="home-rubriken" className="mb-10">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 id="home-rubriken" className={heading}>Rubriken</h2>
+        <span className="text-sm text-muted">Beiträge und Abstimmungen pro Rubrik</span>
+      </div>
+      {state(categories) ?? <ul className="mt-4 grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
+        {categories.data?.map(c => {
+          const mine = (polls.data ?? []).filter(p => p.category_id === c.id);
+          const n = (submissions.data ?? []).filter(s => s.category_id === c.id).length;
+          return (
+            <li key={c.id} className="min-w-0">
+              <Link to={`/redaktion?rubrik=${c.id}`} className="flex h-full flex-col rounded-ui bg-white p-4 transition-transform hover:-translate-y-0.5 hover:bg-pop/40 active:scale-[.99] sm:p-5">
+                <span className="flex items-center gap-2"><KindIcon icon={categoryKindIcon[c.kind]} className="size-4 text-muted"/><strong className="min-w-0 truncate text-[15px] font-bold">{c.name}</strong></span>
+                <span className="mt-5 flex items-baseline gap-2"><strong className={figure}>{submissions.isPending ? '–' : n}</strong> <span className="text-[13px] text-muted">{n === 1 ? 'Beitrag' : 'Beiträge'}</span></span>
+                <span className="mt-4 grid grid-cols-2 gap-2 text-[13px] text-muted">
+                  <span><strong className="block text-lg font-extrabold tabular-nums leading-tight text-ink">{mine.filter(p => p.status === 'open').length}</strong> offen</span>{' '}
+                  <span><strong className="block text-lg font-extrabold tabular-nums leading-tight text-ink">{mine.filter(p => p.status === 'closed').length}</strong> beendet</span>
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>}
+    </section>
     <div className="grid items-start gap-4 lg:grid-cols-[5fr_7fr]">
       <section aria-labelledby="home-personen" className={card}>
         <h2 id="home-personen" className={`${heading} flex items-center gap-2`}><Users aria-hidden="true" className="size-[18px] shrink-0"/>Personen</h2>
@@ -376,25 +400,6 @@ function AdminHome() {
         {state(polls) ?? (latest.length === 0 ? <div className="mt-4"><Empty>Noch keine Abstimmung.</Empty></div> : <ul className="mt-3 divide-y divide-line">
           {latest.map(p => <li key={p.id} className="min-w-0"><Link to={`/abstimmungen/${p.id}`} className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30"><KindIcon icon={pollKindIcon[p.kind]} className="size-4 text-muted"/><span className="min-w-0 flex-1"><strong className="block truncate text-[15px] font-semibold">{p.title}</strong><span className="block text-[13px] text-muted">{[kindLabel(p.kind), p.status === 'open' ? since(p.opened_at) : ''].filter(Boolean).join(', ')}</span></span><Badge status={p.status}/></Link><DevDebug label="Abstimmung" data={{ id: p.id, category: p.category_id, status: p.status, kind: p.kind, version: p.version, options: p.options.length }}/></li>)}
         </ul>)}
-        <h3 className="mt-6 text-sm font-bold">Beiträge und Abstimmungen pro Rubrik</h3>
-        {state(categories) ?? <ul className="mt-3 grid grid-cols-2 gap-2 sm:gap-3">
-          {categories.data?.map(c => {
-            const mine = (polls.data ?? []).filter(p => p.category_id === c.id);
-            const n = (submissions.data ?? []).filter(s => s.category_id === c.id).length;
-            return (
-              <li key={c.id} className="min-w-0">
-                <Link to={`/redaktion?rubrik=${c.id}`} className="flex h-full flex-col rounded-xl bg-soft p-3.5 transition-colors hover:bg-pop/40 sm:p-4">
-                  <span className="flex items-center gap-2"><KindIcon icon={categoryKindIcon[c.kind]} className="size-4 text-muted"/><strong className="min-w-0 truncate text-[15px] font-bold">{c.name}</strong></span>
-                  <span className="mt-4 flex items-baseline gap-2"><strong className={figure}>{submissions.isPending ? '–' : n}</strong> <span className="text-[13px] text-muted">{n === 1 ? 'Beitrag' : 'Beiträge'}</span></span>
-                  <span className="mt-4 grid grid-cols-2 gap-2 text-[13px] text-muted">
-                    <span><strong className="block text-lg font-extrabold tabular-nums leading-tight text-ink">{mine.filter(p => p.status === 'open').length}</strong> offen</span>{' '}
-                    <span><strong className="block text-lg font-extrabold tabular-nums leading-tight text-ink">{mine.filter(p => p.status === 'closed').length}</strong> beendet</span>
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>}
       </section>
     </div>
   </>;
