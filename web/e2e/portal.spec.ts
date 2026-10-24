@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 async function signInAs(page: Page, role: 'Jahrgang' | 'Redaktion' | 'Administration', name?: string) {
   await page.goto('/');
   await page.getByRole('link', { name: /Mit Schulkonto anmelden/ }).click();
-  const identity = name ?? (role === 'Jahrgang' ? 'Mia Weber' : role === 'Redaktion' ? 'Sam · Redaktion' : 'Alex · Administration');
+  const identity = name ?? (role === 'Jahrgang' ? 'Mia Weber' : role === 'Redaktion' ? 'Sam (Redaktion)' : 'Alex (Administration)');
   const access = page.getByRole('button', { name: identity, exact: true });
   await expect(access, `Development login for ${role} is available (start a seeded development server)`).toBeVisible();
   await access.click();
@@ -74,7 +74,7 @@ test('editor reviews and accepts an assigned contribution, exports it, and sees 
   await page.getByRole('complementary', { name: 'Seitenleiste' }).getByRole('link', { name: /Unser Abimotto/ }).click();
   await expect(page.getByRole('heading', { name: /Unser Abimotto/ })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Gesamtergebnisse' })).toBeVisible();
-  await expect(page.getByText(/Nur für die Redaktion · \d+ abgegebene Stimme/)).toBeVisible();
+  await expect(page.getByText(/Nur für die Redaktion, \d+ abgegebene Stimme/)).toBeVisible();
 });
 
 test('admin opens access management and activity log on mobile', async ({ page }) => {
