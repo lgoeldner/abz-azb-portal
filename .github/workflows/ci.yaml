@@ -49,6 +49,8 @@ jobs:
         run: cd deployables/portal/web && npm ci && npm run lint && npm run typecheck
       - name: API contract
         run: node scripts/check-contract.mjs
+      - name: Repo map paths exist
+        run: bash scripts/check-repo-map.sh
 
   audit:
     runs-on: ubuntu-latest

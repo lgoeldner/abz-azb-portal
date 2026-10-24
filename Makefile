@@ -31,6 +31,7 @@ check:
 	cd deployables/auth-mock && go test -race ./... && go vet ./...
 	cd deployables/portal/web && npm ci && npm run typecheck && npm test -- --run && npm run build
 	node scripts/check-contract.mjs
+	bash scripts/check-repo-map.sh
 	$(MAKE) lint
 
 # The linter is built with go.mod's Go, matching CI.

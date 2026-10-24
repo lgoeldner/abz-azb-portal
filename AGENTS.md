@@ -12,6 +12,7 @@ Give each worker file ownership, an API contract, and acceptance tests. Do not l
 
 ## Contracts and validation
 
+- Start with docs/repo-map.md: `rg -i '<topic>' docs/repo-map.md` before exploring the tree.
 - Read docs/implementation-contract.md and docs/openapi.json before API work.
 - Update OpenAPI and regenerate TypeScript with `node scripts/check-contract.mjs --write` after contract changes. Do not edit generated types by hand.
 - Run `make check`; use TEST_DATABASE_URL pointing only to a disposable PostgreSQL database for integration tests. Never run seed against production.
@@ -21,6 +22,7 @@ Give each worker file ownership, an API contract, and acceptance tests. Do not l
 
 ## Commits and completion
 
+- Before every commit, check whether docs/repo-map.md is stale for the change (added, moved, renamed or repurposed files, routes, pages, rules) and update it in the same commit. `make check` fails on map paths that no longer exist.
 - Split larger changes into sensible commits.
 - Commit everything that belongs in the repository and push at the end of the task. Do not ask whether to commit or push.
 - Work done in a worktree is merged into main once it is finished and checks pass; then push main and remove the worktree. Do not leave finished worktree branches unmerged. Do not push the worktree.
