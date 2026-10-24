@@ -35,6 +35,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "jsdom": "^27.0.0",
     "openapi-typescript": "^7.13.0",
+    "prettier": "^3.9.10",
     "tailwindcss": "^4.1.13",
     "typescript": "~5.9.2",
     "typescript-eslint": "^8.72.0",

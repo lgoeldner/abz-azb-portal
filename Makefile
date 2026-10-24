@@ -42,3 +42,6 @@ restore:
 	@case "$(RESTORE_UPLOAD_DIR)" in /*) ;; *) echo 'RESTORE_UPLOAD_DIR must be absolute' >&2; exit 2 ;; esac
 	@test "$(RESTORE_UPLOAD_DIR)" != / && test -d "$(RESTORE_UPLOAD_DIR)" || (echo 'Create an explicit restore directory first' >&2; exit 2)
 	$(COMPOSE) --profile production run --rm --no-deps --user 0:0 --entrypoint /bin/bash --volume "$(RESTORE_UPLOAD_DIR):/restore-target" -e RESTORE_SNAPSHOT -e RESTORE_DATABASE_URL -e RESTORE_ACK -e RESTORE_UPLOAD_DIR=/restore-target backup /usr/local/bin/restore.sh
+
+hooks:
+	git config core.hooksPath .githooks

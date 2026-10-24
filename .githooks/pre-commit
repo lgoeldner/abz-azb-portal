@@ -1,0 +1,8 @@
+#!/bin/sh
+# Formats staged files only, then re-stages them. Install: make hooks
+set -e
+cd "$(git rev-parse --show-toplevel)"
+ts=$(git diff --cached --name-only --diff-filter=ACM -- 'web/src/*.ts' 'web/src/*.tsx' 'web/e2e/*.ts' | grep -v 'generated/' || true)
+go=$(git diff --cached --name-only --diff-filter=ACM -- '*.go' || true)
+if [ -n "$ts" ]; then (cd web && echo "$ts" | sed 's#^web/##' | xargs npx --no-install prettier --write) && echo "$ts" | xargs git add; fi
+if [ -n "$go" ]; then echo "$go" | xargs gofmt -w && echo "$go" | xargs git add; fi
