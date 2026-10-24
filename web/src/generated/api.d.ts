@@ -441,6 +441,8 @@ export interface components {
             admitted: boolean;
             cohort_member: boolean;
             category_ids: string[];
+            /** Format: date-time */
+            created_at: string;
         };
         Me: {
             user: components["schemas"]["User"];

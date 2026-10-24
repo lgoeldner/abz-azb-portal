@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"strings"
+	"time"
 )
 
 const AdminID = "00000000-0000-4000-8000-000000000001"
@@ -45,7 +46,7 @@ func SeedWithIssuer(ctx context.Context, pool *pgxpool.Pool, environment, issuer
 			return e
 		}
 	}
-	users := []User{{AdminID, "Alex (Administration)", "admin", true, true, []string{}}, {ManagerID, "Sam (Redaktion)", "manager", true, true, []string{categoryID(1), categoryID(4)}}, {MiaID, "Mia Weber", "student", true, true, []string{}}, {LeonID, "Leon Fischer", "student", true, true, []string{}}, {GuestID, "Kim (Gast)", "student", true, false, []string{}}, {PendingID, "Pat (Freigabe ausstehend)", "student", false, false, []string{}}}
+	users := []User{{AdminID, "Alex (Administration)", "admin", true, true, []string{}, time.Time{}}, {ManagerID, "Sam (Redaktion)", "manager", true, true, []string{categoryID(1), categoryID(4)}, time.Time{}}, {MiaID, "Mia Weber", "student", true, true, []string{}, time.Time{}}, {LeonID, "Leon Fischer", "student", true, true, []string{}, time.Time{}}, {GuestID, "Kim (Gast)", "student", true, false, []string{}, time.Time{}}, {PendingID, "Pat (Freigabe ausstehend)", "student", false, false, []string{}, time.Time{}}}
 	for _, u := range users {
 		if _, e = tx.Exec(ctx, "INSERT INTO users(id,subject,name,role,admitted,cohort_member,category_ids) VALUES($1,$2,$3,$4,$5,$6,$7::uuid[]) ON CONFLICT(id) DO UPDATE SET subject=EXCLUDED.subject WHERE users.subject LIKE 'mock:%' OR starts_with(users.subject, $8) OR users.subject ~ ('^https?://[^/]+/dev/oidc'||chr(31)||'[^'||chr(31)||']+$')", u.ID, issuer+"\x1f"+FixtureSubject(u.ID), u.Name, u.Role, u.Admitted, u.CohortMember, u.CategoryIDs, issuer+"\x1f"); e != nil {
 			return e

@@ -3,12 +3,13 @@ package portal
 import "time"
 
 type User struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Role         string   `json:"role"`
-	Admitted     bool     `json:"admitted"`
-	CohortMember bool     `json:"cohort_member"`
-	CategoryIDs  []string `json:"category_ids"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Role         string    `json:"role"`
+	Admitted     bool      `json:"admitted"`
+	CohortMember bool      `json:"cohort_member"`
+	CategoryIDs  []string  `json:"category_ids"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 type Category struct {
 	ID          string `json:"id"`

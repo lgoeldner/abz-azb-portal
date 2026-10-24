@@ -1467,6 +1467,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -1475,7 +1479,8 @@
           "role",
           "admitted",
           "cohort_member",
-          "category_ids"
+          "category_ids",
+          "created_at"
         ],
         "additionalProperties": false
       },

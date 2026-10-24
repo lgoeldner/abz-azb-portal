@@ -34,7 +34,7 @@ describe('API client', () => {
   });
 
   it('grants managers only their assigned categories', () => {
-    const manager = { id: 'm', name: 'Redaktion', role: 'manager' as const, admitted: true, cohort_member: true, category_ids: ['a'] };
+    const manager = { id: 'm', name: 'Redaktion', role: 'manager' as const, admitted: true, cohort_member: true, category_ids: ['a'], created_at: '2026-10-01T00:00:00Z' };
     expect(canEdit(manager, 'a')).toBe(true);
     expect(canEdit(manager, 'b')).toBe(false);
     expect(canEdit({ ...manager, role: 'admin' }, 'b')).toBe(true);
