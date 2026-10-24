@@ -1,9 +1,10 @@
-import { ArrowRight, ClipboardList, FileText, House, Plus, Settings, Users, Vote, type LucideIcon } from 'lucide-react';
+import { ArrowRight, ChevronDown, ClipboardList, FileText, House, Plus, ScrollText, Settings, Tags, Users, Vote, type LucideIcon } from 'lucide-react';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { api, ApiError, editorial, json, setCsrf, type Category, type Me, type Poll, type Submission, type User } from './api';
 import { Arrow, Badge, Empty, Failure, Loading, PageHead, Session, SubmissionList, btn, heading, notice, roleName, since, useAction, useData, useSession, useView, type View } from './ui';
-import { Admin, ContributionDetail, Contributions, Editorial, NewContribution, NotFound, PollDetail, Polls } from './pages';
+import { ActivityLog, Categories, People } from './admin';
+import { ContributionDetail, Contributions, Editorial, NewContribution, NotFound, PollDetail, Polls } from './pages';
 import { DevDebug } from './DevDebug';
 
 export function App() {
@@ -24,7 +25,7 @@ export function App() {
       </section>
     </main>
   );
-  return <Session.Provider value={me.data}><Routes><Route element={<Layout/>}><Route index element={<Overview/>}/><Route path="beitraege" element={<Contributions/>}/><Route path="beitraege/neu" element={<NewContribution/>}/><Route path="beitraege/:id" element={<ContributionDetail/>}/><Route path="abstimmungen" element={<Polls/>}/><Route path="abstimmungen/:id" element={<PollDetail/>}/><Route path="redaktion" element={<RoleGuard><Editorial/></RoleGuard>}/><Route path="admin" element={<RoleGuard admin><Admin/></RoleGuard>}/><Route path="*" element={<NotFound/>}/></Route></Routes></Session.Provider>;
+  return <Session.Provider value={me.data}><Routes><Route element={<Layout/>}><Route index element={<Overview/>}/><Route path="beitraege" element={<Contributions/>}/><Route path="beitraege/neu" element={<NewContribution/>}/><Route path="beitraege/:id" element={<ContributionDetail/>}/><Route path="abstimmungen" element={<Polls/>}/><Route path="abstimmungen/:id" element={<PollDetail/>}/><Route path="redaktion" element={<RoleGuard><Editorial/></RoleGuard>}/><Route path="admin" element={<Navigate to="/verwaltung/personen" replace/>}/><Route path="verwaltung/personen" element={<RoleGuard admin><People/></RoleGuard>}/><Route path="verwaltung/rubriken" element={<RoleGuard admin><Categories/></RoleGuard>}/><Route path="verwaltung/protokoll" element={<RoleGuard admin><ActivityLog/></RoleGuard>}/><Route path="*" element={<NotFound/>}/></Route></Routes></Session.Provider>;
 }
 
 // ---------- small helpers ----------
@@ -105,6 +106,7 @@ function Layout() {
           <NavItem to="/" icon={House}>Überblick</NavItem>
           {view[0] === 'redaktion' && editorial(user) ? <EditorNav/> : <StudentNav/>}
         </nav>
+        {user.role === 'admin' && <AdminNav onNavigate={() => setMenu(false)}/>}
         <div className="flex flex-none flex-col gap-3 bg-pill px-3 py-4">
           {editorial(user) && <ViewSwitch onSwitch={() => setMenu(false)}/>}
           <div className="flex items-center gap-3 px-1">
@@ -139,6 +141,15 @@ function NavItem({ to, icon: Icon, children }: { to: string; icon?: LucideIcon; 
   const location = useLocation();
   const active = location.pathname + location.search === to;
   return <Link to={to} aria-current={active ? 'page' : undefined} className={`${navItem} ${active ? 'bg-ink font-bold text-pop' : 'hover:bg-pill'}`}><span className="flex items-center gap-2.5">{Icon && <Icon aria-hidden="true" className="size-[18px] shrink-0"/>}{children}</span></Link>;
+}
+// Pinned between the scrolling nav and the account block; open state is a per-browser preference.
+function AdminNav({ onNavigate }: { onNavigate: () => void }) {
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem('verwaltung') !== 'zu'; } catch { return true; } });
+  const toggle = () => { setOpen(!open); try { localStorage.setItem('verwaltung', open ? 'zu' : 'offen'); } catch { /* private mode */ } };
+  return <div className="flex flex-none flex-col gap-1 border-t border-line px-3 py-2" onClick={e => { if ((e.target as Element).closest('a')) onNavigate(); }}>
+    <button type="button" aria-expanded={open} aria-controls="nav-verwaltung" className={`${navItem} w-full font-bold hover:bg-pill`} onClick={toggle}><span className="flex items-center gap-2.5"><Settings aria-hidden="true" className="size-[18px] shrink-0"/>Verwaltung</span><ChevronDown aria-hidden="true" className={`size-4 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`}/></button>
+    {open && <div id="nav-verwaltung" className="flex flex-col gap-1"><NavItem to="/verwaltung/personen" icon={Users}>Personen</NavItem><NavItem to="/verwaltung/rubriken" icon={Tags}>Rubriken</NavItem><NavItem to="/verwaltung/protokoll" icon={ScrollText}>Aktivitätsprotokoll</NavItem></div>}
+  </div>;
 }
 function NavRow({ to, title, sub, end }: { to: string; title: string; sub?: string; end?: string }) {
   const location = useLocation();
@@ -215,7 +226,6 @@ function EditorNav() {
       })}
       <NavItem to="/redaktion" icon={ClipboardList}>Alle Beiträge</NavItem>
     </NavGroup>
-    {user.role === 'admin' && <NavItem to="/admin" icon={Settings}>Verwaltung</NavItem>}
   </>;
 }
 
@@ -345,7 +355,7 @@ function AdminHome() {
             <p><strong className="block text-3xl font-extrabold tabular-nums leading-none">{users.data?.length}</strong><span className="mt-1 block text-[13px] text-muted">Angemeldet</span></p>
             <p><strong className="block text-3xl font-extrabold tabular-nums leading-none">{waiting}</strong><span className="mt-1 block text-[13px] text-muted">{waiting === 1 ? 'wartet' : 'warten'} auf Freigabe</span></p>
           </div>
-          <Link to="/admin" className={`${btn.text} mt-5`}>Zugänge verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0"/></Link>
+          <Link to="/verwaltung/personen" className={`${btn.text} mt-5`}>Zugänge verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0"/></Link>
           <DevDebug label="Personen" data={{ total: users.data?.length ?? 0, waiting, admins: (users.data ?? []).filter(u => u.role === 'admin').length }}/>
         </>}
       </section>
