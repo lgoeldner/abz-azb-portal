@@ -17,7 +17,7 @@ JSON API under `/api/v1`. Errors `{ "error": { "code": "...", "message": "..." }
 Types (snake_case JSON):
 
 ```
-User { id, name, role: 'student'|'manager'|'admin', admitted: boolean, cohort_member: boolean, category_ids: string[] }
+User { id, name, role: 'student'|'manager'|'admin', admitted: boolean, cohort_member: boolean, category_ids: string[], created_at: string }
 Me { user: User, csrf_token: string }
 Category { id, name, description, kind: 'idea'|'quote'|'memory'|'photo' }
 Attachment { id, filename, mime_type, size_bytes, url, preview_url }

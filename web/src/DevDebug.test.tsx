@@ -30,7 +30,7 @@ it('keeps contribution debug metadata outside its navigation link and omits priv
     title: 'Title sentinel', body: 'Body sentinel', context: 'Context sentinel', status: 'pending' as const, version: 2,
     created_at: '2026-10-23T12:00:00Z', updated_at: '2026-10-23T12:00:00Z', attachments: [],
   };
-  render(<MemoryRouter><Session.Provider value={{ user: { id: 'student-1', name: 'Name sentinel', role: 'student', admitted: true, cohort_member: true, category_ids: [] }, csrf_token: 'secret' }}><SubmissionList items={[submission]} categories={[{ id: 'memory', name: 'Erinnerungen', description: '', kind: 'memory' }]}/></Session.Provider></MemoryRouter>);
+  render(<MemoryRouter><Session.Provider value={{ user: { id: 'student-1', name: 'Name sentinel', role: 'student', admitted: true, cohort_member: true, category_ids: [], created_at: '2026-10-01T00:00:00Z' }, csrf_token: 'secret' }}><SubmissionList items={[submission]} categories={[{ id: 'memory', name: 'Erinnerungen', description: '', kind: 'memory' }]}/></Session.Provider></MemoryRouter>);
 
   const disclosure = screen.getByText('Debug: Beitrag').closest('details')!;
   const link = screen.getByRole('link', { name: /Title sentinel/ });

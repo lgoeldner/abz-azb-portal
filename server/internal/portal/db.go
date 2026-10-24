@@ -71,14 +71,14 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 }
 func scanUser(row pgx.Row) (User, error) {
 	u := User{}
-	e := row.Scan(&u.ID, &u.Name, &u.Role, &u.Admitted, &u.CohortMember, &u.CategoryIDs)
+	e := row.Scan(&u.ID, &u.Name, &u.Role, &u.Admitted, &u.CohortMember, &u.CategoryIDs, &u.CreatedAt)
 	if u.CategoryIDs == nil {
 		u.CategoryIDs = []string{}
 	}
 	return u, e
 }
 
-const userCols = "id::text,name,role,admitted,cohort_member,category_ids::text[]"
+const userCols = "id::text,name,role,admitted,cohort_member,category_ids::text[],created_at"
 
 func audit(ctx context.Context, db DB, u User, action, entity string) error {
 	_, e := db.Exec(ctx, "INSERT INTO audit_events(id,actor_id,action,entity_id) VALUES($1,$2,$3,$4)", ID(), u.ID, action, entity)
