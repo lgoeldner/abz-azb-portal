@@ -7,7 +7,7 @@ import { MemoryRouter } from 'react-router-dom';
 afterEach(() => vi.unstubAllEnvs());
 
 it('starts collapsed and reveals scalar metadata when opened', () => {
-  render(<DevDebug label="Poll" data={{ id: 'poll-1', status: 'open', options: 3, voted: false }}/>);
+  render(<DevDebug label="Poll" data={{ id: 'poll-1', status: 'open', options: 3, voted: false }} />);
 
   const disclosure = screen.getByText('Debug: Poll').closest('details');
   expect(disclosure).not.toHaveAttribute('open');
@@ -19,18 +19,65 @@ it('starts collapsed and reveals scalar metadata when opened', () => {
 
 it('renders no debug DOM when DEV is false, even when data is supplied', () => {
   vi.stubEnv('DEV', false);
-  const { container } = render(<DevDebug label="Private" data={{ body: 'private sentinel' }}/>);
+  const { container } = render(<DevDebug label="Private" data={{ body: 'private sentinel' }} />);
 
   expect(container).toBeEmptyDOMElement();
 });
 
 it('keeps contribution debug metadata outside its navigation link and omits private text', () => {
   const submission = {
-    id: 'submission-1', category_id: 'memory', author_id: 'student-1', author_name: 'Name sentinel',
-    title: 'Title sentinel', body: 'Body sentinel', context: 'Context sentinel', status: 'pending' as const, version: 2,
-    created_at: '2026-10-23T12:00:00Z', updated_at: '2026-10-23T12:00:00Z', attachments: [],
+    id: 'submission-1',
+    category_id: 'memory',
+    author_id: 'student-1',
+    author_name: 'Name sentinel',
+    title: 'Title sentinel',
+    body: 'Body sentinel',
+    context: 'Context sentinel',
+    status: 'pending' as const,
+    version: 2,
+    created_at: '2026-10-23T12:00:00Z',
+    updated_at: '2026-10-23T12:00:00Z',
+    attachments: [],
   };
-  render(<MemoryRouter><Session.Provider value={{ user: { id: 'student-1', name: 'Name sentinel', role: 'student', admitted: true, cohort_member: true, category_ids: [], created_at: '2026-10-01T00:00:00Z' }, csrf_token: 'secret' }}><SubmissionList items={[submission]} categories={[{ id: 'memory', name: 'Erinnerungen', description: '', kind: 'memory' }]}/></Session.Provider></MemoryRouter>);
+  render(
+    <MemoryRouter>
+      <Session.Provider
+        value={{
+          user: {
+            id: 'student-1',
+            name: 'Name sentinel',
+            role: 'student',
+            admitted: true,
+            cohort_member: true,
+            category_ids: [],
+            created_at: '2026-10-01T00:00:00Z',
+          },
+          csrf_token: 'secret',
+        }}
+      >
+        <SubmissionList
+          items={[submission]}
+          categories={[
+            {
+              id: 'memory',
+              name: 'Erinnerungen',
+              description: '',
+              kind: 'memory',
+              repeatable: true,
+              status: 'open',
+              allow_self_vote: false,
+              options: [],
+              my_option_id: null,
+              version: 1,
+              created_at: '2026-10-01T00:00:00Z',
+              opened_at: null,
+              ballot_count: null,
+            },
+          ]}
+        />
+      </Session.Provider>
+    </MemoryRouter>,
+  );
 
   const disclosure = screen.getByText('Debug: Beitrag').closest('details')!;
   const link = screen.getByRole('link', { name: /Title sentinel/ });

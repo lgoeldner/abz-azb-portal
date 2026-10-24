@@ -4,17 +4,50 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 
-const user = { id: 'student-1', name: 'Mia Beispiel', role: 'student', admitted: true, cohort_member: true, category_ids: [] };
-const category = { id: 'memory', name: 'Erinnerungen', description: 'Was bleibt', kind: 'memory' };
+const user = {
+  id: 'student-1',
+  name: 'Mia Beispiel',
+  role: 'student',
+  admitted: true,
+  cohort_member: true,
+  category_ids: [],
+};
+const repeatable = ['idea', 'quote', 'memory', 'photo'];
+// A complete Sammlung as the API returns it; repeatable classes are always open with no options.
+const sammlung = (id: string, name: string, kind: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  name,
+  description: '',
+  kind,
+  repeatable: repeatable.includes(kind),
+  status: 'open',
+  allow_self_vote: false,
+  options: [],
+  my_option_id: null,
+  version: 1,
+  created_at: '2026-10-01T00:00:00Z',
+  opened_at: null,
+  ballot_count: null,
+  ...extra,
+});
+const category = sammlung('memory', 'Erinnerungen', 'memory', { description: 'Was bleibt' });
 
 it('starts provider login without fetching identities from the portal', async () => {
-  const fetchMock = vi.fn(async (_input: RequestInfo | URL) => Response.json({ error: { code: 'unauthorized', message: 'Bitte anmelden.' } }, { status: 401 }));
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
+    Response.json({ error: { code: 'unauthorized', message: 'Bitte anmelden.' } }, { status: 401 }),
+  );
   vi.stubGlobal('fetch', fetchMock);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><MemoryRouter><App/></MemoryRouter></QueryClientProvider>);
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
 
   expect(await screen.findByRole('link', { name: /Mit Schulkonto anmelden/ })).toHaveAttribute('href', '/auth/login');
-  expect(fetchMock.mock.calls.every(call => String(call[0]) === '/api/v1/me')).toBe(true);
+  expect(fetchMock.mock.calls.every((call) => String(call[0]) === '/api/v1/me')).toBe(true);
 });
 
 describe('contribution submission', () => {
@@ -23,16 +56,25 @@ describe('contribution submission', () => {
       const url = String(input);
       if (url.endsWith('/api/v1/me')) return Response.json({ user, csrf_token: 'csrf' });
       if (url.endsWith('/api/v1/categories')) return Response.json([category]);
-      if (url === '/api/v1/submissions') return Response.json({ error: { code: 'stale_version', message: 'Bitte erneut prüfen.' } }, { status: 409 });
+      if (url === '/api/v1/submissions')
+        return Response.json({ error: { code: 'stale_version', message: 'Bitte erneut prüfen.' } }, { status: 409 });
       return Response.json([]);
     });
     vi.stubGlobal('fetch', fetchMock);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/beitraege/neu?kategorie=memory']}><App/></MemoryRouter></QueryClientProvider>);
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/beitraege/neu?kategorie=memory']}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
 
     const title = await screen.findByPlaceholderText('Gib deiner Erinnerung einen Namen');
     fireEvent.change(title, { target: { value: 'Die letzte Freistunde' } });
-    fireEvent.change(screen.getByPlaceholderText('Was ist passiert? Welcher Spruch darf nicht fehlen?'), { target: { value: 'Wir waren alle dabei.' } });
+    fireEvent.change(screen.getByPlaceholderText('Was ist passiert? Welcher Spruch darf nicht fehlen?'), {
+      target: { value: 'Wir waren alle dabei.' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /Beitrag einreichen/i }));
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Eine neuere Version liegt vor.'));
@@ -49,7 +91,13 @@ describe('contribution submission', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/beitraege/neu?kategorie=memory']}><App/></MemoryRouter></QueryClientProvider>);
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/beitraege/neu?kategorie=memory']}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
 
     const title = await screen.findByPlaceholderText('Gib deiner Erinnerung einen Namen');
     fireEvent.change(title, { target: { value: 'Die letzte Freistunde' } });
@@ -58,16 +106,29 @@ describe('contribution submission', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /Beitrag einreichen/i }));
 
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Bitte wähle nur JPEG-, PNG- oder WebP-Bilder aus.'));
-    expect(fetchMock.mock.calls.some(([url, init]) => String(url) === '/api/v1/submissions' && init?.method === 'POST')).toBe(false);
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Bitte wähle nur JPEG-, PNG- oder WebP-Bilder aus.'),
+    );
+    expect(
+      fetchMock.mock.calls.some(([url, init]) => String(url) === '/api/v1/submissions' && init?.method === 'POST'),
+    ).toBe(false);
     expect(title).toHaveValue('Die letzte Freistunde');
   });
 
   it('lets a student replace a rejected photo and retry without creating another contribution', async () => {
     const submission = {
-      id: 'new-submission', category_id: 'memory', author_id: user.id, author_name: user.name,
-      title: 'Das letzte Schulfest', body: 'Wir waren alle dabei.', context: '', status: 'pending', version: 1,
-      created_at: '2026-10-23T12:00:00Z', updated_at: '2026-10-23T12:00:00Z', attachments: [],
+      id: 'new-submission',
+      category_id: 'memory',
+      author_id: user.id,
+      author_name: user.name,
+      title: 'Das letzte Schulfest',
+      body: 'Wir waren alle dabei.',
+      context: '',
+      status: 'pending',
+      version: 1,
+      created_at: '2026-10-23T12:00:00Z',
+      updated_at: '2026-10-23T12:00:00Z',
+      attachments: [],
     };
     let uploadCount = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -77,7 +138,11 @@ describe('contribution submission', () => {
       if (url === '/api/v1/submissions' && init?.method === 'POST') return Response.json(submission, { status: 201 });
       if (url === '/api/v1/submissions/new-submission/attachments' && init?.method === 'POST') {
         uploadCount += 1;
-        if (uploadCount === 1) return Response.json({ error: { code: 'invalid_image', message: 'Das Foto ist ungültig.' } }, { status: 400 });
+        if (uploadCount === 1)
+          return Response.json(
+            { error: { code: 'invalid_image', message: 'Das Foto ist ungültig.' } },
+            { status: 400 },
+          );
         return Response.json({ ...submission, version: 2 });
       }
       if (url === '/api/v1/submissions/new-submission') return Response.json({ ...submission, version: 2 });
@@ -86,11 +151,19 @@ describe('contribution submission', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/beitraege/neu?kategorie=memory']}><App/></MemoryRouter></QueryClientProvider>);
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/beitraege/neu?kategorie=memory']}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
 
     const title = await screen.findByPlaceholderText('Gib deiner Erinnerung einen Namen');
     fireEvent.change(title, { target: { value: submission.title } });
-    fireEvent.change(screen.getByPlaceholderText('Was ist passiert? Welcher Spruch darf nicht fehlen?'), { target: { value: submission.body } });
+    fireEvent.change(screen.getByPlaceholderText('Was ist passiert? Welcher Spruch darf nicht fehlen?'), {
+      target: { value: submission.body },
+    });
     const photoPicker = screen.getByLabelText(/höchstens 10 Bilder/);
     fireEvent.change(photoPicker, { target: { files: [new File(['bad'], 'bad.jpg', { type: 'image/jpeg' })] } });
     fireEvent.click(screen.getByRole('button', { name: /Beitrag einreichen/i }));
@@ -98,49 +171,102 @@ describe('contribution submission', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Das Foto ist ungültig.'));
     expect(screen.getByRole('button', { name: 'Ohne weitere Fotos fortfahren' })).toBeInTheDocument();
     expect(photoPicker).toBeEnabled();
-    fireEvent.change(photoPicker, { target: { files: [new File(['replacement'], 'replacement.jpg', { type: 'image/jpeg' })] } });
+    fireEvent.change(photoPicker, {
+      target: { files: [new File(['replacement'], 'replacement.jpg', { type: 'image/jpeg' })] },
+    });
     fireEvent.click(screen.getByRole('button', { name: /Fotos erneut hochladen/ }));
 
     await screen.findByRole('heading', { name: submission.title });
-    expect(fetchMock.mock.calls.filter(([url, init]) => String(url) === '/api/v1/submissions' && init?.method === 'POST')).toHaveLength(1);
+    expect(
+      fetchMock.mock.calls.filter(([url, init]) => String(url) === '/api/v1/submissions' && init?.method === 'POST'),
+    ).toHaveLength(1);
     expect(uploadCount).toBe(2);
   });
 });
 
-
 describe('verwaltung', () => {
-  const admin = { id: 'admin-1', name: 'Test Admin', role: 'admin', admitted: true, cohort_member: true, category_ids: [] };
-  const guest = { id: 'guest-1', name: 'Gast Gerda', role: 'student', admitted: true, cohort_member: false, category_ids: [] };
-  const waiting = { id: 'wait-1', name: 'Warte Willi', role: 'student', admitted: false, cohort_member: true, category_ids: [] };
-  const editor = { id: 'mgr-1', name: 'Sam Redaktion', role: 'manager', admitted: true, cohort_member: true, category_ids: ['memory'] };
+  const admin = {
+    id: 'admin-1',
+    name: 'Test Admin',
+    role: 'admin',
+    admitted: true,
+    cohort_member: true,
+    category_ids: [],
+  };
+  const guest = {
+    id: 'guest-1',
+    name: 'Gast Gerda',
+    role: 'student',
+    admitted: true,
+    cohort_member: false,
+    category_ids: [],
+  };
+  const waiting = {
+    id: 'wait-1',
+    name: 'Warte Willi',
+    role: 'student',
+    admitted: false,
+    cohort_member: true,
+    category_ids: [],
+  };
+  const editor = {
+    id: 'mgr-1',
+    name: 'Sam Redaktion',
+    role: 'manager',
+    admitted: true,
+    cohort_member: true,
+    category_ids: ['memory'],
+  };
   const everyone = [admin, guest, waiting, editor];
   type Call = { url: string; method: string; body: Record<string, unknown> | undefined };
-  function mount(path: string, me: Record<string, unknown> = admin, onWrite: (c: Call) => Response | undefined = () => undefined, people: () => unknown[] = () => everyone, categories: unknown[] = [category]) {
+  function mount(
+    path: string,
+    me: Record<string, unknown> = admin,
+    onWrite: (c: Call) => Response | undefined = () => undefined,
+    people: () => unknown[] = () => everyone,
+    categories: unknown[] = [category],
+  ) {
     const calls: Call[] = [];
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input).replace('/api/v1', ''); const method = init?.method ?? 'GET';
-      if (url === '/me') return Response.json({ user: me, csrf_token: 'csrf' });
-      if (method !== 'GET') { const c = { url, method, body: init?.body ? JSON.parse(String(init.body)) : undefined }; calls.push(c); return onWrite(c) ?? Response.json({ id: 'new-cat' }); }
-      if (url === '/admin/users') return Response.json(people());
-      if (url === '/categories') return Response.json(categories);
-      if (url === '/admin/status') return Response.json({ backup_last_success: null, backup_stale: false, upload_bytes: 0 });
-      return Response.json([]);
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input).replace('/api/v1', '');
+        const method = init?.method ?? 'GET';
+        if (url === '/me') return Response.json({ user: me, csrf_token: 'csrf' });
+        if (method !== 'GET') {
+          const c = { url, method, body: init?.body ? JSON.parse(String(init.body)) : undefined };
+          calls.push(c);
+          return onWrite(c) ?? Response.json({ id: 'new-cat' });
+        }
+        if (url === '/admin/users') return Response.json(people());
+        if (url === '/categories') return Response.json(categories);
+        if (url === '/admin/status')
+          return Response.json({ backup_last_success: null, backup_stale: false, upload_bytes: 0 });
+        return Response.json([]);
+      }),
+    );
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[path]}><App/></MemoryRouter></QueryClientProvider>);
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[path]}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
     return calls;
   }
-  const openMenu = async (name: string) => fireEvent.click(await screen.findByRole('button', { name: `Aktionen für ${name}` }));
+  const openMenu = async (name: string) =>
+    fireEvent.click(await screen.findByRole('button', { name: `Aktionen für ${name}` }));
 
   it('redirects /admin to the people page', async () => {
     mount('/admin');
     expect(await screen.findByRole('heading', { level: 1, name: 'Personen' })).toBeInTheDocument();
   });
 
-  it.each(['personen', 'rubriken', 'protokoll'])('keeps non-admins away from /verwaltung/%s', async page => {
+  it.each(['personen', 'sammlungen', 'protokoll'])('keeps non-admins away from /verwaltung/%s', async (page) => {
     mount(`/verwaltung/${page}`, editor);
     expect(await screen.findByRole('heading', { level: 1, name: 'Redaktion' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { level: 1, name: /Personen|Rubriken|Aktivitätsprotokoll/ })).toBeNull();
+    expect(screen.queryByRole('heading', { level: 1, name: /Personen|Sammlungen|Aktivitätsprotokoll/ })).toBeNull();
   });
 
   it('shows the collapsible Verwaltung group only to admins and remembers it', async () => {
@@ -149,7 +275,10 @@ describe('verwaltung', () => {
     const toggle = await screen.findByRole('button', { name: 'Verwaltung' });
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     const aside = screen.getByRole('complementary');
-    expect(within(aside).getByRole('link', { name: 'Aktivitätsprotokoll' })).toHaveAttribute('href', '/verwaltung/protokoll');
+    expect(within(aside).getByRole('link', { name: 'Aktivitätsprotokoll' })).toHaveAttribute(
+      'href',
+      '/verwaltung/protokoll',
+    );
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(within(aside).queryByRole('link', { name: 'Personen' })).toBeNull();
@@ -164,7 +293,9 @@ describe('verwaltung', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Wartet auf Freigabe/ }));
     expect(screen.getByText('Warte Willi')).toBeInTheDocument();
     expect(screen.queryByText('Gast Gerda')).toBeNull();
-    fireEvent.click(within(screen.getByRole('group', { name: 'Personen filtern' })).getByRole('button', { name: /^Redaktion/ }));
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Personen filtern' })).getByRole('button', { name: /^Redaktion/ }),
+    );
     expect(screen.getByText('Sam Redaktion')).toBeInTheDocument();
     expect(screen.queryByText('Warte Willi')).toBeNull();
   });
@@ -173,26 +304,42 @@ describe('verwaltung', () => {
     const calls = mount('/verwaltung/personen');
     fireEvent.click(await screen.findByRole('button', { name: 'Zum Jahrgangsmitglied machen: Gast Gerda' }));
     await waitFor(() => expect(calls).toHaveLength(1));
-    expect(calls[0]).toEqual({ url: '/admin/users/guest-1', method: 'PATCH', body: { name: 'Gast Gerda', role: 'student', admitted: true, cohort_member: true, category_ids: [] } });
+    expect(calls[0]).toEqual({
+      url: '/admin/users/guest-1',
+      method: 'PATCH',
+      body: { name: 'Gast Gerda', role: 'student', admitted: true, cohort_member: true, category_ids: [] },
+    });
   });
 
   it('keeps grants another admin added after the list loaded when changing a role', async () => {
     let server = everyone;
     const calls = mount('/verwaltung/personen', admin, undefined, () => server);
     await openMenu('Sam Redaktion');
-    server = everyone.map(u => u.id === editor.id ? { ...editor, category_ids: ['memory', 'quotes'] } : u);
+    server = everyone.map((u) => (u.id === editor.id ? { ...editor, category_ids: ['memory', 'quotes'] } : u));
     fireEvent.click(screen.getByRole('menuitem', { name: /Rolle ändern/ }));
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'Administration' }));
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Bestätigen' }));
     await waitFor(() => expect(calls).toHaveLength(1));
-    expect(calls[0].body).toEqual({ name: 'Sam Redaktion', role: 'admin', admitted: true, cohort_member: true, category_ids: ['memory', 'quotes'] });
+    expect(calls[0].body).toEqual({
+      name: 'Sam Redaktion',
+      role: 'admin',
+      admitted: true,
+      cohort_member: true,
+      category_ids: ['memory', 'quotes'],
+    });
   });
 
   it('admits a waiting person with one click', async () => {
     const calls = mount('/verwaltung/personen');
     fireEvent.click(await screen.findByRole('button', { name: 'Zugang freigeben: Warte Willi' }));
     await waitFor(() => expect(calls).toHaveLength(1));
-    expect(calls[0].body).toEqual({ name: 'Warte Willi', role: 'student', admitted: true, cohort_member: true, category_ids: [] });
+    expect(calls[0].body).toEqual({
+      name: 'Warte Willi',
+      role: 'student',
+      admitted: true,
+      cohort_member: true,
+      category_ids: [],
+    });
   });
 
   it('changes a role only after confirmation', async () => {
@@ -212,11 +359,17 @@ describe('verwaltung', () => {
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'Redaktion' }));
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Bestätigen' }));
     await waitFor(() => expect(calls).toHaveLength(1));
-    expect(calls[0]).toEqual({ url: '/admin/users/guest-1', method: 'PATCH', body: { name: 'Gast Gerda', role: 'manager', admitted: true, cohort_member: false, category_ids: [] } });
+    expect(calls[0]).toEqual({
+      url: '/admin/users/guest-1',
+      method: 'PATCH',
+      body: { name: 'Gast Gerda', role: 'manager', admitted: true, cohort_member: false, category_ids: [] },
+    });
   });
 
   it('deletes only after confirmation and shows the server error in the dialog', async () => {
-    const calls = mount('/verwaltung/personen', admin, () => Response.json({ error: { code: 'has_content', message: 'Die Person hat bereits Beiträge.' } }, { status: 409 }));
+    const calls = mount('/verwaltung/personen', admin, () =>
+      Response.json({ error: { code: 'has_content', message: 'Die Person hat bereits Beiträge.' } }, { status: 409 }),
+    );
     await openMenu('Gast Gerda');
     fireEvent.click(screen.getByRole('menuitem', { name: 'Löschen' }));
     const dialog = await screen.findByRole('dialog', { name: 'Gast Gerda löschen?' });
@@ -237,7 +390,11 @@ describe('verwaltung', () => {
     expect(calls).toHaveLength(0);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Sperren' }));
     await waitFor(() => expect(calls).toHaveLength(1));
-    expect(calls[0]).toEqual({ url: '/admin/users/mgr-1', method: 'PATCH', body: { name: 'Sam Redaktion', role: 'manager', admitted: false, cohort_member: true, category_ids: ['memory'] } });
+    expect(calls[0]).toEqual({
+      url: '/admin/users/mgr-1',
+      method: 'PATCH',
+      body: { name: 'Sam Redaktion', role: 'manager', admitted: false, cohort_member: true, category_ids: ['memory'] },
+    });
   });
 
   it('moves keyboard focus into the row menu and back to its trigger', async () => {
@@ -265,68 +422,123 @@ describe('verwaltung', () => {
     expect(screen.queryByRole('menu')).toBeNull();
   });
 
+  it('keeps the old /verwaltung/rubriken bookmark working', async () => {
+    mount('/verwaltung/' + 'rubriken');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Sammlungen' })).toBeInTheDocument();
+  });
+
+  it('lets an admin assign a single-answer Sammlung to a manager and saves it as a draft definition', async () => {
+    const calls = mount('/verwaltung/sammlungen');
+    fireEvent.click(await screen.findByRole('button', { name: /Neue Sammlung/ }));
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Motto' } });
+    fireEvent.change(screen.getByLabelText('Klasse'), { target: { value: 'proposal' } });
+    fireEvent.change(screen.getByLabelText(/Antwortoptionen/), { target: { value: 'A\nB' } });
+    fireEvent.click(await screen.findByLabelText('Sam Redaktion'));
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(calls[0].body).toMatchObject({ kind: 'proposal', options: [{ label: 'A' }, { label: 'B' }] });
+    expect(calls[1].body).toMatchObject({ role: 'manager', category_ids: ['memory', 'new-cat'] });
+  });
+
   it('grants a new category to a manager with the full user payload', async () => {
-    const calls = mount('/verwaltung/rubriken');
-    fireEvent.click(await screen.findByRole('button', { name: /Neue Rubrik/ }));
+    const calls = mount('/verwaltung/sammlungen');
+    fireEvent.click(await screen.findByRole('button', { name: /Neue Sammlung/ }));
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Neu' } });
     fireEvent.click(await screen.findByLabelText('Sam Redaktion'));
-    fireEvent.click(screen.getByRole('button', { name: 'Rubrik speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
     await waitFor(() => expect(calls).toHaveLength(2));
     expect(calls[0]).toMatchObject({ url: '/categories', method: 'POST' });
-    expect(calls[1]).toEqual({ url: '/admin/users/mgr-1', method: 'PATCH', body: { name: 'Sam Redaktion', role: 'manager', admitted: true, cohort_member: true, category_ids: ['memory', 'new-cat'] } });
+    expect(calls[1]).toEqual({
+      url: '/admin/users/mgr-1',
+      method: 'PATCH',
+      body: {
+        name: 'Sam Redaktion',
+        role: 'manager',
+        admitted: true,
+        cohort_member: true,
+        category_ids: ['memory', 'new-cat'],
+      },
+    });
   });
 
-  it('does not carry unsaved grant changes over to another Rubrik', async () => {
-    const quotes = { id: 'quotes', name: 'Zitate', description: '', kind: 'quote' };
-    const photos = { id: 'photos', name: 'Fotos', description: '', kind: 'photo' };
-    const calls = mount('/verwaltung/rubriken', admin, undefined, undefined, [category, quotes, photos]);
-    fireEvent.click(await screen.findByRole('button', { name: 'Rubrik bearbeiten: Zitate' }));
+  it('does not carry unsaved grant changes over to another Sammlung', async () => {
+    const quotes = sammlung('quotes', 'Zitate', 'quote');
+    const photos = sammlung('photos', 'Fotos', 'photo');
+    const calls = mount('/verwaltung/sammlungen', admin, undefined, undefined, [category, quotes, photos]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung bearbeiten: Zitate' }));
     fireEvent.click(await screen.findByLabelText('Sam Redaktion'));
     expect(screen.getByLabelText('Sam Redaktion')).toBeChecked();
-    fireEvent.click(screen.getByRole('button', { name: 'Rubrik bearbeiten: Fotos' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung bearbeiten: Fotos' }));
     await waitFor(() => expect(screen.getByLabelText('Name')).toHaveValue('Fotos'));
     expect(screen.getByLabelText('Sam Redaktion')).not.toBeChecked();
-    fireEvent.click(screen.getByRole('button', { name: 'Rubrik speichern' }));
-    await waitFor(() => expect(calls.some(c => c.url === '/categories/photos')).toBe(true));
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Rubrik speichern' })).toBeNull());
-    expect(calls.filter(c => c.url.startsWith('/admin/users'))).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    await waitFor(() => expect(calls.some((c) => c.url === '/categories/photos')).toBe(true));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Sammlung speichern' })).toBeNull());
+    expect(calls.filter((c) => c.url.startsWith('/admin/users'))).toEqual([]);
   });
 
-  it('merges grants into the current server state and retries a failed save without a second Rubrik', async () => {
+  it('merges grants into the current server state and retries a failed save without a second Sammlung', async () => {
     let server = { ...editor, category_ids: ['memory'] };
     let failGrant = true;
-    const calls = mount('/verwaltung/rubriken', admin, c => {
-      if (c.url === '/admin/users/mgr-1') {
-        if (failGrant) { failGrant = false; return Response.json({ error: { code: 'unavailable', message: 'Kurz nicht erreichbar.' } }, { status: 503 }); }
-        server = { ...server, ...(c.body as object) };
-      }
-      return undefined;
-    }, () => [admin, server]);
-    fireEvent.click(await screen.findByRole('button', { name: /Neue Rubrik/ }));
+    const calls = mount(
+      '/verwaltung/sammlungen',
+      admin,
+      (c) => {
+        if (c.url === '/admin/users/mgr-1') {
+          if (failGrant) {
+            failGrant = false;
+            return Response.json(
+              { error: { code: 'unavailable', message: 'Kurz nicht erreichbar.' } },
+              { status: 503 },
+            );
+          }
+          server = { ...server, ...(c.body as object) };
+        }
+        return undefined;
+      },
+      () => [admin, server],
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /Neue Sammlung/ }));
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Neu' } });
     fireEvent.click(await screen.findByLabelText('Sam Redaktion'));
-    // Another admin grants a further Rubrik while this form is open.
+    // Another admin grants a further Sammlung while this form is open.
     server = { ...server, category_ids: ['memory', 'quotes'] };
-    fireEvent.click(screen.getByRole('button', { name: 'Rubrik speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
     expect(await screen.findByText('Kurz nicht erreichbar.')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Rubrik speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
     await waitFor(() => expect(server.category_ids).toEqual(['memory', 'quotes', 'new-cat']));
-    expect(calls.filter(c => c.url === '/categories' && c.method === 'POST')).toHaveLength(1);
+    expect(calls.filter((c) => c.url === '/categories' && c.method === 'POST')).toHaveLength(1);
   });
 });
 
 describe('navigation by view', () => {
   const now = Date.now();
   const iso = (daysAgo: number) => new Date(now - daysAgo * 86_400_000).toISOString();
-  const categories = [category, { id: 'quotes', name: 'Zitate', description: 'Sprüche', kind: 'quote' }];
-  const poll = (id: string, title: string, extra: Record<string, unknown> = {}) => ({
-    id, category_id: 'memory', title, description: 'Beschreibung', kind: 'proposal', format: 'single_choice', status: 'open',
-    allow_self_vote: false, options: [{ id: `${id}-a`, label: 'A' }, { id: `${id}-b`, label: 'B' }], my_option_id: null, version: 1,
-    created_at: iso(10), opened_at: iso(3), ballot_count: null, ...extra,
-  });
+  const fixed = [category, sammlung('quotes', 'Zitate', 'quote', { description: 'Sprüche' })];
+  const poll = (id: string, name: string, extra: Record<string, unknown> = {}) =>
+    sammlung(id, name, 'proposal', {
+      description: 'Beschreibung',
+      options: [
+        { id: `${id}-a`, label: 'A' },
+        { id: `${id}-b`, label: 'B' },
+      ],
+      created_at: iso(10),
+      opened_at: iso(3),
+      ...extra,
+    });
   const submission = (id: string, categoryId: string, authorId: string, status = 'pending') => ({
-    id, category_id: categoryId, author_id: authorId, author_name: 'Wer', title: `Beitrag ${id}`, body: 'x', context: '', status, version: 1,
-    created_at: iso(1), updated_at: iso(1), attachments: [],
+    id,
+    category_id: categoryId,
+    author_id: authorId,
+    author_name: 'Wer',
+    title: `Beitrag ${id}`,
+    body: 'x',
+    context: '',
+    status,
+    version: 1,
+    created_at: iso(1),
+    updated_at: iso(1),
+    attachments: [],
   });
   function mount(who: Record<string, unknown>, data: { polls: unknown[]; submissions: unknown[] }) {
     localStorage.clear();
@@ -335,18 +547,23 @@ describe('navigation by view', () => {
       const url = String(input);
       urls.push(url);
       if (url.endsWith('/api/v1/me')) return Response.json({ user: who, csrf_token: 'csrf' });
-      if (url.endsWith('/api/v1/categories')) return Response.json(categories);
-      if (url.endsWith('/api/v1/polls')) return Response.json(data.polls);
+      if (url.endsWith('/api/v1/categories')) return Response.json([...fixed, ...data.polls]);
       if (url.endsWith('/api/v1/submissions')) return Response.json(data.submissions);
       return Response.json([]);
     });
     vi.stubGlobal('fetch', fetchMock);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><MemoryRouter><App/></MemoryRouter></QueryClientProvider>);
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
     return urls;
   }
 
-  it('shows students open unvoted polls first, files finished ones under "Erledigt" and never offers the view switch', async () => {
+  it('shows students open unvoted ballots first, lists repeatable Sammlungen under "Fortlaufend", files finished ones under "Erledigt" and never offers the view switch', async () => {
     const urls = mount(user, {
       polls: [
         poll('p-open', 'Abimotto', { opened_at: iso(3) }),
@@ -355,16 +572,25 @@ describe('navigation by view', () => {
         poll('p-closed', 'Altlast', { status: 'closed' }),
         poll('p-draft', 'Geheimer Entwurf', { status: 'draft', opened_at: null }),
       ],
-      submissions: [submission('s1', 'memory', user.id), submission('s2', 'memory', user.id), submission('s3', 'memory', 'someone-else')],
+      submissions: [
+        submission('s1', 'memory', user.id),
+        submission('s2', 'memory', user.id),
+        submission('s3', 'memory', 'someone-else'),
+      ],
     });
     const aside = await screen.findByRole('complementary');
     const open = await within(aside).findByRole('list', { name: 'Offen' });
     const links = within(open).getAllByRole('link');
-    expect(links.map(l => l.textContent)).toEqual([expect.stringContaining('Lehrerzitat'), expect.stringContaining('Abimotto')]);
-    expect(links[0]).toHaveAttribute('href', '/abstimmungen/p-newer');
+    expect(links.map((l) => l.textContent)).toEqual([
+      expect.stringContaining('Lehrerzitat'),
+      expect.stringContaining('Abimotto'),
+    ]);
+    expect(links[0]).toHaveAttribute('href', '/sammlungen/p-newer');
 
-    const category = within(aside).getByRole('link', { name: /Erinnerungen/ });
-    expect(category).toHaveAttribute('href', '/beitraege/neu?kategorie=memory');
+    const fortlaufend = within(aside).getByRole('group', { name: 'Fortlaufend' });
+    const category = within(fortlaufend).getByRole('link', { name: /Erinnerungen/ });
+    expect(category).toHaveAttribute('href', '/sammlungen/memory');
+    expect(within(fortlaufend).queryByRole('link', { name: /Abimotto/ })).toBeNull();
     expect(category).toHaveTextContent('2 eingereicht');
     expect(within(aside).getByRole('link', { name: /Zitate/ })).toHaveTextContent('Noch nichts eingereicht');
     expect(open.compareDocumentPosition(category) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -374,21 +600,38 @@ describe('navigation by view', () => {
     expect(voted.closest('details')).not.toBeNull();
     expect(closed.closest('details')).not.toBeNull();
     expect(open).not.toContainElement(voted);
-    expect(within(aside).getByRole('link', { name: /Abimotto/ }).closest('details')).toBeNull();
+    expect(
+      within(aside)
+        .getByRole('link', { name: /Abimotto/ })
+        .closest('details'),
+    ).toBeNull();
     expect(within(aside).queryByText('Geheimer Entwurf')).toBeNull();
     expect(within(aside).getByText(/Erledigt \(2\)/)).toBeInTheDocument();
 
-    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Hey Mia. 2 Abstimmungen warten auf dich.');
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(
+      'Hey Mia. 2 Sammlungen warten auf deine Stimme.',
+    );
     expect(screen.queryByRole('button', { name: 'Schüler' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Redaktion' })).toBeNull();
-    expect(urls.some(url => url.includes('/results') || url.includes('/audit'))).toBe(false);
+    expect(urls.some((url) => url.includes('/results') || url.includes('/audit'))).toBe(false);
   });
 
-  it.each([['manager', 'Sam Redaktion'], ['admin', 'Alex Admin']])('lets a %s switch between the editorial and the student home', async (role, name) => {
+  it.each([
+    ['manager', 'Sam Redaktion'],
+    ['admin', 'Alex Admin'],
+  ])('lets a %s switch between the editorial and the student home', async (role, name) => {
     const who = { id: `${role}-1`, name, role, admitted: true, cohort_member: false, category_ids: ['memory'] };
     mount(who, {
-      polls: [poll('p-open', 'Abimotto', { ballot_count: 34 }), poll('p-draft', 'Entwurf', { status: 'draft', opened_at: null, ballot_count: 0 })],
-      submissions: [submission('s1', 'memory', 'a'), submission('s2', 'memory', 'b'), submission('s3', 'memory', 'c', 'accepted'), submission('s4', 'quotes', 'd')],
+      polls: [
+        poll('p-open', 'Abimotto', { ballot_count: 34 }),
+        poll('p-draft', 'Entwurf', { status: 'draft', opened_at: null, ballot_count: 0 }),
+      ],
+      submissions: [
+        submission('s1', 'memory', 'a'),
+        submission('s2', 'memory', 'b'),
+        submission('s3', 'memory', 'c', 'accepted'),
+        submission('s4', 'quotes', 'd'),
+      ],
     });
     const aside = await screen.findByRole('complementary');
     const editorSwitch = await within(aside).findByRole('button', { name: 'Redaktion' });
@@ -400,67 +643,409 @@ describe('navigation by view', () => {
     expect(await within(main).findByRole('heading', { level: 1, name: 'Redaktion' })).toBeInTheDocument();
     if (role === 'admin') expect(within(main).getByRole('region', { name: 'Personen' })).toBeInTheDocument();
     else {
-      expect(await within(main).findByText('3 Beiträge warten auf Prüfung · 1 Abstimmung offen')).toBeInTheDocument();
+      expect(await within(main).findByText('3 Beiträge warten auf Prüfung · 1 Wahl offen')).toBeInTheDocument();
       expect(within(main).getByRole('link', { name: /Abimotto/ })).toHaveTextContent(/34\s*Stimmen/);
       expect(within(main).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent(/3\s*Beiträge.*2 offen/);
       expect(within(main).getByRole('link', { name: /Zitate/ })).toHaveTextContent(/1\s*Beitrag1 offen/);
     }
     expect(within(aside).getByRole('link', { name: /Abimotto/ })).toHaveTextContent('34 Stimmen');
     expect(within(aside).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('3 Beiträge, 2 offen');
-    expect(within(aside).getByRole('link', { name: /Erinnerungen/ })).toHaveAttribute('href', '/redaktion?rubrik=memory');
-    expect(within(aside).getByRole('link', { name: 'Neue Abstimmung' })).toHaveAttribute('href', '/abstimmungen?neu');
+    expect(
+      within(within(aside).getByRole('group', { name: 'Fortlaufend' })).getByRole('link', { name: /Erinnerungen/ }),
+    ).toHaveAttribute('href', '/sammlungen/memory');
+    expect(within(aside).getByRole('link', { name: 'Neue Sammlung' })).toHaveAttribute('href', '/sammlungen?neu');
 
     fireEvent.click(within(aside).getByRole('button', { name: 'Schüler' }));
-    expect(await screen.findByRole('heading', { level: 1, name: /^Hey / })).toHaveTextContent(`Hey ${name.split(' ')[0]}.`);
+    expect(await screen.findByRole('heading', { level: 1, name: /^Hey / })).toHaveTextContent(
+      `Hey ${name.split(' ')[0]}.`,
+    );
     expect(within(aside).getByRole('button', { name: 'Schüler' })).toHaveAttribute('aria-pressed', 'true');
     expect(within(aside).getByRole('list', { name: 'Offen' })).toBeInTheDocument();
-    expect(within(aside).queryByRole('link', { name: 'Neue Abstimmung' })).toBeNull();
+    expect(within(aside).queryByRole('link', { name: 'Neue Sammlung' })).toBeNull();
     expect(within(aside).queryByRole('button', { name: 'Verwaltung' }) !== null).toBe(role === 'admin');
   });
 });
 
 describe('admin home', () => {
-  it('shows counts, the three newest people awaiting admission, the three latest polls and per-category tallies', async () => {
+  it('shows counts, the three newest people awaiting admission, the latest Sammlungen and one widget per class', async () => {
     localStorage.clear();
-    const admin = { id: 'admin-1', name: 'Test Admin', role: 'admin', admitted: true, cohort_member: false, category_ids: [] };
+    const admin = {
+      id: 'admin-1',
+      name: 'Test Admin',
+      role: 'admin',
+      admitted: true,
+      cohort_member: false,
+      category_ids: [],
+    };
     const day = (n: number) => new Date(Date.UTC(2026, 9, n)).toISOString();
     // Signup days are shuffled against the name order; s6 is admitted and must not appear.
-    const people = [admin, ...[[1, 3], [2, 7], [3, 1], [4, 5], [5, 2], [6, 9]].map(([i, d]) => ({ ...user, id: `s${i}`, name: `Schüler ${i}`, admitted: i === 6, created_at: day(d) }))];
-    const poll = (id: string, categoryId: string, status: string, n: number) => ({
-      id, category_id: categoryId, title: `Titel ${id}`, description: '', kind: 'proposal', format: 'single_choice', status,
-      allow_self_vote: false, options: [], my_option_id: null, version: 1, created_at: day(n), opened_at: day(n), ballot_count: 0,
-    });
-    const polls = [poll('p1', 'memory', 'open', 1), poll('p2', 'memory', 'closed', 2), poll('p3', 'quotes', 'open', 3), poll('p4', 'quotes', 'open', 4), poll('p5', 'memory', 'open', 5)];
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.endsWith('/api/v1/me')) return Response.json({ user: admin, csrf_token: 'csrf' });
-      if (url.endsWith('/api/v1/admin/users')) return Response.json(people);
-      if (url.endsWith('/api/v1/polls')) return Response.json(polls);
-      if (url.endsWith('/api/v1/categories')) return Response.json([category, { id: 'quotes', name: 'Zitate', description: '', kind: 'quote' }]);
-      if (url.endsWith('/api/v1/submissions')) return Response.json([{ category_id: 'memory' }, { category_id: 'memory' }, { category_id: 'memory' }, { category_id: 'quotes' }]);
-      return Response.json([]);
-    }));
+    const people = [
+      admin,
+      ...[
+        [1, 3],
+        [2, 7],
+        [3, 1],
+        [4, 5],
+        [5, 2],
+        [6, 9],
+      ].map(([i, d]) => ({ ...user, id: `s${i}`, name: `Schüler ${i}`, admitted: i === 6, created_at: day(d) })),
+    ];
+    const ballot = (id: string, kind: string, status: string, n: number) =>
+      sammlung(id, `Titel ${id}`, kind, {
+        status,
+        created_at: day(n),
+        opened_at: day(n),
+        ballot_count: 0,
+        options: [{ id: `${id}-a`, label: 'A' }],
+      });
+    const all = [
+      sammlung('memory', 'Erinnerungen', 'memory', { created_at: day(1) }),
+      sammlung('quotes', 'Zitate', 'quote', { created_at: day(6) }),
+      ballot('p1', 'proposal', 'open', 1),
+      ballot('p2', 'proposal', 'closed', 2),
+      ballot('p3', 'person', 'open', 3),
+      ballot('p4', 'person', 'open', 4),
+      ballot('p5', 'proposal', 'open', 5),
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith('/api/v1/me')) return Response.json({ user: admin, csrf_token: 'csrf' });
+        if (url.endsWith('/api/v1/admin/users')) return Response.json(people);
+        if (url.endsWith('/api/v1/categories')) return Response.json(all);
+        if (url.endsWith('/api/v1/submissions'))
+          return Response.json([
+            { category_id: 'memory' },
+            { category_id: 'memory' },
+            { category_id: 'memory' },
+            { category_id: 'quotes' },
+          ]);
+        return Response.json([]);
+      }),
+    );
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><MemoryRouter><App/></MemoryRouter></QueryClientProvider>);
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
 
     const people$ = await screen.findByRole('region', { name: 'Personen' });
     await waitFor(() => expect(within(people$).getByText('Angemeldet').previousElementSibling).toHaveTextContent('7'));
     expect(within(people$).getByText(/auf Freigabe/).previousElementSibling).toHaveTextContent('5');
     const waiting = within(within(people$).getByRole('list', { name: 'Warten auf Freigabe' })).getAllByRole('listitem');
-    expect(waiting.map(li => li.textContent)).toEqual([expect.stringContaining('Schüler 2'), expect.stringContaining('Schüler 4'), expect.stringContaining('Schüler 1')]);
+    expect(waiting.map((li) => li.textContent)).toEqual([
+      expect.stringContaining('Schüler 2'),
+      expect.stringContaining('Schüler 4'),
+      expect.stringContaining('Schüler 1'),
+    ]);
     expect(within(people$).getByText('und 2 weitere')).toBeInTheDocument();
-    expect(within(people$).getByRole('link', { name: /Zugänge verwalten/ })).toHaveAttribute('href', '/verwaltung/personen');
+    expect(within(people$).getByRole('link', { name: /Zugänge verwalten/ })).toHaveAttribute(
+      'href',
+      '/verwaltung/personen',
+    );
 
-    const pollCard = screen.getByRole('region', { name: 'Neueste Abstimmungen' });
-    await waitFor(() => expect(within(pollCard).getAllByRole('listitem')).toHaveLength(3));
-    expect(within(pollCard).queryByText('Erinnerungen')).toBeNull();
-    const links = within(pollCard).getAllByRole('link').filter(a => a.getAttribute('href')?.startsWith('/abstimmungen/'));
-    expect(links.map(a => a.getAttribute('href'))).toEqual(['/abstimmungen/p5', '/abstimmungen/p4', '/abstimmungen/p3']);
-    const rubriken = screen.getByRole('region', { name: 'Rubriken' });
-    const tile = (name: string) => within(rubriken).getByText(name).closest('a')!;
-    await waitFor(() => expect(tile('Erinnerungen')).toHaveTextContent('3 Beiträge'));
-    expect(tile('Erinnerungen')).toHaveTextContent('2 offen 1 beendet');
+    const latest = screen.getByRole('region', { name: 'Neueste Sammlungen' });
+    await waitFor(() => expect(within(latest).getAllByRole('listitem')).toHaveLength(4));
+    const links = within(latest)
+      .getAllByRole('link')
+      .filter((a) => a.getAttribute('href')?.startsWith('/sammlungen/'));
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      '/sammlungen/quotes',
+      '/sammlungen/p5',
+      '/sammlungen/p4',
+      '/sammlungen/p3',
+    ]);
+
+    const widgets = screen.getByRole('region', { name: 'Sammlungen' });
+    const tile = (name: string) => within(widgets).getByText(name).closest('a')!;
+    await waitFor(() => expect(tile('Erinnerungen')).toHaveTextContent('1 Sammlung'));
+    expect(within(widgets).getAllByRole('listitem')).toHaveLength(6);
+    expect(tile('Erinnerungen')).toHaveTextContent('3 Beiträge');
+    expect(tile('Erinnerungen')).toHaveAttribute('href', '/sammlungen?klasse=memory');
+    expect(tile('Zitate')).toHaveTextContent('1 Sammlung');
     expect(tile('Zitate')).toHaveTextContent('1 Beitrag');
-    expect(tile('Zitate')).toHaveTextContent('2 offen 0 beendet');
+    expect(tile('Ideen')).toHaveTextContent('0 Sammlungen');
+    expect(tile('Ideen')).toHaveTextContent('0 Beiträge');
+    expect(tile('Fotos')).toHaveTextContent('0 Sammlungen');
+    expect(tile('Vorschlagswahl')).toHaveTextContent('3 Sammlungen');
+    expect(tile('Vorschlagswahl')).toHaveTextContent('2 offen 1 beendet');
+    expect(tile('Vorschlagswahl')).not.toHaveTextContent('Beitr');
+    expect(tile('Personenwahl')).toHaveTextContent('2 Sammlungen');
+    expect(tile('Personenwahl')).toHaveTextContent('2 offen 0 beendet');
+    expect(tile('Personenwahl')).toHaveAttribute('href', '/sammlungen?klasse=person');
+  });
+});
+
+describe('sammlungen', () => {
+  const admin = {
+    id: 'admin-1',
+    name: 'Test Admin',
+    role: 'admin',
+    admitted: true,
+    cohort_member: true,
+    category_ids: [],
+  };
+  const manager = {
+    id: 'mgr-1',
+    name: 'Sam Redaktion',
+    role: 'manager',
+    admitted: true,
+    cohort_member: true,
+    category_ids: [],
+  };
+  const motto = sammlung('motto', 'Abimotto', 'proposal', {
+    status: 'open',
+    options: [
+      { id: 'o1', label: 'Eins' },
+      { id: 'o2', label: 'Zwei' },
+    ],
+    opened_at: '2026-10-02T00:00:00Z',
+  });
+  const old = sammlung('alt', 'Altlast', 'person', {
+    status: 'closed',
+    options: [
+      { id: 'x', label: 'X' },
+      { id: 'y', label: 'Y' },
+    ],
+  });
+  const draft = sammlung('entwurf', 'Geheimer Entwurf', 'proposal', {
+    status: 'draft',
+    options: [
+      { id: 'd1', label: 'D1' },
+      { id: 'd2', label: 'D2' },
+    ],
+  });
+  const quotes = sammlung('quotes', 'Zitate', 'quote', { description: 'Sprüche' });
+  const all = [category, quotes, motto, old, draft];
+  type Call = { url: string; method: string; body: Record<string, unknown> | undefined };
+  function mount(path: string, me: Record<string, unknown> = user, list: unknown[] = all) {
+    localStorage.clear();
+    const calls: Call[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input).replace('/api/v1', '');
+        const method = init?.method ?? 'GET';
+        if (url === '/me') return Response.json({ user: me, csrf_token: 'csrf' });
+        if (method !== 'GET') {
+          const c = { url, method, body: init?.body ? JSON.parse(String(init.body)) : undefined };
+          calls.push(c);
+          return Response.json({ ...(c.body ?? {}), id: 'new-cat', version: 2, option_id: c.body?.option_id });
+        }
+        if (url === '/categories')
+          return Response.json(
+            list.filter((c) => me.role !== 'student' || (c as { status: string }).status !== 'draft'),
+          );
+        if (url === '/roster')
+          return Response.json([
+            { id: 'u1', name: 'Anna' },
+            { id: 'u2', name: 'Ben' },
+          ]);
+        if (url === '/submissions')
+          return Response.json([
+            {
+              id: 's1',
+              category_id: 'memory',
+              author_id: me.id,
+              author_name: 'Wer',
+              title: 'Mein Beitrag',
+              body: '',
+              context: '',
+              status: 'pending',
+              version: 1,
+              created_at: '2026-10-01T00:00:00Z',
+              updated_at: '2026-10-01T00:00:00Z',
+              attachments: [],
+            },
+          ]);
+        return Response.json([]);
+      }),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[path]}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    return calls;
+  }
+
+  it('lists repeatable Sammlungen in their own section and single-answer ones grouped by status', async () => {
+    mount('/sammlungen');
+    await screen.findByRole('heading', { level: 1, name: 'Sammlungen' });
+    const main = screen.getByRole('main');
+    expect(await within(main).findByRole('heading', { level: 1, name: 'Sammlungen' })).toBeInTheDocument();
+    const section = (name: string) => within(main).getByRole('region', { name });
+    const fortlaufend = await waitFor(() => section('Fortlaufend'));
+    expect(within(fortlaufend).getByRole('link', { name: /Erinnerungen/ })).toHaveAttribute(
+      'href',
+      '/sammlungen/memory',
+    );
+    expect(within(fortlaufend).getByRole('link', { name: /Zitate/ })).toHaveTextContent('Beitragen');
+    expect(within(fortlaufend).queryByText('Abimotto')).toBeNull();
+    expect(within(section('Offen')).getByRole('link', { name: /Abimotto/ })).toHaveTextContent('Abstimmen');
+    expect(within(section('Beendet')).getByRole('link', { name: /Altlast/ })).toHaveTextContent('Ansehen');
+    expect(within(main).queryByRole('region', { name: 'Entwürfe' })).toBeNull();
+    expect(within(main).queryByText('Geheimer Entwurf')).toBeNull();
+    expect(within(main).queryByRole('button', { name: /Neue Sammlung/ })).toBeNull();
+  });
+
+  it('shows drafts and the create button to managers', async () => {
+    mount('/sammlungen', manager);
+    await screen.findByRole('heading', { level: 1, name: 'Sammlungen' });
+    const main = screen.getByRole('main');
+    expect(await within(main).findByRole('region', { name: 'Entwürfe' })).toHaveTextContent('Geheimer Entwurf');
+    expect(within(main).getByRole('button', { name: /Neue Sammlung/ })).toBeInTheDocument();
+  });
+
+  it('filters the list by class with ?klasse=', async () => {
+    mount('/sammlungen?klasse=quote');
+    await screen.findByRole('heading', { level: 1, name: 'Sammlungen' });
+    const main = screen.getByRole('main');
+    expect(await within(main).findByRole('link', { name: /Zitate/ })).toBeInTheDocument();
+    expect(within(main).queryByText('Abimotto')).toBeNull();
+    expect(within(main).queryByRole('region', { name: 'Offen' })).toBeNull();
+    expect(within(main).getByRole('link', { name: 'Zitate' })).toHaveAttribute('aria-current', 'true');
+  });
+
+  it.each(['/abstimmungen', '/abstimmungen?klasse=person'])(
+    'redirects the old list route %s to /sammlungen',
+    async (path) => {
+      mount(path);
+      await screen.findByRole('heading', { level: 1, name: 'Sammlungen' });
+      const main = screen.getByRole('main');
+      expect(await within(main).findByRole('heading', { level: 1, name: 'Sammlungen' })).toBeInTheDocument();
+      expect(
+        await within(main).findByRole('region', { name: path.includes('klasse') ? 'Beendet' : 'Offen' }),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it('redirects the old detail route /abstimmungen/:id to /sammlungen/:id', async () => {
+    mount('/abstimmungen/motto');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Abimotto' })).toBeInTheDocument();
+    expect(screen.getByText('Vorschlagswahl')).toBeInTheDocument();
+  });
+
+  it('renders the submission flow for a repeatable Sammlung', async () => {
+    mount('/sammlungen/memory');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Erinnerungen' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Beitrag einreichen/ })).toHaveAttribute(
+      'href',
+      '/beitraege/neu?kategorie=memory',
+    );
+    expect(await screen.findByRole('link', { name: /Mein Beitrag/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Stimme/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Beiträge prüfen' })).toBeNull();
+  });
+
+  it('offers editors review and export for a repeatable Sammlung, and editing only to admins', async () => {
+    mount('/sammlungen/memory', manager);
+    expect(await screen.findByRole('link', { name: 'Beiträge prüfen' })).toHaveAttribute(
+      'href',
+      '/redaktion?sammlung=memory',
+    );
+    expect(screen.getByRole('link', { name: /ZIP herunterladen/ })).toHaveAttribute(
+      'href',
+      '/api/v1/categories/memory/export?status=accepted',
+    );
+    expect(screen.queryByRole('button', { name: 'Sammlung bearbeiten' })).toBeNull();
+  });
+
+  it('lets an admin edit a repeatable Sammlung within its group and sends the version', async () => {
+    const calls = mount('/sammlungen/memory', admin);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung bearbeiten' }));
+    expect(
+      within(screen.getByLabelText('Klasse'))
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Ideen', 'Zitate', 'Erinnerungen', 'Fotos']);
+    fireEvent.change(screen.getByLabelText('Klasse'), { target: { value: 'photo' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]).toMatchObject({
+      url: '/categories/memory',
+      method: 'PATCH',
+      body: { version: 1, kind: 'photo', options: [] },
+    });
+  });
+
+  it('renders the ballot flow for a single-answer Sammlung and saves the vote', async () => {
+    const calls = mount('/sammlungen/motto');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Abimotto' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: 'Zwei' }));
+    fireEvent.click(screen.getByRole('button', { name: /Stimme speichern/ }));
+    await waitFor(() =>
+      expect(calls).toEqual([{ url: '/categories/motto/ballot', method: 'PUT', body: { option_id: 'o2' } }]),
+    );
+    expect(screen.queryByRole('button', { name: /Beiträge prüfen/ })).toBeNull();
+  });
+
+  it('opens a draft with the current version', async () => {
+    const calls = mount('/sammlungen/entwurf', { ...manager, category_ids: ['entwurf'] });
+    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung öffnen' }));
+    await waitFor(() =>
+      expect(calls).toEqual([
+        { url: '/categories/entwurf/status', method: 'POST', body: { version: 1, status: 'open' } },
+      ]),
+    );
+  });
+
+  it('offers managers only single-answer classes in the create form and posts a draft', async () => {
+    const calls = mount('/sammlungen?neu', manager);
+    const klasse = await screen.findByLabelText('Klasse');
+    expect(
+      within(klasse)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Personenwahl', 'Vorschlagswahl']);
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Neues Motto' } });
+    fireEvent.change(screen.getByLabelText(/Antwortoptionen/), { target: { value: 'A\nB' } });
+    fireEvent.click(screen.getByLabelText(/eigene Person/));
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]).toEqual({
+      url: '/categories',
+      method: 'POST',
+      body: {
+        name: 'Neues Motto',
+        description: '',
+        kind: 'proposal',
+        allow_self_vote: true,
+        options: [{ label: 'A' }, { label: 'B' }],
+      },
+    });
+  });
+
+  it('offers admins all six classes and hides option fields for repeatable ones', async () => {
+    mount('/sammlungen?neu', admin);
+    const klasse = await screen.findByLabelText('Klasse');
+    expect(
+      within(klasse)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Ideen', 'Zitate', 'Erinnerungen', 'Fotos', 'Personenwahl', 'Vorschlagswahl']);
+    expect(screen.queryByLabelText(/Antwortoptionen/)).toBeNull();
+    fireEvent.change(klasse, { target: { value: 'proposal' } });
+    expect(screen.getByLabelText(/Antwortoptionen/)).toBeInTheDocument();
+    fireEvent.change(klasse, { target: { value: 'person' } });
+    expect(await screen.findByLabelText('Anna')).toBeInTheDocument();
+  });
+
+  it('offers only repeatable Sammlungen on the editorial review page', async () => {
+    mount('/redaktion', manager);
+    const select = (await screen.findAllByLabelText('Sammlung'))[0];
+    await waitFor(() => expect(within(select).getAllByRole('option').length).toBeGreaterThan(1));
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Alle Sammlungen', 'Erinnerungen', 'Zitate']);
   });
 });
