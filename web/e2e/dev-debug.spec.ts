@@ -99,6 +99,7 @@ test('editor and admin diagnostics preserve short-screen navigation', async ({ p
     await page.getByRole('button', { name: 'Menü öffnen' }).click();
     const aside = page.getByRole('complementary', { name: 'Seitenleiste' });
     await expect(aside.getByRole('link', { name: 'Überblick', exact: true })).toBeVisible();
+    await aside.evaluate(element => { element.scrollTop = element.scrollHeight; });
     await expect(aside.getByRole('button', { name: /Abmelden/ })).toBeInViewport();
     if (role === 'admin') {
       await page.goto('/verwaltung/rubriken', { waitUntil: 'domcontentloaded' });

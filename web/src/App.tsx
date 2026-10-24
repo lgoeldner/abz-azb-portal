@@ -100,9 +100,9 @@ function Layout() {
         <Brand/>
       </header>
       {menu && <button type="button" tabIndex={-1} aria-hidden="true" className="fixed inset-0 z-30 bg-ink/30 min-[651px]:hidden" onClick={() => setMenu(false)}/>}
-      <aside aria-label="Seitenleiste" className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col bg-chrome max-[651px]:top-12 max-[651px]:w-[min(86vw,320px)] max-[651px]:transition-transform ${menu ? '' : 'max-[651px]:invisible max-[651px]:-translate-x-full'}`}>
+      <aside aria-label="Seitenleiste" className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col overflow-y-auto bg-chrome max-[651px]:top-12 max-[651px]:w-[min(86vw,320px)] max-[651px]:transition-transform ${menu ? '' : 'max-[651px]:invisible max-[651px]:-translate-x-full'}`}>
         <Link to="/" className="flex-none rounded-full px-5 pb-4 pt-5 max-[651px]:hidden" aria-label="AbiZeitBetrug Startseite" onClick={() => setMenu(false)}><Brand/></Link>
-        <nav aria-label="Hauptnavigation" className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-3 py-2 max-[651px]:pt-4" onClick={e => { if ((e.target as Element).closest('a')) setMenu(false); }}>
+        <nav aria-label="Hauptnavigation" className="flex min-h-24 flex-1 flex-col gap-6 overflow-y-auto px-3 py-2 max-[651px]:pt-4" onClick={e => { if ((e.target as Element).closest('a')) setMenu(false); }}>
           <NavItem to="/" icon={House}>Überblick</NavItem>
           {view[0] === 'redaktion' && editorial(user) ? <EditorNav/> : <StudentNav/>}
         </nav>
