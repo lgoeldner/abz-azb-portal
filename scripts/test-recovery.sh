@@ -56,8 +56,9 @@ dc volume create "$restored_volume" >/dev/null
 dc run -d --name "$pg" --network "$network" \
   -e POSTGRES_DB=portal -e POSTGRES_USER=portal -e POSTGRES_PASSWORD=recovery-only \
   -v "$db_volume:/var/lib/postgresql" postgres:18-alpine >/dev/null
+# Probe over TCP: during init the image runs a socket-only temporary server that pg_isready would accept.
 for attempt in $(seq 1 60); do
-  if dc exec "$pg" pg_isready -U portal -d portal >/dev/null 2>&1; then break; fi
+  if dc exec "$pg" pg_isready -h 127.0.0.1 -U portal -d portal >/dev/null 2>&1; then break; fi
   if [[ "$attempt" == 60 ]]; then echo 'Disposable PostgreSQL did not become ready' >&2; exit 1; fi
   sleep 1
 done

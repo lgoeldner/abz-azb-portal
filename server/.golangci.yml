@@ -1,0 +1,15 @@
+version: "2"
+linters:
+  # standard: errcheck, govet, ineffassign, staticcheck, unused
+  settings:
+    errcheck:
+      # Best-effort cleanup after the meaningful error was already returned or the data was synced.
+      exclude-functions:
+        - (*os.File).Close
+        - (io.ReadCloser).Close
+        - (mime/multipart.File).Close
+        - os.Remove
+        - (*mime/multipart.Form).RemoveAll
+        - (github.com/jackc/pgx/v5.Tx).Rollback
+    staticcheck:
+      checks: ["all", "-ST1000", "-ST1003", "-ST1016", "-ST1020", "-ST1021", "-ST1022", "-QF1001"]

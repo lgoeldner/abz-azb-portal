@@ -1,12 +1,6 @@
-import { Plus } from 'lucide-react'
-import { useRef, useState, type FormEvent } from 'react'
-import {
-  Link,
-  Navigate,
-  useNavigate,
-  useParams,
-  useSearchParams
-} from 'react-router-dom'
+import { Plus } from 'lucide-react';
+import { useRef, useState, type FormEvent } from 'react';
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   api,
   ApiError,
@@ -16,7 +10,6 @@ import {
   json,
   statusLabels,
   type Attachment,
-  type AuditEvent,
   type BallotAudit,
   type Category,
   type Correction,
@@ -24,9 +17,7 @@ import {
   type PollResult,
   type Revision,
   type Submission,
-  type SystemStatus,
-  type User
-} from './api'
+} from './api';
 import {
   Arrow,
   Badge,
@@ -37,122 +28,107 @@ import {
   PageHead,
   SubmissionList,
   btn,
-  categoryKindIcon,
   field,
   heading,
   label,
   notice,
   panel,
   pollKindIcon,
-  roleName,
   useAction,
   useData,
-  useSession
-} from './ui'
-import { DevDebug } from './DevDebug'
-function photoValidationError (files: File[]) {
-  if (files.length > 10) return 'Bitte wähle höchstens 10 Bilder aus.'
-  if (files.some(file => file.size > 20 * 1024 * 1024))
-    return 'Jedes Bild darf höchstens 20 MiB groß sein.'
+  useSession,
+} from './ui';
+import { DevDebug } from './DevDebug';
+function photoValidationError(files: File[]) {
+  if (files.length > 10) return 'Bitte wähle höchstens 10 Bilder aus.';
+  if (files.some((file) => file.size > 20 * 1024 * 1024)) return 'Jedes Bild darf höchstens 20 MiB groß sein.';
   const extensions: Record<string, string[]> = {
     'image/jpeg': ['jpg', 'jpeg'],
     'image/png': ['png'],
-    'image/webp': ['webp']
-  }
+    'image/webp': ['webp'],
+  };
   if (
-    files.some(file => {
-      const extension = file.name.split('.').pop()?.toLowerCase()
-      const supported = extensions[file.type]
-      return !supported || !extension || !supported.includes(extension)
+    files.some((file) => {
+      const extension = file.name.split('.').pop()?.toLowerCase();
+      const supported = extensions[file.type];
+      return !supported || !extension || !supported.includes(extension);
     })
   )
-    return 'Bitte wähle nur JPEG-, PNG- oder WebP-Bilder aus.'
-  return ''
+    return 'Bitte wähle nur JPEG-, PNG- oder WebP-Bilder aus.';
+  return '';
 }
-const kindName = (kind: Poll['kind']) =>
-  kind === 'person' ? 'Personenwahl' : 'Vorschläge & Ideen'
-export function Contributions () {
-  const { user } = useSession()
-  const categories = useData<Category[]>('/categories')
-  const submissions = useData<Submission[]>('/submissions')
-  const [status, setStatus] = useState('')
-  const [search, setSearch] = useState('')
+const kindName = (kind: Poll['kind']) => (kind === 'person' ? 'Personenwahl' : 'Vorschläge & Ideen');
+export function Contributions() {
+  const { user } = useSession();
+  const categories = useData<Category[]>('/categories');
+  const submissions = useData<Submission[]>('/submissions');
+  const [status, setStatus] = useState('');
+  const [search, setSearch] = useState('');
   const own =
     submissions.data?.filter(
-      s =>
+      (s) =>
         s.author_id === user.id &&
         (!status || s.status === status) &&
-        `${s.title} ${s.body}`.toLowerCase().includes(search.toLowerCase())
-    ) ?? []
+        `${s.title} ${s.body}`.toLowerCase().includes(search.toLowerCase()),
+    ) ?? [];
   return (
     <>
-      <PageHead title='Meine Beiträge'>
-        Alles, was du beigesteuert hast. Von der ersten Idee bis zur fertigen
-        Seite.
+      <PageHead title="Meine Beiträge">
+        Alles, was du beigesteuert hast. Von der ersten Idee bis zur fertigen Seite.
       </PageHead>
-      <div className='mb-6 flex flex-wrap items-end gap-3'>
+      <div className="mb-6 flex flex-wrap items-end gap-3">
         <label className={`${label} min-w-0 w-full sm:flex-1`}>
           Suchen
           <input
-            type='search'
+            type="search"
             className={field}
-            placeholder='Geschichte finden …'
+            placeholder="Geschichte finden …"
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
           />
         </label>
         <label className={`${label} min-w-0 w-full sm:w-56`}>
           Status
-          <select
-            className={field}
-            value={status}
-            onChange={e => setStatus(e.target.value)}
-          >
-            <option value=''>Alle Status</option>
-            {(['pending', 'accepted', 'rejected', 'withdrawn'] as const).map(
-              s => (
-                <option key={s} value={s}>
-                  {statusLabels[s]}
-                </option>
-              )
-            )}
+          <select className={field} value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">Alle Status</option>
+            {(['pending', 'accepted', 'rejected', 'withdrawn'] as const).map((s) => (
+              <option key={s} value={s}>
+                {statusLabels[s]}
+              </option>
+            ))}
           </select>
         </label>
       </div>
       {submissions.isPending ? (
         <Loading />
       ) : submissions.error ? (
-        <Failure
-          error={submissions.error}
-          retry={() => submissions.refetch()}
-        />
+        <Failure error={submissions.error} retry={() => submissions.refetch()} />
       ) : own.length ? (
         <SubmissionList items={own} categories={categories.data ?? []} />
       ) : (
         <Empty>
-          Noch keine Beiträge.{' '}
-          <Link to='/'>Wähle auf der Startseite eine Rubrik aus.</Link>
+          Noch keine Beiträge. <Link to="/">Wähle auf der Startseite eine Rubrik aus.</Link>
         </Empty>
       )}
     </>
-  )
+  );
 }
-export function NewContribution () {
-  const categories = useData<Category[]>('/categories')
-  const [params] = useSearchParams()
-  const navigate = useNavigate()
-  const action = useAction()
-  const key = useRef(crypto.randomUUID())
-  const [saved, setSaved] = useState<Submission | null>(null)
-  const [files, setFiles] = useState<File[]>([])
-  const category = categories.data?.find(c => c.id === params.get('kategorie'))
+export function NewContribution() {
+  const categories = useData<Category[]>('/categories');
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const action = useAction();
+  const key = useRef(crypto.randomUUID());
+  const [saved, setSaved] = useState<Submission | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const category = categories.data?.find((c) => c.id === params.get('kategorie'));
 
-  async function submit (e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const data = new FormData(e.currentTarget)
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const data = new FormData(e.currentTarget);
     await action.run(async () => {
-      const invalidFiles = photoValidationError(files)
-      if (invalidFiles) throw new Error(invalidFiles)
+      const invalidFiles = photoValidationError(files);
+      if (invalidFiles) throw new Error(invalidFiles);
 
       let current =
         saved ??
@@ -163,44 +139,31 @@ export function NewContribution () {
             category_id: data.get('category_id'),
             title: data.get('title'),
             body: data.get('body'),
-            context: data.get('context')
-          })
-        ))
-      setSaved(current)
-      let remaining = [...files]
+            context: data.get('context'),
+          }),
+        ));
+      setSaved(current);
+      let remaining = [...files];
       for (const file of files) {
-        const upload = new FormData()
-        upload.set('file', file)
-        upload.set('version', String(current.version))
-        current = await api<Submission>(
-          `/submissions/${current.id}/attachments`,
-          { method: 'POST', body: upload }
-        )
-        setSaved(current)
-        remaining = remaining.slice(1)
-        setFiles(remaining)
+        const upload = new FormData();
+        upload.set('file', file);
+        upload.set('version', String(current.version));
+        current = await api<Submission>(`/submissions/${current.id}/attachments`, { method: 'POST', body: upload });
+        setSaved(current);
+        remaining = remaining.slice(1);
+        setFiles(remaining);
       }
-      navigate(`/beitraege/${current.id}`)
-    })
+      navigate(`/beitraege/${current.id}`);
+    });
   }
 
   return (
     <>
-      <Link
-        className='mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink'
-        to='/beitraege'
-      >
+      <Link className="mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink" to="/beitraege">
         ← Meine Beiträge
       </Link>
-      <PageHead
-        title={
-          category
-            ? `Beitrag für „${category.name}“`
-            : 'Was sollen wir festhalten?'
-        }
-      >
-        Dein Beitrag wird erst nach der Prüfung durch die Redaktion für die
-        Zeitung übernommen.
+      <PageHead title={category ? `Beitrag für „${category.name}“` : 'Was sollen wir festhalten?'}>
+        Dein Beitrag wird erst nach der Prüfung durch die Redaktion für die Zeitung übernommen.
       </PageHead>
       {categories.isPending ? (
         <Loading />
@@ -209,21 +172,18 @@ export function NewContribution () {
       ) : !categories.data?.length ? (
         <Empty>Das Team richtet die Rubriken gerade ein.</Empty>
       ) : !category ? (
-        <Navigate to='/' replace />
+        <Navigate to="/" replace />
       ) : (
-        <div className='grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start'>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start">
           <form className={`${panel} min-w-0 space-y-5`} onSubmit={submit}>
-            <input type='hidden' name='category_id' value={category.id} />
-            <fieldset
-              className='min-w-0 space-y-5'
-              disabled={action.busy || !!saved}
-            >
+            <input type="hidden" name="category_id" value={category.id} />
+            <fieldset className="min-w-0 space-y-5" disabled={action.busy || !!saved}>
               <label className={label}>
                 Titel
                 <input
                   className={field}
-                  name='title'
-                  placeholder='Gib deiner Erinnerung einen Namen'
+                  name="title"
+                  placeholder="Gib deiner Erinnerung einen Namen"
                   maxLength={200}
                   required
                 />
@@ -232,191 +192,160 @@ export function NewContribution () {
                 Dein Beitrag
                 <textarea
                   className={field}
-                  name='body'
+                  name="body"
                   rows={7}
-                  placeholder='Was ist passiert? Welcher Spruch darf nicht fehlen?'
+                  placeholder="Was ist passiert? Welcher Spruch darf nicht fehlen?"
                   maxLength={20000}
                 />
               </label>
               <label className={label}>
-                Kontext & Hinweise{' '}
-                <small className='font-normal text-muted'>optional</small>
+                Kontext & Hinweise <small className="font-normal text-muted">optional</small>
                 <textarea
                   className={field}
-                  name='context'
+                  name="context"
                   rows={3}
-                  placeholder='Wer, wann, wo? Was soll die Redaktion dazu wissen?'
+                  placeholder="Wer, wann, wo? Was soll die Redaktion dazu wissen?"
                   maxLength={5000}
                 />
               </label>
             </fieldset>
             <label className={label}>
               Fotos{' '}
-              <small className='block font-normal text-muted'>
-                JPEG, PNG oder WebP · höchstens 10 Bilder · je 20 MiB ·
-                höchstens 24 Megapixel
+              <small className="block font-normal text-muted">
+                JPEG, PNG oder WebP · höchstens 10 Bilder · je 20 MiB · höchstens 24 Megapixel
               </small>
               <input
-                className='mt-2 block w-full text-sm text-muted file:mr-3 file:rounded-ui file:border file:border-line file:bg-white file:px-3 file:py-2 file:text-sm file:font-semibold file:text-ink hover:file:bg-soft'
-                type='file'
+                className="mt-2 block w-full text-sm text-muted file:mr-3 file:rounded-ui file:border file:border-line file:bg-white file:px-3 file:py-2 file:text-sm file:font-semibold file:text-ink hover:file:bg-soft"
+                type="file"
                 multiple
-                accept='image/jpeg,image/png,image/webp'
+                accept="image/jpeg,image/png,image/webp"
                 disabled={action.busy}
-                onChange={e => setFiles(Array.from(e.target.files ?? []))}
+                onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
               />
             </label>
             {files.length > 0 && (
-              <p className='text-sm text-muted'>
-                {files.length} Datei(en) zum Hochladen:{' '}
-                {files.map(f => f.name).join(', ')}
+              <p className="text-sm text-muted">
+                {files.length} Datei(en) zum Hochladen: {files.map((f) => f.name).join(', ')}
               </p>
             )}
             {saved && (
               <p className={notice}>
-                Der Text ist bereits gespeichert. Noch ausstehende Fotos kannst
-                du erneut hochladen.{' '}
-                <Link
-                  className='font-semibold underline'
-                  to={`/beitraege/${saved.id}`}
-                >
+                Der Text ist bereits gespeichert. Noch ausstehende Fotos kannst du erneut hochladen.{' '}
+                <Link className="font-semibold underline" to={`/beitraege/${saved.id}`}>
                   Zum gespeicherten Beitrag
                 </Link>
               </p>
             )}
             {action.feedback}
             {saved && action.error && files.length > 0 && (
-              <button
-                type='button'
-                className={btn.secondary}
-                onClick={() => navigate(`/beitraege/${saved.id}`)}
-              >
+              <button type="button" className={btn.secondary} onClick={() => navigate(`/beitraege/${saved.id}`)}>
                 Ohne weitere Fotos fortfahren
               </button>
             )}
-            <div className='flex flex-wrap items-center justify-between gap-3'>
-              <Link to='/beitraege' className={btn.text}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Link to="/beitraege" className={btn.text}>
                 Abbrechen
               </Link>
               <button className={btn.primary} disabled={action.busy}>
-                {action.busy
-                  ? 'Wird gespeichert …'
-                  : saved
-                  ? 'Fotos erneut hochladen'
-                  : 'Beitrag einreichen'}{' '}
-                <Arrow />
+                {action.busy ? 'Wird gespeichert …' : saved ? 'Fotos erneut hochladen' : 'Beitrag einreichen'} <Arrow />
               </button>
             </div>
           </form>
-          <aside className='rounded-ui bg-chrome p-5 text-sm text-muted sm:p-6'>
+          <aside className="rounded-ui bg-chrome p-5 text-sm text-muted sm:p-6">
             <h3 className={heading}>
               Kleine Momente.
               <br />
               Große Geschichten.
             </h3>
-            <p className='mt-2'>
-              Ein Insider aus dem Unterricht, das beste Foto der Klassenfahrt
-              oder eine Idee für unsere Zeitung.
+            <p className="mt-2">
+              Ein Insider aus dem Unterricht, das beste Foto der Klassenfahrt oder eine Idee für unsere Zeitung.
             </p>
-            <hr className='my-4 border-line' />
-            <strong className='block text-ink'>
-              Dein Beitrag bleibt bearbeitbar.
-            </strong>
-            <p className='mt-1'>
-              Solange er in Prüfung ist, kannst du Text und Bilder jederzeit
-              ändern.
-            </p>
-            <small className='mt-4 block'>
-              Bitte lade nur Bilder hoch, die du für unsere Abizeitung verwenden
-              darfst.
+            <hr className="my-4 border-line" />
+            <strong className="block text-ink">Dein Beitrag bleibt bearbeitbar.</strong>
+            <p className="mt-1">Solange er in Prüfung ist, kannst du Text und Bilder jederzeit ändern.</p>
+            <small className="mt-4 block">
+              Bitte lade nur Bilder hoch, die du für unsere Abizeitung verwenden darfst.
             </small>
           </aside>
         </div>
       )}
     </>
-  )
+  );
 }
-export function ContributionDetail () {
-  const { id } = useParams()
-  const { user } = useSession()
-  const item = useData<Submission>(`/submissions/${id}`)
-  const categories = useData<Category[]>('/categories')
-  const revisions = useData<Revision[]>(`/submissions/${id}/revisions`)
-  const corrections = useData<Correction[]>(`/submissions/${id}/corrections`)
-  const action = useAction()
-  const [editing, setEditing] = useState(false)
-  const [baseVersion, setBaseVersion] = useState(0)
+export function ContributionDetail() {
+  const { id } = useParams();
+  const { user } = useSession();
+  const item = useData<Submission>(`/submissions/${id}`);
+  const categories = useData<Category[]>('/categories');
+  const revisions = useData<Revision[]>(`/submissions/${id}/revisions`);
+  const corrections = useData<Correction[]>(`/submissions/${id}/corrections`);
+  const action = useAction();
+  const [editing, setEditing] = useState(false);
+  const [baseVersion, setBaseVersion] = useState(0);
   const [draft, setDraft] = useState({
     title: '',
     body: '',
     context: '',
-    category_id: ''
-  })
-  const [file, setFile] = useState<File | null>(null)
-  const [correction, setCorrection] = useState('')
-  if (item.isPending) return <Loading />
-  if (item.error)
-    return <Failure error={item.error} retry={() => item.refetch()} />
-  const s = item.data
-  const own = s.author_id === user.id
-  const writable =
-    (s.status === 'pending' && own) || canEdit(user, s.category_id)
-  const editable = writable && (s.status === 'pending' || editorial(user))
-  const categoryName = categories.data?.find(c => c.id === s.category_id)?.name
+    category_id: '',
+  });
+  const [file, setFile] = useState<File | null>(null);
+  const [correction, setCorrection] = useState('');
+  if (item.isPending) return <Loading />;
+  if (item.error) return <Failure error={item.error} retry={() => item.refetch()} />;
+  const s = item.data;
+  const own = s.author_id === user.id;
+  const writable = (s.status === 'pending' && own) || canEdit(user, s.category_id);
+  const editable = writable && (s.status === 'pending' || editorial(user));
+  const categoryName = categories.data?.find((c) => c.id === s.category_id)?.name;
   const beginEdit = () => {
     setDraft({
       title: s.title,
       body: s.body,
       context: s.context,
-      category_id: s.category_id
-    })
-    setBaseVersion(s.version)
-    setEditing(true)
-  }
+      category_id: s.category_id,
+    });
+    setBaseVersion(s.version);
+    setEditing(true);
+  };
   const setStatus = (status: Submission['status']) =>
     action.run(async () => {
-      await api(
-        `/submissions/${id}/status`,
-        json('POST', { version: s.version, status })
-      )
-    }, 'Status aktualisiert.')
-  async function save (e: FormEvent) {
-    e.preventDefault()
+      await api(`/submissions/${id}/status`, json('POST', { version: s.version, status }));
+    }, 'Status aktualisiert.');
+  async function save(e: FormEvent) {
+    e.preventDefault();
     await action.run(async () => {
-      await api(
-        `/submissions/${id}`,
-        json('PATCH', { version: baseVersion, ...draft })
-      )
-      setEditing(false)
-    }, 'Änderungen gespeichert.')
+      await api(`/submissions/${id}`, json('PATCH', { version: baseVersion, ...draft }));
+      setEditing(false);
+    }, 'Änderungen gespeichert.');
   }
-  async function upload (e: FormEvent) {
-    e.preventDefault()
-    if (!file) return
+  async function upload(e: FormEvent) {
+    e.preventDefault();
+    if (!file) return;
     await action.run(async () => {
-      const data = new FormData()
-      data.set('file', file!)
-      data.set('version', String(s.version))
+      const data = new FormData();
+      data.set('file', file!);
+      data.set('version', String(s.version));
       await api(`/submissions/${id}/attachments`, {
         method: 'POST',
-        body: data
-      })
-      setFile(null)
-    }, 'Datei hochgeladen.')
+        body: data,
+      });
+      setFile(null);
+    }, 'Datei hochgeladen.');
   }
   return (
     <>
       <Link
-        className='mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink'
+        className="mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink"
         to={own ? '/beitraege' : '/redaktion'}
       >
         ← {own ? 'Meine Beiträge' : 'Redaktion'}
       </Link>
       <PageHead title={s.title} action={<Badge status={s.status} />}>
-        {categoryName && `${categoryName} · `}Von {s.author_name} · Aktualisiert
-        am {date(s.updated_at)} · Version {s.version}
+        {categoryName && `${categoryName} · `}Von {s.author_name} · Aktualisiert am {date(s.updated_at)} · Version{' '}
+        {s.version}
       </PageHead>
       <DevDebug
-        label='Beitrag'
+        label="Beitrag"
         data={{
           id: s.id,
           category: s.category_id,
@@ -424,31 +353,26 @@ export function ContributionDetail () {
           version: s.version,
           attachments: s.attachments?.length ?? 0,
           editable,
-          own
+          own,
         }}
       />
       {action.feedback}
-      {action.error instanceof ApiError &&
-        action.error.status === 409 &&
-        editing && (
-          <div className={`${notice} space-y-3`}>
-            <button
-              className={btn.secondary}
-              onClick={async () => {
-                const latest = await item.refetch()
-                if (latest.data) setBaseVersion(latest.data.version)
-              }}
-            >
-              Aktuelle Version laden · Eingaben behalten
-            </button>
-            <p>
-              Vergleiche den aktuellen Beitrag unter dem Formular mit deinem
-              Entwurf, bevor du erneut speicherst.
-            </p>
-          </div>
-        )}
-      <div className='grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start'>
-        <div className='min-w-0 space-y-6'>
+      {action.error instanceof ApiError && action.error.status === 409 && editing && (
+        <div className={`${notice} space-y-3`}>
+          <button
+            className={btn.secondary}
+            onClick={async () => {
+              const latest = await item.refetch();
+              if (latest.data) setBaseVersion(latest.data.version);
+            }}
+          >
+            Aktuelle Version laden · Eingaben behalten
+          </button>
+          <p>Vergleiche den aktuellen Beitrag unter dem Formular mit deinem Entwurf, bevor du erneut speicherst.</p>
+        </div>
+      )}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start">
+        <div className="min-w-0 space-y-6">
           {editing ? (
             <form className={`${panel} space-y-5`} onSubmit={save}>
               <label className={label}>
@@ -458,7 +382,7 @@ export function ContributionDetail () {
                   value={draft.title}
                   maxLength={200}
                   required
-                  onChange={e => setDraft({ ...draft, title: e.target.value })}
+                  onChange={(e) => setDraft({ ...draft, title: e.target.value })}
                 />
               </label>
               <label className={label}>
@@ -466,13 +390,11 @@ export function ContributionDetail () {
                 <select
                   className={field}
                   value={draft.category_id}
-                  onChange={e =>
-                    setDraft({ ...draft, category_id: e.target.value })
-                  }
+                  onChange={(e) => setDraft({ ...draft, category_id: e.target.value })}
                 >
                   {categories.data
-                    ?.filter(c => own || canEdit(user, c.id))
-                    .map(c => (
+                    ?.filter((c) => own || canEdit(user, c.id))
+                    .map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
@@ -485,7 +407,7 @@ export function ContributionDetail () {
                   className={field}
                   rows={8}
                   value={draft.body}
-                  onChange={e => setDraft({ ...draft, body: e.target.value })}
+                  onChange={(e) => setDraft({ ...draft, body: e.target.value })}
                 />
               </label>
               <label className={label}>
@@ -494,17 +416,11 @@ export function ContributionDetail () {
                   className={field}
                   rows={3}
                   value={draft.context}
-                  onChange={e =>
-                    setDraft({ ...draft, context: e.target.value })
-                  }
+                  onChange={(e) => setDraft({ ...draft, context: e.target.value })}
                 />
               </label>
-              <div className='flex flex-wrap items-center justify-between gap-3'>
-                <button
-                  type='button'
-                  className={btn.secondary}
-                  onClick={() => setEditing(false)}
-                >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <button type="button" className={btn.secondary} onClick={() => setEditing(false)}>
                   Abbrechen
                 </button>
                 <button className={btn.primary} disabled={action.busy}>
@@ -514,40 +430,29 @@ export function ContributionDetail () {
             </form>
           ) : null}
           <article className={panel}>
-            <div className='flex flex-wrap items-center justify-between gap-3'>
-              <h2 className={heading}>
-                {editing ? 'Aktueller Stand' : 'Deine Geschichte'}
-              </h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className={heading}>{editing ? 'Aktueller Stand' : 'Deine Geschichte'}</h2>
               {editable && !editing && (
                 <button className={btn.secondary} onClick={beginEdit}>
                   Bearbeiten <Arrow />
                 </button>
               )}
             </div>
-            <p className='mt-4 whitespace-pre-wrap break-words text-[15px]'>
-              {s.body || 'Kein Text hinzugefügt.'}
-            </p>
+            <p className="mt-4 whitespace-pre-wrap break-words text-[15px]">{s.body || 'Kein Text hinzugefügt.'}</p>
             {s.context && (
-              <div className='mt-5 border-t border-line pt-4'>
-                <h3 className='text-sm font-semibold text-muted'>
-                  Kontext & Hinweise
-                </h3>
-                <p className='mt-1 whitespace-pre-wrap break-words text-[15px]'>
-                  {s.context}
-                </p>
+              <div className="mt-5 border-t border-line pt-4">
+                <h3 className="text-sm font-semibold text-muted">Kontext & Hinweise</h3>
+                <p className="mt-1 whitespace-pre-wrap break-words text-[15px]">{s.context}</p>
               </div>
             )}
           </article>
           <section className={panel}>
             <h2 className={heading}>
-              Fotos{' '}
-              <small className='font-normal text-muted'>
-                ({s.attachments?.length ?? 0})
-              </small>
+              Fotos <small className="font-normal text-muted">({s.attachments?.length ?? 0})</small>
             </h2>
             {!!s.attachments?.length && (
-              <div className='mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3'>
-                {s.attachments.map(a => (
+              <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                {s.attachments.map((a) => (
                   <AttachmentCard
                     key={a.id}
                     attachment={a}
@@ -555,12 +460,8 @@ export function ContributionDetail () {
                     busy={action.busy}
                     onRemove={() =>
                       action.run(
-                        () =>
-                          api(
-                            `/submissions/${id}/attachments/${a.id}`,
-                            json('DELETE', { version: s.version })
-                          ),
-                        'Datei entfernt.'
+                        () => api(`/submissions/${id}/attachments/${a.id}`, json('DELETE', { version: s.version })),
+                        'Datei entfernt.',
                       )
                     }
                   />
@@ -568,35 +469,26 @@ export function ContributionDetail () {
               </div>
             )}
             {editable && (
-              <form
-                className='mt-5 flex flex-wrap items-end gap-3 border-t border-line pt-5'
-                onSubmit={upload}
-              >
+              <form className="mt-5 flex flex-wrap items-end gap-3 border-t border-line pt-5" onSubmit={upload}>
                 <label className={`${label} min-w-0 flex-1 basis-64`}>
                   Foto hinzufügen{' '}
-                  <small className='block font-normal text-muted'>
-                    JPEG, PNG oder WebP · höchstens 10 Bilder · je 20 MiB ·
-                    höchstens 24 Megapixel
+                  <small className="block font-normal text-muted">
+                    JPEG, PNG oder WebP · höchstens 10 Bilder · je 20 MiB · höchstens 24 Megapixel
                   </small>
                   <input
-                    className='mt-2 block w-full text-sm text-muted file:mr-3 file:rounded-ui file:border file:border-line file:bg-white file:px-3 file:py-2 file:text-sm file:font-semibold file:text-ink hover:file:bg-soft'
-                    type='file'
+                    className="mt-2 block w-full text-sm text-muted file:mr-3 file:rounded-ui file:border file:border-line file:bg-white file:px-3 file:py-2 file:text-sm file:font-semibold file:text-ink hover:file:bg-soft"
+                    type="file"
                     required
-                    accept='image/jpeg,image/png,image/webp'
-                    onChange={e => setFile(e.target.files?.[0] ?? null)}
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                   />
                 </label>
-                <button
-                  className={btn.secondary}
-                  disabled={action.busy || !file}
-                >
+                <button className={btn.secondary} disabled={action.busy || !file}>
                   Hochladen ↑
                 </button>
               </form>
             )}
-            {!s.attachments?.length && !editable && (
-              <p className='mt-3 text-sm text-muted'>Keine Fotos vorhanden.</p>
-            )}
+            {!s.attachments?.length && !editable && <p className="mt-3 text-sm text-muted">Keine Fotos vorhanden.</p>}
           </section>
           <section className={`${panel} space-y-4`}>
             <h2 className={heading}>Korrekturwünsche</h2>
@@ -605,29 +497,23 @@ export function ContributionDetail () {
             ) : corrections.error ? (
               <Failure error={corrections.error} />
             ) : corrections.data?.length ? (
-              corrections.data.map(c => (
-                <article className='border-t border-line pt-4' key={c.id}>
-                  <div className='flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1'>
+              corrections.data.map((c) => (
+                <article className="border-t border-line pt-4" key={c.id}>
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                     <strong>{c.author_name}</strong>
-                    <small className='text-muted'>
+                    <small className="text-muted">
                       {date(c.created_at)} · {c.resolved ? 'Erledigt' : 'Offen'}
                     </small>
                   </div>
-                  <p className='mt-1 whitespace-pre-wrap break-words'>
-                    {c.body}
-                  </p>
+                  <p className="mt-1 whitespace-pre-wrap break-words">{c.body}</p>
                   {!c.resolved && canEdit(user, s.category_id) && (
                     <button
                       className={`${btn.secondary} mt-3`}
                       disabled={action.busy}
                       onClick={() =>
                         action.run(
-                          () =>
-                            api(
-                              `/submissions/${id}/corrections/${c.id}/resolve`,
-                              json('POST')
-                            ),
-                          'Korrektur als erledigt markiert.'
+                          () => api(`/submissions/${id}/corrections/${c.id}/resolve`, json('POST')),
+                          'Korrektur als erledigt markiert.',
                         )
                       }
                     >
@@ -637,20 +523,17 @@ export function ContributionDetail () {
                 </article>
               ))
             ) : (
-              <p className='text-sm text-muted'>Noch keine Korrekturwünsche.</p>
+              <p className="text-sm text-muted">Noch keine Korrekturwünsche.</p>
             )}
             {own && s.status !== 'pending' && (
               <form
-                className='space-y-3 border-t border-line pt-5'
-                onSubmit={e => {
-                  e.preventDefault()
+                className="space-y-3 border-t border-line pt-5"
+                onSubmit={(e) => {
+                  e.preventDefault();
                   action.run(async () => {
-                    await api(
-                      `/submissions/${id}/corrections`,
-                      json('POST', { body: correction })
-                    )
-                    setCorrection('')
-                  }, 'Korrekturwunsch gesendet.')
+                    await api(`/submissions/${id}/corrections`, json('POST', { body: correction }));
+                    setCorrection('');
+                  }, 'Korrekturwunsch gesendet.');
                 }}
               >
                 <label className={label}>
@@ -660,8 +543,8 @@ export function ContributionDetail () {
                     rows={3}
                     value={correction}
                     required
-                    onChange={e => setCorrection(e.target.value)}
-                    placeholder='Was soll korrigiert werden?'
+                    onChange={(e) => setCorrection(e.target.value)}
+                    placeholder="Was soll korrigiert werden?"
                   />
                 </label>
                 <button className={btn.secondary} disabled={action.busy}>
@@ -671,30 +554,24 @@ export function ContributionDetail () {
             )}
           </section>
         </div>
-        <aside className='min-w-0 space-y-6'>
+        <aside className="min-w-0 space-y-6">
           <section className={`${panel} space-y-4`}>
             <h3 className={heading}>
-              {s.status === 'pending'
-                ? 'Die Redaktion liest mit.'
-                : 'Dein Beitrag ist geprüft.'}
+              {s.status === 'pending' ? 'Die Redaktion liest mit.' : 'Dein Beitrag ist geprüft.'}
             </h3>
-            <p className='text-sm text-muted'>
+            <p className="text-sm text-muted">
               {s.status === 'pending'
                 ? 'Bis zur Entscheidung kannst du deinen Beitrag noch anpassen.'
                 : 'Du hast noch eine Änderung? Schicke einen Korrekturwunsch an das Team.'}
             </p>
             {own && s.status === 'pending' && (
-              <button
-                className={btn.danger}
-                disabled={action.busy}
-                onClick={() => setStatus('withdrawn')}
-              >
+              <button className={btn.danger} disabled={action.busy} onClick={() => setStatus('withdrawn')}>
                 Beitrag zurückziehen
               </button>
             )}
             {canEdit(user, s.category_id) &&
               (s.status === 'pending' ? (
-                <div className='flex flex-col gap-3'>
+                <div className="flex flex-col gap-3">
                   <button
                     className={editing ? btn.secondary : btn.primary}
                     disabled={action.busy}
@@ -702,27 +579,18 @@ export function ContributionDetail () {
                   >
                     Für die Zeitung annehmen ✓
                   </button>
-                  <button
-                    className={btn.danger}
-                    disabled={action.busy}
-                    onClick={() => setStatus('rejected')}
-                  >
+                  <button className={btn.danger} disabled={action.busy} onClick={() => setStatus('rejected')}>
                     Ablehnen
                   </button>
                 </div>
               ) : (
-                <button
-                  className={btn.secondary}
-                  disabled={action.busy}
-                  onClick={() => setStatus('pending')}
-                >
+                <button className={btn.secondary} disabled={action.busy} onClick={() => setStatus('pending')}>
                   Erneut zur Prüfung öffnen
                 </button>
               ))}
             {editorial(user) && !canEdit(user, s.category_id) && (
-              <p className='text-sm text-muted'>
-                Leserechte · Zum Bearbeiten brauchst du eine Zuweisung zu dieser
-                Rubrik.
+              <p className="text-sm text-muted">
+                Leserechte · Zum Bearbeiten brauchst du eine Zuweisung zu dieser Rubrik.
               </p>
             )}
           </section>
@@ -733,26 +601,19 @@ export function ContributionDetail () {
             ) : revisions.error ? (
               <Failure error={revisions.error} />
             ) : (
-              revisions.data?.map(r => (
-                <details
-                  className='mt-3 border-t border-line pt-3 text-sm'
-                  key={r.id}
-                >
-                  <summary className='cursor-pointer'>
+              revisions.data?.map((r) => (
+                <details className="mt-3 border-t border-line pt-3 text-sm" key={r.id}>
+                  <summary className="cursor-pointer">
                     <strong>Version {r.version}</strong>{' '}
-                    <small className='text-muted'>
+                    <small className="text-muted">
                       {r.actor_name} · {date(r.created_at)}
                     </small>
                   </summary>
-                  <div className='mt-3 space-y-2'>
+                  <div className="mt-3 space-y-2">
                     <Badge status={r.status} />
-                    <h4 className='font-semibold'>{r.title}</h4>
-                    <p className='whitespace-pre-wrap break-words'>{r.body}</p>
-                    {r.context && (
-                      <p className='whitespace-pre-wrap break-words text-muted'>
-                        {r.context}
-                      </p>
-                    )}
+                    <h4 className="font-semibold">{r.title}</h4>
+                    <p className="whitespace-pre-wrap break-words">{r.body}</p>
+                    {r.context && <p className="whitespace-pre-wrap break-words text-muted">{r.context}</p>}
                   </div>
                 </details>
               ))
@@ -761,87 +622,69 @@ export function ContributionDetail () {
         </aside>
       </div>
     </>
-  )
+  );
 }
-function AttachmentCard ({
+function AttachmentCard({
   attachment: a,
   removable,
   busy,
-  onRemove
+  onRemove,
 }: {
-  attachment: Attachment
-  removable: boolean
-  busy: boolean
-  onRemove: () => void
+  attachment: Attachment;
+  removable: boolean;
+  busy: boolean;
+  onRemove: () => void;
 }) {
   return (
-    <div className='flex min-w-0 flex-col gap-2 text-sm'>
+    <div className="flex min-w-0 flex-col gap-2 text-sm">
       {a.mime_type.startsWith('image/') && (
-        <a href={a.url} target='_blank' rel='noreferrer'>
+        <a href={a.url} target="_blank" rel="noreferrer">
           <img
-            className='aspect-[4/3] w-full rounded-ui bg-pill object-cover'
+            className="aspect-[4/3] w-full rounded-ui bg-pill object-cover"
             src={a.preview_url}
             alt={a.filename}
-            loading='lazy'
+            loading="lazy"
           />
         </a>
       )}
-      <a
-        className='min-w-0 break-words font-semibold underline'
-        href={a.url}
-        target='_blank'
-        rel='noreferrer'
-      >
+      <a className="min-w-0 break-words font-semibold underline" href={a.url} target="_blank" rel="noreferrer">
         {a.filename} ↗
       </a>
-      <small className='text-muted'>
-        {(a.size_bytes / 1024).toFixed(0)} KB
-      </small>
+      <small className="text-muted">{(a.size_bytes / 1024).toFixed(0)} KB</small>
       {removable && (
-        <button
-          type='button'
-          className={btn.danger}
-          disabled={busy}
-          onClick={onRemove}
-        >
+        <button type="button" className={btn.danger} disabled={busy} onClick={onRemove}>
           Datei entfernen
         </button>
       )}
     </div>
-  )
+  );
 }
-export function Editorial () {
-  const categories = useData<Category[]>('/categories')
-  const [params, setParams] = useSearchParams()
-  const category = params.get('rubrik') ?? ''
-  const setCategory = (id: string) =>
-    setParams(id ? { rubrik: id } : {}, { replace: true })
-  const [status, setStatus] = useState('pending')
-  const [search, setSearch] = useState('')
-  const { user } = useSession()
+export function Editorial() {
+  const categories = useData<Category[]>('/categories');
+  const [params, setParams] = useSearchParams();
+  const category = params.get('rubrik') ?? '';
+  const setCategory = (id: string) => setParams(id ? { rubrik: id } : {}, { replace: true });
+  const [status, setStatus] = useState('pending');
+  const [search, setSearch] = useState('');
+  const { user } = useSession();
   const path = `/submissions?${new URLSearchParams({
     category_id: category,
     status,
-    q: search
-  })}`
-  const items = useData<Submission[]>(path)
-  const [exportStatus, setExportStatus] = useState('accepted')
+    q: search,
+  })}`;
+  const items = useData<Submission[]>(path);
+  const [exportStatus, setExportStatus] = useState('accepted');
   return (
     <>
-      <PageHead title='Aus Geschichten wird Zeitung.'>
-        Alle Beiträge im Blick. Du bearbeitest die Rubriken, die dir zugewiesen
-        sind.
+      <PageHead title="Aus Geschichten wird Zeitung.">
+        Alle Beiträge im Blick. Du bearbeitest die Rubriken, die dir zugewiesen sind.
       </PageHead>
-      <div className='mb-6 flex flex-wrap items-end gap-3'>
+      <div className="mb-6 flex flex-wrap items-end gap-3">
         <label className={`${label} min-w-0 w-full sm:w-56`}>
           Rubrik
-          <select
-            className={field}
-            value={category}
-            onChange={e => setCategory(e.target.value)}
-          >
-            <option value=''>Alle Rubriken</option>
-            {categories.data?.map(c => (
+          <select className={field} value={category} onChange={(e) => setCategory(e.target.value)}>
+            <option value="">Alle Rubriken</option>
+            {categories.data?.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
                 {canEdit(user, c.id) ? ' · zugewiesen' : ''}
@@ -851,29 +694,23 @@ export function Editorial () {
         </label>
         <label className={`${label} min-w-0 w-full sm:w-48`}>
           Status
-          <select
-            className={field}
-            value={status}
-            onChange={e => setStatus(e.target.value)}
-          >
-            <option value=''>Alle Status</option>
-            {(['pending', 'accepted', 'rejected', 'withdrawn'] as const).map(
-              s => (
-                <option key={s} value={s}>
-                  {statusLabels[s]}
-                </option>
-              )
-            )}
+          <select className={field} value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">Alle Status</option>
+            {(['pending', 'accepted', 'rejected', 'withdrawn'] as const).map((s) => (
+              <option key={s} value={s}>
+                {statusLabels[s]}
+              </option>
+            ))}
           </select>
         </label>
         <label className={`${label} min-w-0 w-full sm:flex-1`}>
           Suchen
           <input
-            type='search'
+            type="search"
             className={field}
             value={search}
-            placeholder='Titel, Text, Name …'
-            onChange={e => setSearch(e.target.value)}
+            placeholder="Titel, Text, Name …"
+            onChange={(e) => setSearch(e.target.value)}
           />
         </label>
       </div>
@@ -882,34 +719,23 @@ export function Editorial () {
       ) : items.error ? (
         <Failure error={items.error} retry={() => items.refetch()} />
       ) : items.data?.length ? (
-        <SubmissionList
-          items={items.data}
-          categories={categories.data ?? []}
-          showAuthor
-        />
+        <SubmissionList items={items.data} categories={categories.data ?? []} showAuthor />
       ) : (
         <Empty>In dieser Auswahl sind noch keine Beiträge.</Empty>
       )}
-      <section
-        className={`${panel} mt-10 flex flex-wrap items-end justify-between gap-6`}
-      >
-        <div className='min-w-0 max-w-md'>
+      <section className={`${panel} mt-10 flex flex-wrap items-end justify-between gap-6`}>
+        <div className="min-w-0 max-w-md">
           <h2 className={heading}>Eine Rubrik exportieren</h2>
-          <p className='mt-1 text-sm text-muted'>
-            ZIP mit CSV, Originaldateien und Manifest. Abstimmungsdaten sind
-            nicht enthalten.
+          <p className="mt-1 text-sm text-muted">
+            ZIP mit CSV, Originaldateien und Manifest. Abstimmungsdaten sind nicht enthalten.
           </p>
         </div>
-        <div className='flex flex-wrap items-end gap-3'>
+        <div className="flex flex-wrap items-end gap-3">
           <label className={`${label} min-w-0 w-full sm:w-56`}>
             Rubrik
-            <select
-              className={field}
-              value={category}
-              onChange={e => setCategory(e.target.value)}
-            >
-              <option value=''>Rubrik auswählen</option>
-              {categories.data?.map(c => (
+            <select className={field} value={category} onChange={(e) => setCategory(e.target.value)}>
+              <option value="">Rubrik auswählen</option>
+              {categories.data?.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
@@ -918,20 +744,13 @@ export function Editorial () {
           </label>
           <label className={`${label} min-w-0 w-full sm:w-56`}>
             Umfang
-            <select
-              className={field}
-              value={exportStatus}
-              onChange={e => setExportStatus(e.target.value)}
-            >
-              <option value='accepted'>Nur angenommene Beiträge</option>
-              <option value='all'>Alle Beiträge inklusive abgelehnter</option>
+            <select className={field} value={exportStatus} onChange={(e) => setExportStatus(e.target.value)}>
+              <option value="accepted">Nur angenommene Beiträge</option>
+              <option value="all">Alle Beiträge inklusive abgelehnter</option>
             </select>
           </label>
           {category ? (
-            <a
-              className={btn.primary}
-              href={`/api/v1/categories/${category}/export?status=${exportStatus}`}
-            >
+            <a className={btn.primary} href={`/api/v1/categories/${category}/export?status=${exportStatus}`}>
               ZIP herunterladen ↓
             </a>
           ) : (
@@ -942,98 +761,79 @@ export function Editorial () {
         </div>
       </section>
     </>
-  )
+  );
 }
-export function Polls () {
-  const { user } = useSession()
-  const [params, setParams] = useSearchParams()
-  const polls = useData<Poll[]>('/polls')
-  const creating = editorial(user) && params.has('neu')
-  const setCreating = (open: boolean) =>
-    setParams(open ? { neu: '' } : {}, { replace: true })
+export function Polls() {
+  const { user } = useSession();
+  const [params, setParams] = useSearchParams();
+  const polls = useData<Poll[]>('/polls');
+  const creating = editorial(user) && params.has('neu');
+  const setCreating = (open: boolean) => setParams(open ? { neu: '' } : {}, { replace: true });
   return (
     <>
       <PageHead
-        title='Der Jahrgang entscheidet.'
+        title="Der Jahrgang entscheidet."
         action={
           editorial(user) && (
-            <button
-              className={creating ? btn.secondary : btn.primary}
-              onClick={() => setCreating(!creating)}
-            >
+            <button className={creating ? btn.secondary : btn.primary} onClick={() => setCreating(!creating)}>
               {creating ? (
                 'Formular schließen'
               ) : (
                 <>
-                  Neue Abstimmung{' '}
-                  <Plus aria-hidden='true' className='size-4 shrink-0' />
+                  Neue Abstimmung <Plus aria-hidden="true" className="size-4 shrink-0" />
                 </>
               )}
             </button>
           )
         }
       >
-        Wer bleibt uns in Erinnerung? Welche Idee schafft es ins Heft? Stimme
-        mit ab.
+        Wer bleibt uns in Erinnerung? Welche Idee schafft es ins Heft? Stimme mit ab.
       </PageHead>
       <div className={`${notice} mb-8 space-y-1`}>
-        <strong className='block'>Transparent abgestimmt.</strong>
+        <strong className="block">Transparent abgestimmt.</strong>
         <p>
-          Deine Stimme wird deinem Namen zugeordnet. Die Administration kann
-          Stimmen und Änderungen nachvollziehen. Die Redaktion sieht nur
-          Gesamtergebnisse. Als Schüler:in siehst du keine Ergebnisse. Du kannst
-          deine Stimme ändern, solange die Abstimmung offen ist.
+          Deine Stimme wird deinem Namen zugeordnet. Die Administration kann Stimmen und Änderungen nachvollziehen. Die
+          Redaktion sieht nur Gesamtergebnisse. Als Schüler:in siehst du keine Ergebnisse. Du kannst deine Stimme
+          ändern, solange die Abstimmung offen ist.
         </p>
       </div>
       {creating && <PollForm onSaved={() => setCreating(false)} />}
-      <div className='mb-4 flex flex-wrap items-baseline justify-between gap-2'>
+      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className={heading}>Unsere Abstimmungen</h2>
-        <span className='text-sm text-muted'>Eine Auswahl pro Person</span>
+        <span className="text-sm text-muted">Eine Auswahl pro Person</span>
       </div>
       {polls.isPending ? (
         <Loading />
       ) : polls.error ? (
         <Failure error={polls.error} retry={() => polls.refetch()} />
       ) : polls.data?.length ? (
-        <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-3'>
-          {polls.data.map(p => (
-            <div
-              className={
-                import.meta.env.DEV
-                  ? 'flex h-full min-w-0 flex-col'
-                  : 'contents'
-              }
-              key={p.id}
-            >
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {polls.data.map((p) => (
+            <div className={import.meta.env.DEV ? 'flex h-full min-w-0 flex-col' : 'contents'} key={p.id}>
               <Link
-                className='flex min-w-0 flex-1 flex-col gap-3 rounded-ui bg-white p-5 transition-colors hover:border-muted'
+                className="flex min-w-0 flex-1 flex-col gap-3 rounded-ui bg-white p-5 transition-colors hover:border-muted"
                 to={`/abstimmungen/${p.id}`}
               >
-                <div className='flex items-start justify-between gap-3'>
+                <div className="flex items-start justify-between gap-3">
                   <h2 className={`${heading} min-w-0`}>{p.title}</h2>
                   <Badge status={p.status} />
                 </div>
-                <p className='text-sm text-muted'>{p.description}</p>
-                <div className='mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line pt-3 text-sm text-muted'>
-                  <span className='flex min-w-0 flex-1 items-start gap-1.5'>
-                    <KindIcon
-                      icon={pollKindIcon[p.kind]}
-                      className='mt-[3px] size-4'
-                    />
+                <p className="text-sm text-muted">{p.description}</p>
+                <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line pt-3 text-sm text-muted">
+                  <span className="flex min-w-0 flex-1 items-start gap-1.5">
+                    <KindIcon icon={pollKindIcon[p.kind]} className="mt-[3px] size-4" />
                     <span>
                       {kindName(p.kind)},{' '}
-                      {p.my_option_id
-                        ? '✓ Deine Stimme ist gespeichert'
-                        : `${p.options.length} Optionen`}
+                      {p.my_option_id ? '✓ Deine Stimme ist gespeichert' : `${p.options.length} Optionen`}
                     </span>
                   </span>
-                  <span className='inline-flex flex-none items-center gap-1 whitespace-nowrap font-semibold text-ink'>
+                  <span className="inline-flex flex-none items-center gap-1 whitespace-nowrap font-semibold text-ink">
                     {p.status === 'open' ? 'Abstimmen' : 'Ansehen'} <Arrow />
                   </span>
                 </div>
               </Link>
               <DevDebug
-                label='Abstimmung'
+                label="Abstimmung"
                 data={{
                   id: p.id,
                   category: p.category_id,
@@ -1042,7 +842,7 @@ export function Polls () {
                   version: p.version,
                   options: p.options.length,
                   allowSelfVote: p.allow_self_vote,
-                  hasVoted: p.my_option_id !== null
+                  hasVoted: p.my_option_id !== null,
                 }}
               />
             </div>
@@ -1052,37 +852,34 @@ export function Polls () {
         <Empty>Hier geht’s bald los. Aktuell gibt es keine Abstimmungen.</Empty>
       )}
     </>
-  )
+  );
 }
-function PollForm ({ poll, onSaved }: { poll?: Poll; onSaved: () => void }) {
-  const { user } = useSession()
-  const categories = useData<Category[]>('/categories')
-  const roster = useData<{ id: string; name: string }[]>('/roster')
-  const action = useAction()
-  const [kind, setKind] = useState<Poll['kind']>(poll?.kind ?? 'proposal')
+function PollForm({ poll, onSaved }: { poll?: Poll; onSaved: () => void }) {
+  const { user } = useSession();
+  const categories = useData<Category[]>('/categories');
+  const roster = useData<{ id: string; name: string }[]>('/roster');
+  const action = useAction();
+  const [kind, setKind] = useState<Poll['kind']>(poll?.kind ?? 'proposal');
   const [selected, setSelected] = useState<string[]>(
-    poll?.options.flatMap(o => (o.user_id ? [o.user_id] : [])) ?? []
-  )
-  const [options, setOptions] = useState(
-    poll?.options.map(o => o.label).join('\n') ?? ''
-  )
-  function save (e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const data = new FormData(e.currentTarget)
+    poll?.options.flatMap((o) => (o.user_id ? [o.user_id] : [])) ?? [],
+  );
+  const [options, setOptions] = useState(poll?.options.map((o) => o.label).join('\n') ?? '');
+  function save(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const data = new FormData(e.currentTarget);
     const choices =
       kind === 'person'
-        ? selected.map(id => ({
-            label: roster.data?.find(u => u.id === id)?.name ?? '',
-            user_id: id
+        ? selected.map((id) => ({
+            label: roster.data?.find((u) => u.id === id)?.name ?? '',
+            user_id: id,
           }))
         : options
             .split('\n')
-            .map(s => s.trim())
+            .map((s) => s.trim())
             .filter(Boolean)
-            .map(text => ({ label: text }))
+            .map((text) => ({ label: text }));
     action.run(async () => {
-      if (choices.length < 2)
-        throw new Error('Bitte mindestens zwei Optionen auswählen.')
+      if (choices.length < 2) throw new Error('Bitte mindestens zwei Optionen auswählen.');
       await api(
         poll ? `/polls/${poll.id}` : '/polls',
         json(poll ? 'PATCH' : 'POST', {
@@ -1092,29 +889,22 @@ function PollForm ({ poll, onSaved }: { poll?: Poll; onSaved: () => void }) {
           description: data.get('description'),
           kind,
           allow_self_vote: data.get('allow_self_vote') === 'on',
-          options: choices
-        })
-      )
-      onSaved()
-    }, 'Abstimmung gespeichert.')
+          options: choices,
+        }),
+      );
+      onSaved();
+    }, 'Abstimmung gespeichert.');
   }
   return (
     <form className={`${panel} mb-10 space-y-5`} onSubmit={save}>
-      <h2 className={heading}>
-        {poll ? 'Entwurf bearbeiten' : 'Eine neue Abstimmung'}
-      </h2>
+      <h2 className={heading}>{poll ? 'Entwurf bearbeiten' : 'Eine neue Abstimmung'}</h2>
       <label className={label}>
         Rubrik
-        <select
-          className={field}
-          name='category_id'
-          required
-          defaultValue={poll?.category_id}
-        >
-          <option value=''>Bitte auswählen</option>
+        <select className={field} name="category_id" required defaultValue={poll?.category_id}>
+          <option value="">Bitte auswählen</option>
           {categories.data
-            ?.filter(c => canEdit(user, c.id))
-            .map(c => (
+            ?.filter((c) => canEdit(user, c.id))
+            .map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
@@ -1123,73 +913,48 @@ function PollForm ({ poll, onSaved }: { poll?: Poll; onSaved: () => void }) {
       </label>
       <label className={label}>
         Titel
-        <input
-          className={field}
-          name='title'
-          defaultValue={poll?.title}
-          maxLength={200}
-          required
-        />
+        <input className={field} name="title" defaultValue={poll?.title} maxLength={200} required />
       </label>
       <label className={label}>
         Beschreibung
-        <textarea
-          className={field}
-          name='description'
-          defaultValue={poll?.description}
-          rows={3}
-        />
+        <textarea className={field} name="description" defaultValue={poll?.description} rows={3} />
       </label>
       <label className={label}>
         Art
-        <select
-          className={field}
-          value={kind}
-          onChange={e => setKind(e.target.value as Poll['kind'])}
-        >
-          <option value='proposal'>Vorschläge & Ideen</option>
-          <option value='person'>Personenwahl</option>
+        <select className={field} value={kind} onChange={(e) => setKind(e.target.value as Poll['kind'])}>
+          <option value="proposal">Vorschläge & Ideen</option>
+          <option value="person">Personenwahl</option>
         </select>
       </label>
       {kind === 'proposal' ? (
         <label className={label}>
-          Antwortoptionen{' '}
-          <small className='font-normal text-muted'>
-            eine Option pro Zeile
-          </small>
+          Antwortoptionen <small className="font-normal text-muted">eine Option pro Zeile</small>
           <textarea
             className={field}
             rows={5}
             value={options}
-            onChange={e => setOptions(e.target.value)}
+            onChange={(e) => setOptions(e.target.value)}
             required
             placeholder={'Option A\nOption B'}
           />
         </label>
       ) : (
-        <fieldset className='min-w-0 space-y-3'>
+        <fieldset className="min-w-0 space-y-3">
           <legend className={label}>Kandidat:innen · mindestens zwei</legend>
           {roster.isPending ? (
             <Loading />
           ) : roster.error ? (
             <Failure error={roster.error} />
           ) : (
-            <div className='grid gap-2 sm:grid-cols-2'>
-              {roster.data?.map(u => (
-                <label
-                  className='flex items-center gap-2.5 text-[15px]'
-                  key={u.id}
-                >
+            <div className="grid gap-2 sm:grid-cols-2">
+              {roster.data?.map((u) => (
+                <label className="flex items-center gap-2.5 text-[15px]" key={u.id}>
                   <input
-                    className='size-4 shrink-0 accent-[var(--color-accent)]'
-                    type='checkbox'
+                    className="size-4 shrink-0 accent-[var(--color-accent)]"
+                    type="checkbox"
                     checked={selected.includes(u.id)}
-                    onChange={e =>
-                      setSelected(
-                        e.target.checked
-                          ? [...selected, u.id]
-                          : selected.filter(id => id !== u.id)
-                      )
+                    onChange={(e) =>
+                      setSelected(e.target.checked ? [...selected, u.id] : selected.filter((id) => id !== u.id))
                     }
                   />
                   {u.name}
@@ -1199,21 +964,19 @@ function PollForm ({ poll, onSaved }: { poll?: Poll; onSaved: () => void }) {
           )}
         </fieldset>
       )}
-      <label className='flex items-center gap-2.5 text-[15px]'>
+      <label className="flex items-center gap-2.5 text-[15px]">
         <input
-          className='size-4 shrink-0 accent-[var(--color-accent)]'
-          type='checkbox'
-          name='allow_self_vote'
+          className="size-4 shrink-0 accent-[var(--color-accent)]"
+          type="checkbox"
+          name="allow_self_vote"
           defaultChecked={poll?.allow_self_vote}
         />
         Stimme für die eigene Person erlauben
       </label>
-      <p className='text-sm text-muted'>
-        Format: Eine Auswahl. Nach dem Öffnen ist die Definition gesperrt.
-      </p>
+      <p className="text-sm text-muted">Format: Eine Auswahl. Nach dem Öffnen ist die Definition gesperrt.</p>
       {action.feedback}
-      <div className='flex flex-wrap items-center justify-between gap-3'>
-        <button type='button' className={btn.secondary} onClick={onSaved}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <button type="button" className={btn.secondary} onClick={onSaved}>
           Abbrechen
         </button>
         <button className={btn.primary} disabled={action.busy}>
@@ -1221,55 +984,48 @@ function PollForm ({ poll, onSaved }: { poll?: Poll; onSaved: () => void }) {
         </button>
       </div>
     </form>
-  )
+  );
 }
-export function PollDetail () {
-  const { id } = useParams()
-  const { user } = useSession()
-  const polls = useData<Poll[]>('/polls')
-  const poll = polls.data?.find(p => p.id === id)
-  const action = useAction()
-  const savedChoice = poll?.my_option_id ?? null
-  const [choice, setChoice] = useState<string | null>(savedChoice)
-  const [syncedChoice, setSyncedChoice] = useState(savedChoice)
-  const [editing, setEditing] = useState(false)
-  const results = useData<PollResult[]>(
-    `/polls/${id}/results`,
-    !!poll && editorial(user)
-  )
-  const [auditOpen, setAuditOpen] = useState(false)
-  const audit = useData<BallotAudit[]>(
-    `/polls/${id}/audit`,
-    auditOpen && user.role === 'admin'
-  )
+export function PollDetail() {
+  const { id } = useParams();
+  const { user } = useSession();
+  const polls = useData<Poll[]>('/polls');
+  const poll = polls.data?.find((p) => p.id === id);
+  const action = useAction();
+  const savedChoice = poll?.my_option_id ?? null;
+  const [choice, setChoice] = useState<string | null>(savedChoice);
+  const [syncedChoice, setSyncedChoice] = useState(savedChoice);
+  const [editing, setEditing] = useState(false);
+  const results = useData<PollResult[]>(`/polls/${id}/results`, !!poll && editorial(user));
+  const [auditOpen, setAuditOpen] = useState(false);
+  const audit = useData<BallotAudit[]>(`/polls/${id}/audit`, auditOpen && user.role === 'admin');
   if (syncedChoice !== savedChoice) {
-    setSyncedChoice(savedChoice)
-    setChoice(savedChoice)
+    setSyncedChoice(savedChoice);
+    setChoice(savedChoice);
   } // reset the selection when the saved ballot changes
-  if (polls.isPending) return <Loading />
-  if (polls.error)
-    return <Failure error={polls.error} retry={() => polls.refetch()} />
-  if (!poll) return <NotFound />
-  const writable = canEdit(user, poll.category_id)
-  const eligible = user.admitted && user.cohort_member
-  const total = results.data?.reduce((n, r) => n + r.count, 0) ?? 0
+  if (polls.isPending) return <Loading />;
+  if (polls.error) return <Failure error={polls.error} retry={() => polls.refetch()} />;
+  if (!poll) return <NotFound />;
+  const writable = canEdit(user, poll.category_id);
+  const eligible = user.admitted && user.cohort_member;
+  const total = results.data?.reduce((n, r) => n + r.count, 0) ?? 0;
   return (
     <>
       <Link
-        className='mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink'
+        className="mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink"
         to={editorial(user) ? '/abstimmungen' : '/'}
       >
         {editorial(user) ? '← Abstimmungen' : '← Zurück'}
       </Link>
       <PageHead title={poll.title} action={<Badge status={poll.status} />}>
-        <span className='inline-flex items-center gap-1.5 align-[-3px]'>
+        <span className="inline-flex items-center gap-1.5 align-[-3px]">
           <KindIcon icon={pollKindIcon[poll.kind]} />
           {kindName(poll.kind)}
         </span>
         {poll.description && `. ${poll.description}`}
       </PageHead>
       <DevDebug
-        label='Abstimmung'
+        label="Abstimmung"
         data={{
           id: poll.id,
           category: poll.category_id,
@@ -1278,41 +1034,35 @@ export function PollDetail () {
           version: poll.version,
           options: poll.options.length,
           allowSelfVote: poll.allow_self_vote,
-          hasVoted: poll.my_option_id !== null
+          hasVoted: poll.my_option_id !== null,
         }}
       />
       {action.feedback}
       {editing ? (
         <PollForm poll={poll} onSaved={() => setEditing(false)} />
       ) : (
-        <div className='grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start'>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start">
           <section className={`${panel} min-w-0 space-y-5`}>
             <h2 className={heading}>
               {poll.status === 'open'
                 ? 'Wem gibst du deine Stimme?'
                 : poll.status === 'closed'
-                ? 'Die Abstimmung ist beendet.'
-                : 'Diese Abstimmung ist ein Entwurf.'}
+                  ? 'Die Abstimmung ist beendet.'
+                  : 'Diese Abstimmung ist ein Entwurf.'}
             </h2>
             <form
-              className='space-y-4'
-              onSubmit={e => {
-                e.preventDefault()
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
                 action.run(async () => {
-                  await api(
-                    `/polls/${id}/ballot`,
-                    json('PUT', { option_id: choice })
-                  )
-                }, 'Deine Stimme wurde gespeichert.')
+                  await api(`/polls/${id}/ballot`, json('PUT', { option_id: choice }));
+                }, 'Deine Stimme wurde gespeichert.');
               }}
             >
-              <fieldset
-                className='min-w-0 space-y-2'
-                disabled={poll.status !== 'open' || !eligible || action.busy}
-              >
-                <legend className='sr-only'>Eine Option auswählen</legend>
-                {poll.options.map(o => {
-                  const self = o.user_id === user.id && !poll.allow_self_vote
+              <fieldset className="min-w-0 space-y-2" disabled={poll.status !== 'open' || !eligible || action.busy}>
+                <legend className="sr-only">Eine Option auswählen</legend>
+                {poll.options.map((o) => {
+                  const self = o.user_id === user.id && !poll.allow_self_vote;
                   return (
                     <label
                       className={`flex cursor-pointer items-center gap-3 rounded-ui border-2 bg-white px-4 py-3 text-[15px] ${
@@ -1321,27 +1071,25 @@ export function PollDetail () {
                       key={o.id}
                     >
                       <input
-                        className='size-4 shrink-0 accent-[var(--color-accent)]'
-                        type='radio'
-                        name='ballot'
+                        className="size-4 shrink-0 accent-[var(--color-accent)]"
+                        type="radio"
+                        name="ballot"
                         value={o.id}
                         checked={choice === o.id}
                         onChange={() => setChoice(o.id)}
                         disabled={self}
                       />
-                      <span className='min-w-0 flex-1 break-words'>
+                      <span className="min-w-0 flex-1 break-words">
                         {o.label}
                         {self && (
-                          <small className='block text-sm text-muted'>
+                          <small className="block text-sm text-muted">
                             Eine Stimme für dich selbst ist hier nicht erlaubt.
                           </small>
                         )}
                       </span>
-                      {choice === o.id && (
-                        <span className='font-semibold text-ink'>✓</span>
-                      )}
+                      {choice === o.id && <span className="font-semibold text-ink">✓</span>}
                     </label>
-                  )
+                  );
                 })}
               </fieldset>
               {poll.status === 'open' && (
@@ -1351,47 +1099,32 @@ export function PollDetail () {
                     action.busy ||
                     !choice ||
                     !eligible ||
-                    poll.options.some(
-                      o =>
-                        o.id === choice &&
-                        o.user_id === user.id &&
-                        !poll.allow_self_vote
-                    )
+                    poll.options.some((o) => o.id === choice && o.user_id === user.id && !poll.allow_self_vote)
                   }
                 >
-                  {poll.my_option_id ? 'Stimme ändern' : 'Stimme speichern'}{' '}
-                  <Arrow />
+                  {poll.my_option_id ? 'Stimme ändern' : 'Stimme speichern'} <Arrow />
                 </button>
               )}
-              {!eligible && (
-                <p className={notice}>
-                  Nur freigegebene Mitglieder des Jahrgangs dürfen abstimmen.
-                </p>
-              )}
+              {!eligible && <p className={notice}>Nur freigegebene Mitglieder des Jahrgangs dürfen abstimmen.</p>}
               {poll.my_option_id && (
-                <p className='text-sm font-semibold text-ok'>
-                  ✓ Gespeicherte Stimme:{' '}
-                  {poll.options.find(o => o.id === poll.my_option_id)?.label}
+                <p className="text-sm font-semibold text-ok">
+                  ✓ Gespeicherte Stimme: {poll.options.find((o) => o.id === poll.my_option_id)?.label}
                 </p>
               )}
             </form>
-            <p className='text-sm text-muted'>
-              Namentliche Abstimmung: Die Administration kann deine Stimme und
-              Änderungen zuordnen. Während der Öffnung kannst du deine Auswahl
-              ändern. Ergebnisse sind für Schüler:innen nicht sichtbar.
+            <p className="text-sm text-muted">
+              Namentliche Abstimmung: Die Administration kann deine Stimme und Änderungen zuordnen. Während der Öffnung
+              kannst du deine Auswahl ändern. Ergebnisse sind für Schüler:innen nicht sichtbar.
             </p>
           </section>
-          <aside className='min-w-0 space-y-6'>
+          <aside className="min-w-0 space-y-6">
             {writable && (
               <section className={panel}>
                 <h3 className={heading}>Abstimmung verwalten</h3>
-                <div className='mt-4 flex flex-col gap-3'>
+                <div className="mt-4 flex flex-col gap-3">
                   {poll.status === 'draft' && (
                     <>
-                      <button
-                        className={btn.secondary}
-                        onClick={() => setEditing(true)}
-                      >
+                      <button className={btn.secondary} onClick={() => setEditing(true)}>
                         Definition bearbeiten
                       </button>
                       <button
@@ -1404,18 +1137,17 @@ export function PollDetail () {
                                 `/polls/${id}/status`,
                                 json('POST', {
                                   version: poll.version,
-                                  status: 'open'
-                                })
+                                  status: 'open',
+                                }),
                               ),
-                            'Abstimmung geöffnet.'
+                            'Abstimmung geöffnet.',
                           )
                         }
                       >
                         Abstimmung öffnen
                       </button>
-                      <p className='text-sm text-muted'>
-                        Die Definition kann nach dem Öffnen nicht mehr geändert
-                        werden.
+                      <p className="text-sm text-muted">
+                        Die Definition kann nach dem Öffnen nicht mehr geändert werden.
                       </p>
                     </>
                   )}
@@ -1430,10 +1162,10 @@ export function PollDetail () {
                               `/polls/${id}/status`,
                               json('POST', {
                                 version: poll.version,
-                                status: 'closed'
-                              })
+                                status: 'closed',
+                              }),
                             ),
-                          'Abstimmung beendet.'
+                          'Abstimmung beendet.',
                         )
                       }
                     >
@@ -1449,29 +1181,22 @@ export function PollDetail () {
                 {results.isPending ? (
                   <Loading />
                 ) : results.error ? (
-                  <Failure
-                    error={results.error}
-                    retry={() => results.refetch()}
-                  />
+                  <Failure error={results.error} retry={() => results.refetch()} />
                 ) : (
                   <>
-                    <p className='mt-1 text-sm text-muted'>
-                      Nur für die Redaktion · {total} abgegebene Stimme(n)
-                    </p>
-                    <div className='mt-4 space-y-4'>
-                      {results.data?.map(r => (
-                        <div className='min-w-0' key={r.option_id}>
-                          <div className='flex items-baseline justify-between gap-3'>
-                            <strong className='min-w-0 break-words'>
-                              {r.label}
-                            </strong>
-                            <span className='tabular-nums'>{r.count}</span>
+                    <p className="mt-1 text-sm text-muted">Nur für die Redaktion · {total} abgegebene Stimme(n)</p>
+                    <div className="mt-4 space-y-4">
+                      {results.data?.map((r) => (
+                        <div className="min-w-0" key={r.option_id}>
+                          <div className="flex items-baseline justify-between gap-3">
+                            <strong className="min-w-0 break-words">{r.label}</strong>
+                            <span className="tabular-nums">{r.count}</span>
                           </div>
-                          <div className='mt-1.5 h-1.5 overflow-hidden rounded-full bg-pill'>
+                          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-pill">
                             <span
-                              className='block h-full rounded-full bg-ink'
+                              className="block h-full rounded-full bg-ink"
                               style={{
-                                width: `${total ? (r.count / total) * 100 : 0}%`
+                                width: `${total ? (r.count / total) * 100 : 0}%`,
                               }}
                             />
                           </div>
@@ -1487,59 +1212,39 @@ export function PollDetail () {
       )}
       {user.role === 'admin' && (
         <section className={`${panel} mt-6 space-y-4`}>
-          <button
-            className={btn.secondary}
-            aria-expanded={auditOpen}
-            onClick={() => setAuditOpen(!auditOpen)}
-          >
-            {auditOpen
-              ? 'Stimmprotokoll schließen'
-              : 'Namentliches Stimmprotokoll öffnen'}
+          <button className={btn.secondary} aria-expanded={auditOpen} onClick={() => setAuditOpen(!auditOpen)}>
+            {auditOpen ? 'Stimmprotokoll schließen' : 'Namentliches Stimmprotokoll öffnen'}
           </button>
           {auditOpen && (
             <>
-              <p className='text-sm text-muted'>
-                Vertraulich · Enthält die Zuordnung von Stimmen und deren
-                Änderungen.
+              <p className="text-sm text-muted">
+                Vertraulich · Enthält die Zuordnung von Stimmen und deren Änderungen.
               </p>
               {audit.isPending ? (
                 <Loading />
               ) : audit.error ? (
                 <Failure error={audit.error} />
               ) : (
-                <div className='relative overflow-x-auto'>
-                  <table className='w-full text-left text-sm'>
+                <div className="relative overflow-x-auto">
+                  <table className="w-full text-left text-sm">
                     <thead>
-                      <tr className='text-[13px] text-muted'>
-                        <th className='py-2 pr-4 font-normal'>Name</th>
-                        <th className='py-2 pr-4 font-normal'>Auswahl</th>
-                        <th className='py-2 text-right font-normal'>
-                          Zeitpunkt
-                        </th>
+                      <tr className="text-[13px] text-muted">
+                        <th className="py-2 pr-4 font-normal">Name</th>
+                        <th className="py-2 pr-4 font-normal">Auswahl</th>
+                        <th className="py-2 text-right font-normal">Zeitpunkt</th>
                       </tr>
                     </thead>
                     <tbody>
                       {audit.data?.map((a, i) => (
-                        <tr
-                          className='border-t border-line'
-                          key={`${a.user_id}-${i}`}
-                        >
-                          <td className='py-3 pr-4 align-top'>{a.user_name}</td>
-                          <td className='py-3 pr-4 align-top'>
-                            {a.option_label}
-                          </td>
-                          <td className='py-3 text-right align-top tabular-nums'>
-                            {date(a.created_at)}
-                          </td>
+                        <tr className="border-t border-line" key={`${a.user_id}-${i}`}>
+                          <td className="py-3 pr-4 align-top">{a.user_name}</td>
+                          <td className="py-3 pr-4 align-top">{a.option_label}</td>
+                          <td className="py-3 text-right align-top tabular-nums">{date(a.created_at)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  {!audit.data?.length && (
-                    <p className='mt-3 text-sm text-muted'>
-                      Noch keine Stimmen.
-                    </p>
-                  )}
+                  {!audit.data?.length && <p className="mt-3 text-sm text-muted">Noch keine Stimmen.</p>}
                 </div>
               )}
             </>
@@ -1547,17 +1252,17 @@ export function PollDetail () {
         </section>
       )}
     </>
-  )
+  );
 }
-export function NotFound () {
+export function NotFound() {
   return (
     <>
-      <PageHead title='Diese Seite ist nicht verfügbar.'>
+      <PageHead title="Diese Seite ist nicht verfügbar.">
         Vielleicht wurde der Link geändert oder du hast keinen Zugriff.
       </PageHead>
-      <Link className={btn.primary} to='/'>
+      <Link className={btn.primary} to="/">
         Zur Übersicht <Arrow />
       </Link>
     </>
-  )
+  );
 }

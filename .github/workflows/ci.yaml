@@ -1,15 +1,67 @@
 name: CI
 
 on:
-  push:
+  push: # every branch
   pull_request:
+  schedule:
+    - cron: '17 5 * * 1' # weekly, so new advisories surface without a push
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  verify:
+  lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Go lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15.0
+          install-mode: goinstall # built with go.mod's Go, so new language versions never break the linter
+          working-directory: server
+      - name: Shell lint
+        run: shellcheck -S warning scripts/*.sh deployables/backup/*.sh
+      - name: Frontend lint and types
+        run: cd web && npm ci && npm run lint && npm run typecheck
+      - name: API contract
+        run: node scripts/check-contract.mjs
+
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Go vulnerabilities reachable from our code (incl. standard library)
+        run: cd server && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - name: npm advisories
+        run: cd web && npm audit --audit-level=high
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:18-alpine
@@ -20,17 +72,17 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U portal -d portal_test"
+          --health-cmd "pg_isready -h 127.0.0.1 -U portal -d portal_test"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
-          go-version: '1.27.1'
+          go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
@@ -39,8 +91,12 @@ jobs:
         env:
           TEST_DATABASE_URL: postgres://portal:portal_test@localhost:5432/portal_test?sslmode=disable
         run: cd server && go test -race ./... && go vet ./...
-      - name: Frontend tests, types and production build
-        run: cd web && npm ci && npm run typecheck && npm test -- --run && npm run build
+      - name: Frontend tests and production build
+        run: cd web && npm ci && npm test -- --run && npm run build
+      - name: Ops shell and restore safety checks
+        run: |
+          bash deployables/backup/test-backup-lock.sh
+          bash deployables/backup/test-restore-safety.sh
       - name: Start migrated and seeded app
         env:
           APP_ENV: development
@@ -65,35 +121,42 @@ jobs:
           /tmp/portal seed
           go build -o /tmp/auth-mock ./cmd/auth-mock
           ADDR=:9090 /tmp/auth-mock >/tmp/auth-mock.log 2>&1 &
-          for attempt in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl --fail --silent http://localhost:9090/healthz; then break; fi
             sleep 1
           done
           curl --fail --silent http://localhost:9090/healthz
           /tmp/portal serve >/tmp/portal.log 2>&1 &
-          for attempt in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             curl --fail --silent http://127.0.0.1:8080/readyz && exit 0
             sleep 1
           done
           cat /tmp/portal.log
           exit 1
-      - name: Playwright core journeys
+      # No browser download: the runner's preinstalled Google Chrome is used. The suite asserts
+      # behaviour and layout invariants (no overflow, no page crash), not pixel snapshots.
+      - name: Browser journeys and layout checks
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:8080
+          PLAYWRIGHT_CHANNEL: chrome
           DEBUG_EXPECT_PRODUCTION: '1'
-        run: cd web && npx playwright install --with-deps chromium && npm run test:e2e
-      - name: Ops shell and restore safety checks
-        run: |
-          bash -n deployables/backup/backup.sh deployables/backup/restore.sh deployables/backup/test-backup-lock.sh deployables/backup/test-restore-safety.sh scripts/test-recovery.sh
-          bash deployables/backup/test-backup-lock.sh
-          bash deployables/backup/test-restore-safety.sh
-      - name: API contract
-        run: node scripts/check-contract.mjs
+        run: cd web && npm run test:e2e
+      - name: Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-traces
+          path: web/test-results/
+          retention-days: 7
+      - name: App logs
+        if: failure()
+        run: cat /tmp/portal.log /tmp/auth-mock.log
 
   recovery:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Disposable container backup and restore drill
         env:
           DOCKER_CONTEXT: default

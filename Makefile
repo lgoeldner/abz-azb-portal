@@ -1,7 +1,7 @@
 COMPOSE := docker compose
 DEV_COMPOSE := docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml
 
-.PHONY: env doctor dev dev\:frontend dev\:backend down check backup restore migrate
+.PHONY: env doctor dev dev\:frontend dev\:backend down check lint audit backup restore migrate
 
 dev:
 	bash scripts/dev.sh
@@ -30,6 +30,17 @@ check:
 	cd server && go test -race ./... && go vet ./...
 	cd web && npm ci && npm run typecheck && npm test -- --run && npm run build
 	node scripts/check-contract.mjs
+	$(MAKE) lint
+
+# The linter is built with go.mod's Go, matching CI.
+lint:
+	shellcheck -S warning scripts/*.sh deployables/backup/*.sh
+	cd server && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...
+	cd web && npm run lint
+
+audit:
+	cd server && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	cd web && npm audit --audit-level=high
 
 migrate:
 	$(COMPOSE) run --rm --no-deps portal migrate
