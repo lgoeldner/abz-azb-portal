@@ -1,9 +1,10 @@
-import { ArrowRight, ClipboardList, FileText, Hourglass, House, Plus, Settings, UserCheck, Users, Vote, type LucideIcon } from 'lucide-react';
+import { ArrowRight, ChevronDown, ClipboardList, FileText, Hourglass, House, Plus, ScrollText, Settings, Tags, UserCheck, Users, Vote, type LucideIcon } from 'lucide-react';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { api, ApiError, editorial, json, setCsrf, type Category, type Me, type Poll, type Submission, type User } from './api';
 import { Arrow, Badge, Empty, Failure, KindIcon, Loading, PageHead, Session, SubmissionList, btn, categoryKindIcon, heading, notice, pollKindIcon, roleName, since, useAction, useData, useSession, useView, type View } from './ui';
-import { Admin, ContributionDetail, Contributions, Editorial, NewContribution, NotFound, PollDetail, Polls } from './pages';
+import { ActivityLog, Categories, People } from './admin';
+import { ContributionDetail, Contributions, Editorial, NewContribution, NotFound, PollDetail, Polls } from './pages';
 import { DevDebug } from './DevDebug';
 
 export function App() {
@@ -24,7 +25,7 @@ export function App() {
       </section>
     </main>
   );
-  return <Session.Provider value={me.data}><Routes><Route element={<Layout/>}><Route index element={<Overview/>}/><Route path="beitraege" element={<Contributions/>}/><Route path="beitraege/neu" element={<NewContribution/>}/><Route path="beitraege/:id" element={<ContributionDetail/>}/><Route path="abstimmungen" element={<Polls/>}/><Route path="abstimmungen/:id" element={<PollDetail/>}/><Route path="redaktion" element={<RoleGuard><Editorial/></RoleGuard>}/><Route path="admin" element={<RoleGuard admin><Admin/></RoleGuard>}/><Route path="*" element={<NotFound/>}/></Route></Routes></Session.Provider>;
+  return <Session.Provider value={me.data}><Routes><Route element={<Layout/>}><Route index element={<Overview/>}/><Route path="beitraege" element={<Contributions/>}/><Route path="beitraege/neu" element={<NewContribution/>}/><Route path="beitraege/:id" element={<ContributionDetail/>}/><Route path="abstimmungen" element={<Polls/>}/><Route path="abstimmungen/:id" element={<PollDetail/>}/><Route path="redaktion" element={<RoleGuard><Editorial/></RoleGuard>}/><Route path="admin" element={<Navigate to="/verwaltung/personen" replace/>}/><Route path="verwaltung/personen" element={<RoleGuard admin><People/></RoleGuard>}/><Route path="verwaltung/rubriken" element={<RoleGuard admin><Categories/></RoleGuard>}/><Route path="verwaltung/protokoll" element={<RoleGuard admin><ActivityLog/></RoleGuard>}/><Route path="*" element={<NotFound/>}/></Route></Routes></Session.Provider>;
 }
 
 // ---------- small helpers ----------
@@ -99,12 +100,13 @@ function Layout() {
         <Brand/>
       </header>
       {menu && <button type="button" tabIndex={-1} aria-hidden="true" className="fixed inset-0 z-30 bg-ink/30 min-[651px]:hidden" onClick={() => setMenu(false)}/>}
-      <aside aria-label="Seitenleiste" className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col bg-chrome max-[651px]:top-12 max-[651px]:w-[min(86vw,320px)] max-[651px]:transition-transform ${menu ? '' : 'max-[651px]:invisible max-[651px]:-translate-x-full'}`}>
+      <aside aria-label="Seitenleiste" className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col overflow-y-auto bg-chrome max-[651px]:top-12 max-[651px]:w-[min(86vw,320px)] max-[651px]:transition-transform ${menu ? '' : 'max-[651px]:invisible max-[651px]:-translate-x-full'}`}>
         <Link to="/" className="flex-none rounded-full px-5 pb-4 pt-5 max-[651px]:hidden" aria-label="AbiZeitBetrug Startseite" onClick={() => setMenu(false)}><Brand/></Link>
-        <nav aria-label="Hauptnavigation" className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-3 py-2 max-[651px]:pt-4" onClick={e => { if ((e.target as Element).closest('a')) setMenu(false); }}>
+        <nav aria-label="Hauptnavigation" className="flex min-h-24 flex-1 flex-col gap-6 overflow-y-auto px-3 py-2 max-[651px]:pt-4" onClick={e => { if ((e.target as Element).closest('a')) setMenu(false); }}>
           <NavItem to="/" icon={House}>Überblick</NavItem>
           {view[0] === 'redaktion' && editorial(user) ? <EditorNav/> : <StudentNav/>}
         </nav>
+        {user.role === 'admin' && <AdminNav onNavigate={() => setMenu(false)}/>}
         <div className="flex flex-none flex-col gap-3 bg-pill px-3 py-4">
           {editorial(user) && <ViewSwitch onSwitch={() => setMenu(false)}/>}
           <div className="flex items-center gap-3 px-1">
@@ -139,6 +141,15 @@ function NavItem({ to, icon: Icon, children }: { to: string; icon?: LucideIcon; 
   const location = useLocation();
   const active = location.pathname + location.search === to;
   return <Link to={to} aria-current={active ? 'page' : undefined} className={`${navItem} ${active ? 'bg-ink font-bold text-pop' : 'hover:bg-pill'}`}><span className="flex items-center gap-2.5">{Icon && <Icon aria-hidden="true" className="size-[18px] shrink-0"/>}{children}</span></Link>;
+}
+// Pinned between the scrolling nav and the account block; open state is a per-browser preference.
+function AdminNav({ onNavigate }: { onNavigate: () => void }) {
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem('verwaltung') !== 'zu'; } catch { return true; } });
+  const toggle = () => { setOpen(!open); try { localStorage.setItem('verwaltung', open ? 'zu' : 'offen'); } catch { /* private mode */ } };
+  return <div className="flex flex-none flex-col gap-1 border-t border-line px-3 py-2" onClick={e => { if ((e.target as Element).closest('a')) onNavigate(); }}>
+    <button type="button" aria-expanded={open} aria-controls="nav-verwaltung" className={`${navItem} w-full font-bold hover:bg-pill`} onClick={toggle}><span className="flex items-center gap-2.5"><Settings aria-hidden="true" className="size-[18px] shrink-0"/>Verwaltung</span><ChevronDown aria-hidden="true" className={`size-4 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`}/></button>
+    {open && <div id="nav-verwaltung" className="flex flex-col gap-1"><NavItem to="/verwaltung/personen" icon={Users}>Personen</NavItem><NavItem to="/verwaltung/rubriken" icon={Tags}>Rubriken</NavItem><NavItem to="/verwaltung/protokoll" icon={ScrollText}>Aktivitätsprotokoll</NavItem></div>}
+  </div>;
 }
 function NavRow({ to, icon, title, sub, end }: { to: string; icon?: LucideIcon; title: string; sub?: string; end?: string }) {
   const location = useLocation();
@@ -215,7 +226,6 @@ function EditorNav() {
       })}
       <NavItem to="/redaktion" icon={ClipboardList}>Alle Beiträge</NavItem>
     </NavGroup>
-    {user.role === 'admin' && <NavItem to="/admin" icon={Settings}>Verwaltung</NavItem>}
   </>;
 }
 
@@ -378,7 +388,7 @@ function AdminHome() {
             <ul aria-label="Warten auf Freigabe" className="mt-2 divide-y divide-line">
               {waiting.slice(0, 3).map(u => (
                 <li key={u.id}>
-                  <Link to="/admin" className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30">
+                  <Link to="/verwaltung/personen" className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30">
                     <span aria-hidden="true" className="grid size-8 flex-none place-items-center rounded-full bg-soft text-xs font-bold text-ink">{initials(u.name) || '?'}</span>
                     <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{u.name}</span>
                     <span className="flex-none text-[13px] text-muted">{since(u.created_at)}</span>
@@ -388,7 +398,7 @@ function AdminHome() {
             </ul>
           )}
           {waiting.length > 3 && <p className="mt-1 text-[13px] text-muted">und {waiting.length - 3} weitere</p>}
-          <Link to="/admin" className={`${btn.text} mt-5 self-start`}>Zugänge verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0"/></Link>
+          <Link to="/verwaltung/personen" className={`${btn.text} mt-5 self-start`}>Zugänge verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0"/></Link>
           <DevDebug label="Personen" data={{ total: users.data?.length ?? 0, waiting: waiting.length, admins: (users.data ?? []).filter(u => u.role === 'admin').length }}/>
         </>}
       </section>

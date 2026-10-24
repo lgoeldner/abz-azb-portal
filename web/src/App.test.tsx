@@ -107,39 +107,211 @@ describe('contribution submission', () => {
   });
 });
 
-describe('admin access editing', () => {
-  it('loads role and category grants for the newly selected person before saving', async () => {
-    const admin = { id: 'admin-1', name: 'Test Admin', role: 'admin', admitted: true, cohort_member: false, category_ids: ['memory'] };
-    const student = { id: 'student-2', name: 'Test Student', role: 'student', admitted: true, cohort_member: true, category_ids: [] };
-    const categories = [category, { id: 'quotes', name: 'Zitate', description: '', kind: 'quote' }];
-    let saved: { role: string; category_ids: string[] } | undefined;
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.endsWith('/api/v1/me')) return Response.json({ user: admin, csrf_token: 'csrf' });
-      if (url.endsWith('/api/v1/admin/users') && !init?.method) return Response.json([admin, student]);
-      if (url.endsWith('/api/v1/categories')) return Response.json(categories);
-      if (url.endsWith('/api/v1/admin/status')) return Response.json({ backup_last_success: null, backup_stale: false, upload_bytes: 0 });
-      if (url.endsWith('/api/v1/admin/users/student-2') && init?.method === 'PATCH') {
-        saved = JSON.parse(String(init.body));
-        return Response.json(student);
-      }
+
+describe('verwaltung', () => {
+  const admin = { id: 'admin-1', name: 'Test Admin', role: 'admin', admitted: true, cohort_member: true, category_ids: [] };
+  const guest = { id: 'guest-1', name: 'Gast Gerda', role: 'student', admitted: true, cohort_member: false, category_ids: [] };
+  const waiting = { id: 'wait-1', name: 'Warte Willi', role: 'student', admitted: false, cohort_member: true, category_ids: [] };
+  const editor = { id: 'mgr-1', name: 'Sam Redaktion', role: 'manager', admitted: true, cohort_member: true, category_ids: ['memory'] };
+  const everyone = [admin, guest, waiting, editor];
+  type Call = { url: string; method: string; body: Record<string, unknown> | undefined };
+  function mount(path: string, me: Record<string, unknown> = admin, onWrite: (c: Call) => Response | undefined = () => undefined, people: () => unknown[] = () => everyone, categories: unknown[] = [category]) {
+    const calls: Call[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input).replace('/api/v1', ''); const method = init?.method ?? 'GET';
+      if (url === '/me') return Response.json({ user: me, csrf_token: 'csrf' });
+      if (method !== 'GET') { const c = { url, method, body: init?.body ? JSON.parse(String(init.body)) : undefined }; calls.push(c); return onWrite(c) ?? Response.json({ id: 'new-cat' }); }
+      if (url === '/admin/users') return Response.json(people());
+      if (url === '/categories') return Response.json(categories);
+      if (url === '/admin/status') return Response.json({ backup_last_success: null, backup_stale: false, upload_bytes: 0 });
       return Response.json([]);
-    });
-    vi.stubGlobal('fetch', fetchMock);
+    }));
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/admin']}><App/></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[path]}><App/></MemoryRouter></QueryClientProvider>);
+    return calls;
+  }
+  const openMenu = async (name: string) => fireEvent.click(await screen.findByRole('button', { name: `Aktionen für ${name}` }));
 
-    await screen.findByRole('heading', { name: 'Unser Jahrgang & Team' });
-    fireEvent.click(await screen.findByRole('button', { name: 'Test Admin bearbeiten' }));
-    expect(screen.getByLabelText('Rolle')).toHaveValue('admin');
-    fireEvent.click(screen.getByRole('button', { name: 'Test Student bearbeiten' }));
+  it('redirects /admin to the people page', async () => {
+    mount('/admin');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Personen' })).toBeInTheDocument();
+  });
 
-    expect(screen.getByLabelText('Rolle')).toHaveValue('student');
-    expect(screen.getByLabelText('Erinnerungen')).not.toBeChecked();
-    expect(screen.getByLabelText('Zitate')).not.toBeChecked();
-    fireEvent.click(screen.getByRole('button', { name: 'Zugang speichern' }));
+  it.each(['personen', 'rubriken', 'protokoll'])('keeps non-admins away from /verwaltung/%s', async page => {
+    mount(`/verwaltung/${page}`, editor);
+    expect(await screen.findByRole('heading', { level: 1, name: 'Redaktion' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1, name: /Personen|Rubriken|Aktivitätsprotokoll/ })).toBeNull();
+  });
 
-    await waitFor(() => expect(saved).toEqual(expect.objectContaining({ role: 'student', category_ids: [] })));
+  it('shows the collapsible Verwaltung group only to admins and remembers it', async () => {
+    localStorage.clear();
+    mount('/');
+    const toggle = await screen.findByRole('button', { name: 'Verwaltung' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const aside = screen.getByRole('complementary');
+    expect(within(aside).getByRole('link', { name: 'Aktivitätsprotokoll' })).toHaveAttribute('href', '/verwaltung/protokoll');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(within(aside).queryByRole('link', { name: 'Personen' })).toBeNull();
+    expect(localStorage.getItem('verwaltung')).toBe('zu');
+    localStorage.clear();
+  });
+
+  it('filters people with the quick filter chips', async () => {
+    mount('/verwaltung/personen');
+    await screen.findByText('Gast Gerda');
+    expect(screen.getByRole('button', { name: /^Alle/ })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: /^Wartet auf Freigabe/ }));
+    expect(screen.getByText('Warte Willi')).toBeInTheDocument();
+    expect(screen.queryByText('Gast Gerda')).toBeNull();
+    fireEvent.click(within(screen.getByRole('group', { name: 'Personen filtern' })).getByRole('button', { name: /^Redaktion/ }));
+    expect(screen.getByText('Sam Redaktion')).toBeInTheDocument();
+    expect(screen.queryByText('Warte Willi')).toBeNull();
+  });
+
+  it('promotes a guest by changing only cohort_member', async () => {
+    const calls = mount('/verwaltung/personen');
+    fireEvent.click(await screen.findByRole('button', { name: 'Zum Jahrgangsmitglied machen: Gast Gerda' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]).toEqual({ url: '/admin/users/guest-1', method: 'PATCH', body: { name: 'Gast Gerda', role: 'student', admitted: true, cohort_member: true, category_ids: [] } });
+  });
+
+  it('keeps grants another admin added after the list loaded when changing a role', async () => {
+    let server = everyone;
+    const calls = mount('/verwaltung/personen', admin, undefined, () => server);
+    await openMenu('Sam Redaktion');
+    server = everyone.map(u => u.id === editor.id ? { ...editor, category_ids: ['memory', 'quotes'] } : u);
+    fireEvent.click(screen.getByRole('menuitem', { name: /Rolle ändern/ }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Administration' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Bestätigen' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0].body).toEqual({ name: 'Sam Redaktion', role: 'admin', admitted: true, cohort_member: true, category_ids: ['memory', 'quotes'] });
+  });
+
+  it('admits a waiting person with one click', async () => {
+    const calls = mount('/verwaltung/personen');
+    fireEvent.click(await screen.findByRole('button', { name: 'Zugang freigeben: Warte Willi' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0].body).toEqual({ name: 'Warte Willi', role: 'student', admitted: true, cohort_member: true, category_ids: [] });
+  });
+
+  it('changes a role only after confirmation', async () => {
+    const calls = mount('/verwaltung/personen');
+    await openMenu('Gast Gerda');
+    fireEvent.click(screen.getByRole('menuitem', { name: /Rolle ändern/ }));
+    expect(screen.getByRole('menuitemradio', { name: 'Jahrgang' })).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Redaktion' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Gast Gerda wird zu Redaktion?' });
+    expect(calls).toHaveLength(0);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(calls).toHaveLength(0);
+
+    await openMenu('Gast Gerda');
+    fireEvent.click(screen.getByRole('menuitem', { name: /Rolle ändern/ }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Redaktion' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Bestätigen' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]).toEqual({ url: '/admin/users/guest-1', method: 'PATCH', body: { name: 'Gast Gerda', role: 'manager', admitted: true, cohort_member: false, category_ids: [] } });
+  });
+
+  it('deletes only after confirmation and shows the server error in the dialog', async () => {
+    const calls = mount('/verwaltung/personen', admin, () => Response.json({ error: { code: 'has_content', message: 'Die Person hat bereits Beiträge.' } }, { status: 409 }));
+    await openMenu('Gast Gerda');
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Löschen' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Gast Gerda löschen?' });
+    expect(calls).toHaveLength(0);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Löschen' }));
+    await waitFor(() => expect(calls).toEqual([{ url: '/admin/users/guest-1', method: 'DELETE', body: undefined }]));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Die Person hat bereits Beiträge.');
+  });
+
+  it('blocks access only after confirmation and never offers it for the own account', async () => {
+    const calls = mount('/verwaltung/personen');
+    await openMenu('Test Admin');
+    expect(screen.queryByRole('menuitem', { name: 'Zugang sperren' })).toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await openMenu('Sam Redaktion');
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Zugang sperren' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Zugang von Sam Redaktion sperren?' });
+    expect(calls).toHaveLength(0);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Sperren' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]).toEqual({ url: '/admin/users/mgr-1', method: 'PATCH', body: { name: 'Sam Redaktion', role: 'manager', admitted: false, cohort_member: true, category_ids: ['memory'] } });
+  });
+
+  it('moves keyboard focus into the row menu and back to its trigger', async () => {
+    mount('/verwaltung/personen');
+    await openMenu('Gast Gerda');
+    const items = within(screen.getByRole('menu')).getAllByRole('menuitem');
+    expect(items[0]).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    expect(items[1]).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'ArrowUp' });
+    fireEvent.keyDown(document, { key: 'ArrowUp' });
+    expect(items[items.length - 1]).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByRole('button', { name: 'Aktionen für Gast Gerda' })).toHaveFocus();
+  });
+
+  it('closes the row menu on Escape and outside click', async () => {
+    mount('/verwaltung/personen');
+    await openMenu('Gast Gerda');
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    await openMenu('Gast Gerda');
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('grants a new category to a manager with the full user payload', async () => {
+    const calls = mount('/verwaltung/rubriken');
+    fireEvent.click(await screen.findByRole('button', { name: /Neue Rubrik/ }));
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Neu' } });
+    fireEvent.click(await screen.findByLabelText('Sam Redaktion'));
+    fireEvent.click(screen.getByRole('button', { name: 'Rubrik speichern' }));
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(calls[0]).toMatchObject({ url: '/categories', method: 'POST' });
+    expect(calls[1]).toEqual({ url: '/admin/users/mgr-1', method: 'PATCH', body: { name: 'Sam Redaktion', role: 'manager', admitted: true, cohort_member: true, category_ids: ['memory', 'new-cat'] } });
+  });
+
+  it('does not carry unsaved grant changes over to another Rubrik', async () => {
+    const quotes = { id: 'quotes', name: 'Zitate', description: '', kind: 'quote' };
+    const photos = { id: 'photos', name: 'Fotos', description: '', kind: 'photo' };
+    const calls = mount('/verwaltung/rubriken', admin, undefined, undefined, [category, quotes, photos]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Rubrik bearbeiten: Zitate' }));
+    fireEvent.click(await screen.findByLabelText('Sam Redaktion'));
+    expect(screen.getByLabelText('Sam Redaktion')).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Rubrik bearbeiten: Fotos' }));
+    await waitFor(() => expect(screen.getByLabelText('Name')).toHaveValue('Fotos'));
+    expect(screen.getByLabelText('Sam Redaktion')).not.toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Rubrik speichern' }));
+    await waitFor(() => expect(calls.some(c => c.url === '/categories/photos')).toBe(true));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Rubrik speichern' })).toBeNull());
+    expect(calls.filter(c => c.url.startsWith('/admin/users'))).toEqual([]);
+  });
+
+  it('merges grants into the current server state and retries a failed save without a second Rubrik', async () => {
+    let server = { ...editor, category_ids: ['memory'] };
+    let failGrant = true;
+    const calls = mount('/verwaltung/rubriken', admin, c => {
+      if (c.url === '/admin/users/mgr-1') {
+        if (failGrant) { failGrant = false; return Response.json({ error: { code: 'unavailable', message: 'Kurz nicht erreichbar.' } }, { status: 503 }); }
+        server = { ...server, ...(c.body as object) };
+      }
+      return undefined;
+    }, () => [admin, server]);
+    fireEvent.click(await screen.findByRole('button', { name: /Neue Rubrik/ }));
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Neu' } });
+    fireEvent.click(await screen.findByLabelText('Sam Redaktion'));
+    // Another admin grants a further Rubrik while this form is open.
+    server = { ...server, category_ids: ['memory', 'quotes'] };
+    fireEvent.click(screen.getByRole('button', { name: 'Rubrik speichern' }));
+    expect(await screen.findByText('Kurz nicht erreichbar.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Rubrik speichern' }));
+    await waitFor(() => expect(server.category_ids).toEqual(['memory', 'quotes', 'new-cat']));
+    expect(calls.filter(c => c.url === '/categories' && c.method === 'POST')).toHaveLength(1);
   });
 });
 
@@ -222,7 +394,7 @@ describe('navigation by view', () => {
     const editorSwitch = await within(aside).findByRole('button', { name: 'Redaktion' });
     expect(editorSwitch).toHaveAttribute('aria-pressed', 'true');
     expect(within(aside).getByRole('button', { name: 'Schüler' })).toHaveAttribute('aria-pressed', 'false');
-    expect(within(aside).queryByRole('link', { name: 'Verwaltung' }) !== null).toBe(role === 'admin');
+    expect(within(aside).queryByRole('button', { name: 'Verwaltung' }) !== null).toBe(role === 'admin');
 
     const main = screen.getByRole('main');
     expect(await within(main).findByRole('heading', { level: 1, name: 'Redaktion' })).toBeInTheDocument();
@@ -243,7 +415,7 @@ describe('navigation by view', () => {
     expect(within(aside).getByRole('button', { name: 'Schüler' })).toHaveAttribute('aria-pressed', 'true');
     expect(within(aside).getByRole('list', { name: 'Offen' })).toBeInTheDocument();
     expect(within(aside).queryByRole('link', { name: 'Neue Abstimmung' })).toBeNull();
-    expect(within(aside).queryByRole('link', { name: 'Verwaltung' })).toBeNull();
+    expect(within(aside).queryByRole('button', { name: 'Verwaltung' }) !== null).toBe(role === 'admin');
   });
 });
 
@@ -277,7 +449,7 @@ describe('admin home', () => {
     const waiting = within(within(people$).getByRole('list', { name: 'Warten auf Freigabe' })).getAllByRole('listitem');
     expect(waiting.map(li => li.textContent)).toEqual([expect.stringContaining('Schüler 2'), expect.stringContaining('Schüler 4'), expect.stringContaining('Schüler 1')]);
     expect(within(people$).getByText('und 2 weitere')).toBeInTheDocument();
-    expect(within(people$).getByRole('link', { name: /Zugänge verwalten/ })).toHaveAttribute('href', '/admin');
+    expect(within(people$).getByRole('link', { name: /Zugänge verwalten/ })).toHaveAttribute('href', '/verwaltung/personen');
 
     const pollCard = screen.getByRole('region', { name: 'Neueste Abstimmungen' });
     await waitFor(() => expect(within(pollCard).getAllByRole('listitem')).toHaveLength(3));

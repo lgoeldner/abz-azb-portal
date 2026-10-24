@@ -120,13 +120,13 @@ test('pending and request error states remain readable on mobile', async ({ page
 for (const role of ['student', 'manager', 'admin'] as const) {
   test(`${role} pages fit the supported viewport widths and navigation remains usable`, async ({ page }) => {
     await useFixtures(page, role);
-    const path = role === 'student' ? '/beitraege' : role === 'manager' ? '/redaktion' : '/admin';
+    const path = role === 'student' ? '/beitraege' : role === 'manager' ? '/redaktion' : '/verwaltung/personen';
 
     for (const width of widths) {
       await page.setViewportSize({ width, height: 800 });
       await page.goto(path);
       await expect(page.locator('h1')).toBeVisible();
-      if (role === 'admin') await expect(page.getByRole('row').nth(1)).toBeVisible();
+      if (role === 'admin') await expect(page.locator('main li').first()).toBeVisible();
       else await expect(page.getByRole('link', { name: /Die außergewöhnlich lange Geschichte/ }).first()).toBeVisible();
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
       const layout = await page.evaluate(() => ({
@@ -141,7 +141,7 @@ for (const role of ['student', 'manager', 'admin'] as const) {
       if (width <= 650) {
         await page.getByRole('button', { name: 'Menü öffnen' }).click();
         await expect(page.getByRole('navigation', { name: 'Hauptnavigation' })).toBeVisible();
-        await expect(page.getByRole('link', { name: 'Verwaltung' })).toHaveCount(role === 'admin' ? 1 : 0);
+        await expect(page.getByRole('button', { name: 'Verwaltung' })).toHaveCount(role === 'admin' ? 1 : 0);
       }
     }
 

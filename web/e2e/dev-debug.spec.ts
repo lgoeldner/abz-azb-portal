@@ -101,10 +101,10 @@ test('editor and admin diagnostics preserve short-screen navigation', async ({ p
     await page.getByRole('button', { name: 'Menü öffnen' }).click();
     const aside = page.getByRole('complementary', { name: 'Seitenleiste' });
     await expect(aside.getByRole('link', { name: 'Überblick', exact: true })).toBeVisible();
+    await aside.evaluate(element => { element.scrollTop = element.scrollHeight; });
     await expect(aside.getByRole('button', { name: /Abmelden/ })).toBeInViewport();
     if (role === 'admin') {
-      await page.goto('/admin', { waitUntil: 'domcontentloaded' });
-      await page.getByRole('tab', { name: 'Rubriken', exact: true }).click();
+      await page.goto('/verwaltung/rubriken', { waitUntil: 'domcontentloaded' });
       const menu = debugMenus(page).filter({ hasText: category.id });
       await expect(menu).toHaveCount(1);
       await menu.locator('summary').click();
@@ -120,15 +120,14 @@ test('production builds omit debug controls for every role and view', async ({ p
     await page.unrouteAll();
     await page.route('https://fonts.googleapis.com/**', route => route.abort());
     await fixtures(page, role);
-    const paths = ['/', '/beitraege', '/beitraege/debug-submission', '/abstimmungen', '/abstimmungen/debug-poll', ...(role === 'admin' ? ['/admin'] : [])];
+    const paths = ['/', '/beitraege', '/beitraege/debug-submission', '/abstimmungen', '/abstimmungen/debug-poll', ...(role === 'admin' ? ['/verwaltung/rubriken'] : [])];
     for (const path of paths) {
       await page.goto(`${path}?debug=true`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('h1')).toBeVisible();
       await expect(debugMenus(page)).toHaveCount(0);
       await expect(page.getByText('Debug', { exact: true })).toHaveCount(0);
       await expect(page.locator('[data-dev-debug]')).toHaveCount(0);
-      if (path === '/admin') {
-        await page.getByRole('tab', { name: 'Rubriken', exact: true }).click();
+      if (path === '/verwaltung/rubriken') {
         await expect(page.getByRole('button', { name: 'Rubrik bearbeiten' })).toBeVisible();
         await expect(debugMenus(page)).toHaveCount(0);
       }

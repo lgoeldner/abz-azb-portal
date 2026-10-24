@@ -248,6 +248,7 @@ func (a *App) routes() {
 	bind("GET /api/v1/roster", a.roster)
 	bind("GET /api/v1/admin/users", a.users)
 	bind("PATCH /api/v1/admin/users/{id}", a.editUser)
+	bind("DELETE /api/v1/admin/users/{id}", a.deleteUser)
 	bind("GET /api/v1/admin/audit", a.auditEvents)
 	bind("GET /api/v1/admin/status", a.systemStatus)
 	api.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { respondError(w, missing()) })
