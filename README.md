@@ -39,7 +39,7 @@ make down     # stop all development containers (keeps data)
 - Frontend: [localhost:5173](http://localhost:5173)
 - API: `localhost:8080`
 - Mock login provider: [localhost:9090](http://localhost:9090), development only. Its fake identities are listed in `deployables/auth-mock/users.yaml`.
-- Full container stack behind Caddy: [https://localhost](https://localhost) (internal CA, so the browser warns).
+- Full container stack behind Caddy: [https://caddy.abizeitung-portal.orb.local](https://caddy.abizeitung-portal.orb.local) (internal CA, so the browser warns).
 
 Never keep real data on a publicly reachable development host, and never run `down -v` on a database you need.
 
