@@ -23,6 +23,7 @@ file `Makefile` :: dev, check, lint, audit, backup, restore, migrate targets [ma
 file `.github/workflows/ci.yaml` :: CI: lint, audit, Go/web tests, e2e [ci, github]
 file `.githooks/pre-commit` :: prettier and gofmt on staged files [hook, format]
 file `docs/implementation-contract.md` :: binding API/permission contract, lead-owned [contract, permissions, types]
+file `docs/poll-implementation-plans.md` :: ten concise proposed poll formats with implementation steps and invariant tests [poll, plan, voting]
 file `docs/openapi.json` :: OpenAPI spec; source of generated TS types [openapi, schema]
 file `docs/verification.md` :: how the system was verified [verification]
 file `docs/school-login.md` :: school OIDC integration notes [login, oidc, production]
