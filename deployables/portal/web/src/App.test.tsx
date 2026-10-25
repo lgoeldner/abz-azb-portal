@@ -272,6 +272,18 @@ describe('verwaltung', () => {
     expect(screen.queryByRole('heading', { level: 1, name: /Personen|Sammlungen|Aktivitätsprotokoll/ })).toBeNull();
   });
 
+  it.each(['personen', 'sammlungen', 'protokoll'])('opens /verwaltung/%s in the editorial workspace', async (page) => {
+    localStorage.clear();
+    localStorage.setItem('view', 'schueler');
+    mount(`/verwaltung/${page}`);
+
+    const aside = await screen.findByRole('complementary');
+    expect(await screen.findByRole('heading', { level: 1 })).toBeInTheDocument();
+    expect(document.querySelector('[data-workspace="redaktion"]')).toBeInTheDocument();
+    expect(within(aside).getByRole('button', { name: 'Redaktion' })).toHaveAttribute('aria-pressed', 'true');
+    expect(localStorage.getItem('view')).toBe('redaktion');
+  });
+
   it('shows the collapsible Verwaltung group only to admins and remembers it', async () => {
     localStorage.clear();
     mount('/');
@@ -665,7 +677,7 @@ describe('navigation by view', () => {
     expect(within(aside).getByRole('button', { name: 'Schüler' })).toHaveAttribute('aria-pressed', 'true');
     expect(within(aside).getByRole('list', { name: 'Offen' })).toBeInTheDocument();
     expect(within(aside).queryByRole('link', { name: 'Neue Sammlung' })).toBeNull();
-    expect(within(aside).queryByRole('button', { name: 'Verwaltung' }) !== null).toBe(role === 'admin');
+    expect(within(aside).queryByRole('button', { name: 'Verwaltung' })).toBeNull();
   });
 });
 

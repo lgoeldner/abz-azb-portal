@@ -72,7 +72,7 @@
   }
 }
 
-/* Redaktion is a reading desk: neutral chrome, white originals, blue only on data.
+/* Redaktion is a reading desk: neutral chrome, white originals, cobalt accents for actions and orientation.
    Keep the labelled collection navigation: the yeargroup has more than five destinations.
    Desktop frame: 260px sidebar + 2 × 32px gutters + fluid reading canvas. */
 [data-workspace='redaktion'] {
@@ -83,9 +83,10 @@
   --color-soft: #eceef0;
   --color-chrome: #f4f5f6;
   --color-pill: #e4e6e9;
-  --color-pop: #e4e6e9;
-  --color-accent: #17191c;
-  --color-accent-dark: #17191c;
+  --color-pop: #d8e7fc;
+  --color-accent: #1d5fbf;
+  --color-accent-dark: #16488e;
+  --editorial-tint: #e8f0fc;
   --radius-ui: 8px;
   --editorial-data: #1d5fbf;
   font-weight: 400;
@@ -119,6 +120,7 @@
   min-height: 76px;
 }
 [data-workspace='redaktion'] :is(a, button).bg-pop {
+  color: var(--color-accent-dark);
   background: white;
   border: 1px solid var(--color-line);
 }
@@ -126,14 +128,16 @@
   background: var(--color-soft);
 }
 [data-workspace='redaktion'] :is(a, button).bg-ink {
+  background: var(--color-accent);
   color: white;
 }
 [data-workspace='redaktion'] :is(a, button).bg-ink:hover {
-  background: #35383c;
+  background: var(--color-accent-dark);
 }
-[data-workspace='redaktion'] nav a[aria-current='page'] {
-  background: var(--color-pill);
-  color: var(--color-ink);
+[data-workspace='redaktion'] aside a[aria-current='page'],
+[data-workspace='redaktion'] aside a[aria-current='page']:hover {
+  background: var(--editorial-tint);
+  color: var(--color-accent-dark);
 }
 [data-workspace='redaktion'] section.bg-soft,
 [data-workspace='redaktion'] article.bg-soft {
@@ -181,4 +185,18 @@ body:has([data-workspace='redaktion']) {
   [data-workspace='redaktion'] a[data-editorial-row] > span:last-child {
     grid-column: 2;
   }
+}
+
+[data-workspace='redaktion'] :where(a, button, input, textarea, select, summary):focus-visible {
+  outline-color: var(--color-accent);
+}
+[data-workspace='redaktion'] :is(input, textarea, select):focus {
+  border-color: var(--color-accent);
+}
+
+[data-workspace='redaktion'] aside a[aria-current='page'] .text-pop {
+  color: var(--color-accent-dark);
+}
+[data-workspace='redaktion'] aside a[aria-current='page'] [class~='text-white/80'] {
+  color: var(--color-muted);
 }

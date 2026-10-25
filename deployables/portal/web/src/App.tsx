@@ -275,10 +275,13 @@ function Layout() {
   const [menu, setMenu] = useState(false);
   const location = useLocation();
   const [preferredView, setView] = preference;
-  const editorialRoute = editorial(user) && location.pathname.startsWith('/redaktion');
+  const editorialRoute =
+    (editorial(user) && location.pathname.startsWith('/redaktion')) ||
+    (user.role === 'admin' && location.pathname.startsWith('/verwaltung/'));
+  // Normalize on route entry; pending navigation must not overwrite an explicit mode switch.
   useEffect(() => {
-    if (editorialRoute && preferredView !== 'redaktion') setView('redaktion');
-  }, [editorialRoute, preferredView, setView]);
+    if (editorialRoute) setView('redaktion');
+  }, [editorialRoute, setView]);
   const view: [View, (view: View) => void] = [editorialRoute ? 'redaktion' : preferredView, setView];
   return (
     <WorkspaceView.Provider value={view}>
@@ -334,7 +337,7 @@ function Layout() {
             </NavItem>
             {view[0] === 'redaktion' && editorial(user) ? <EditorNav /> : <StudentNav />}
           </nav>
-          {user.role === 'admin' && <AdminNav onNavigate={() => setMenu(false)} />}
+          {user.role === 'admin' && view[0] === 'redaktion' && <AdminNav onNavigate={() => setMenu(false)} />}
           <div className="flex flex-none flex-col gap-3 bg-pill px-3 py-4">
             {editorial(user) && <ViewSwitch onSwitch={() => setMenu(false)} />}
             <div className="flex items-center gap-3 px-1">
