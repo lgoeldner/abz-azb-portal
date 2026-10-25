@@ -100,7 +100,7 @@ file `deployables/portal/web/src/sammlungen.tsx` :: Sammlungen list (Fortlaufend
 file `deployables/portal/web/src/pages.tsx` :: Contributions, NewContribution, author detail and read-only editorial reader with annotations, all-submissions list, NotFound [beitrag, redaktion, export]
 file `deployables/portal/web/src/admin.tsx` :: Verwaltung: People, Categories (Sammlungen + manager grants), ActivityLog, audit action labels [verwaltung, admin, personen, protokoll]
 file `deployables/portal/web/src/ui.tsx` :: shared workspace view context, editorial/author submission links and UI: kindIcon/kindLabel (six classes), Badge, PageHead, Failure, Loading, Empty, SubmissionList, plural, newestOpened [components, icons]
-file `deployables/portal/web/src/styles.css` :: student brand tokens and cobalt-accented Redaktion reading-desk theme including Verwaltung, responsive list rows [styles, theme, redaktion]
+file `deployables/portal/web/src/styles.css` :: student brand tokens and cobalt-accented Redaktion reading-desk theme including Verwaltung, rounded list hover surfaces and distinct chip hover states [styles, theme, redaktion]
 file `deployables/portal/web/src/api.ts` :: fetch wrapper, CSRF header [api, fetch]
 file `deployables/portal/web/src/api-types.ts` :: aliases over generated types [types]
 file `deployables/portal/web/src/generated/api.d.ts` :: generated from openapi.json, never edit by hand [codegen]

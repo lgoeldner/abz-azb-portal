@@ -219,7 +219,7 @@ export function SubmissionList({
           <Link
             to={editorialView ? `/redaktion/beitraege/${s.id}` : `/beitraege/${s.id}`}
             data-editorial-row={editorialView || undefined}
-            className="flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-pop/30"
+            className="flex items-center gap-4 rounded-ui px-4 py-3.5 transition-colors hover:bg-pop/30"
           >
             <span className="min-w-0 flex-1">
               <strong className="block truncate text-[15px] font-semibold">{s.title}</strong>

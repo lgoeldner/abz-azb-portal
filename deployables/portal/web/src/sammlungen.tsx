@@ -73,8 +73,8 @@ export function Sammlungen() {
     ['closed', 'Beendet', 'Die Abstimmung ist abgeschlossen'],
   ];
   const chip = (active: boolean) =>
-    `inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-semibold ${
-      active ? 'bg-ink text-white' : 'bg-pill hover:bg-pop'
+    `inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
+      active ? 'bg-ink text-white hover:bg-accent' : 'bg-pill hover:bg-pop'
     }`;
   return (
     <>
@@ -175,7 +175,10 @@ function Cards({ items }: { items: Category[] }) {
       <ul className="collection-ledger divide-y divide-line rounded-ui bg-white" aria-label="Sammlungen">
         {items.map((c) => (
           <li key={c.id}>
-            <Link to={`/sammlungen/${c.id}`} className="flex min-h-20 items-center gap-4 px-5 py-4 hover:bg-soft">
+            <Link
+              to={`/sammlungen/${c.id}`}
+              className="flex min-h-20 items-center gap-4 rounded-ui px-5 py-4 transition-colors hover:bg-soft"
+            >
               <KindIcon icon={kindIcon[c.kind]} className="size-4 text-muted" />
               <span className="min-w-0 flex-1">
                 <strong className="block text-[15px] font-semibold">{c.name}</strong>
