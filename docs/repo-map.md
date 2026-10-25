@@ -27,6 +27,7 @@ file `docs/openapi.json` :: OpenAPI spec; source of generated TS types [openapi,
 file `docs/verification.md` :: how the system was verified [verification]
 file `docs/school-login.md` :: school OIDC integration notes [login, oidc, production]
 file `docs/dev-debug.md` :: DevDebug overlay and its browser checks [debug]
+file `docs/dev-build.md` :: incremental make dev builds, Go caches, container reuse and host reload behavior [dev, docker, cache]
 file `ops/README.md` :: operations, backup, restore, tidy caveat [ops, restore, production]
 
 ## Scripts

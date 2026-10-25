@@ -1,10 +1,13 @@
+# syntax=docker/dockerfile:1.7
 FROM golang:1.27.3-alpine AS build
 ENV GOWORK=off
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,id=auth-mock-go-mod,target=/go/pkg/mod go mod download
 COPY . ./
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/auth-mock .
+RUN --mount=type=cache,id=auth-mock-go-mod,target=/go/pkg/mod \
+    --mount=type=cache,id=auth-mock-go-build,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/auth-mock .
 
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates \
