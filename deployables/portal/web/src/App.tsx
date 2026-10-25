@@ -1177,9 +1177,14 @@ function AdminHome() {
                           )}
                         </span>
                         {showParticipation && (
-                          <strong className="w-20 flex-none whitespace-nowrap pt-0.5 text-right text-3xl font-extrabold tabular-nums leading-none tracking-tight">
-                            {Math.round(percent)}%
-                          </strong>
+                          <span className="w-24 flex-none whitespace-nowrap pt-0.5 text-right">
+                            <strong className="block text-3xl font-extrabold tabular-nums leading-none tracking-tight">
+                              {Math.round(percent)}%
+                            </strong>
+                            <span className="mt-1 block text-[12px] font-normal leading-4 text-muted">
+                              Teilgenommen
+                            </span>
+                          </span>
                         )}
                       </Link>
                       <DevDebug
