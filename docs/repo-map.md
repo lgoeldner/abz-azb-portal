@@ -49,7 +49,7 @@ file `deployables/portal/server/migrations/001_initial.sql` :: base schema: user
 file `deployables/portal/server/migrations/004_polls_become_categories.sql` :: polls merged into categories (single-answer kinds), polls table dropped [sammlung, poll, migration]
 file `deployables/portal/server/internal/portal/http.go` :: App, router (all `bind(` routes), errors, canEdit/canRead/canMutate, CSRF/session middleware [routes, permissions, middleware]
 file `deployables/portal/server/internal/portal/types.go` :: JSON types: User, Category, Submission, Revision, Correction, PollOption, PollResult, BallotAudit, AuditEvent [types, json]
-file `deployables/portal/server/internal/portal/categories.go` :: Category = Sammlung: kinds, repeatable vs single-answer, list/create/patch/status, ballot fill [sammlung, category, poll, lifecycle, draft]
+file `deployables/portal/server/internal/portal/categories.go` :: Category = Sammlung: kinds, repeatable vs single-answer, list/create/patch/status, ballot fill and editor-only eligible voting participation [sammlung, category, poll, lifecycle, draft, participation]
 file `deployables/portal/server/internal/portal/polls.go` :: vote (row lock), results, ballot audit, roster [ballot, vote, results, roster]
 file `deployables/portal/server/internal/portal/submissions.go` :: author-owned submission CRUD, author search, status transitions, revisions, editorial annotations/correction requests [beitrag, submission, revision, correction]
 file `deployables/portal/server/internal/portal/files.go` :: uploads, previews, downloads, ZIP export, disk usage [attachment, upload, export, zip]
@@ -63,7 +63,7 @@ file `deployables/portal/server/internal/portal/seed.go` :: dev fixtures: users 
 
 test `deployables/portal/server/internal/portal/access_matrix_test.go` :: every contract route enforces session, admission, CSRF, roles [permissions, matrix]
 test `deployables/portal/server/internal/portal/categories_test.go` :: Sammlung invariants, all-status default exports and migration 004 [sammlung, migration]
-test `deployables/portal/server/internal/portal/poll_timeline_test.go` :: opened_at and ballot_count rules [poll, timeline]
+test `deployables/portal/server/internal/portal/poll_timeline_test.go` :: opened_at, ballot_count and eligible participation rules, including preserved votes after eligibility changes [poll, timeline, participation]
 test `deployables/portal/server/internal/portal/portal_test.go` :: pure invariants, integrationPool/emptySchemaPool helpers, author-only original mutations, annotation grants, lifecycle + ballots [helpers, lifecycle]
 test `deployables/portal/server/internal/portal/auth_test.go` :: OIDC trust/enrollment via authmock [auth]
 test `deployables/portal/server/internal/portal/user_delete_test.go` :: user delete guards [admin, delete]
@@ -95,7 +95,7 @@ route GET /auth/login, GET /auth/callback, POST /auth/logout :: outside /api/v1 
 
 ## Frontend (deployables/portal/web)
 
-file `deployables/portal/web/src/App.tsx` :: router, Layout, nav (StudentNav, EditorNav, AdminNav), StudentHome, EditorHome, AdminHome dashboard with one widget per class [routes, nav, dashboard, home]
+file `deployables/portal/web/src/App.tsx` :: router, Layout, nav (StudentNav, EditorNav, AdminNav), StudentHome, EditorHome, AdminHome dashboard with one widget per class and latest-collection voting participation bars [routes, nav, dashboard, home, participation]
 file `deployables/portal/web/src/sammlungen.tsx` :: Sammlungen list (Fortlaufend section, status groups, ?klasse filter), SammlungForm, SammlungDetail, all-submission editorial collection reader, read-only ballot options/results and student voting [sammlung, poll, vote, form]
 file `deployables/portal/web/src/pages.tsx` :: Contributions, NewContribution, author detail and read-only editorial reader with annotations, all-submissions list, NotFound [beitrag, redaktion, export]
 file `deployables/portal/web/src/admin.tsx` :: Verwaltung: People, Categories (Sammlungen + manager grants), ActivityLog, audit action labels [verwaltung, admin, personen, protokoll]
@@ -106,7 +106,7 @@ file `deployables/portal/web/src/api-types.ts` :: aliases over generated types [
 file `deployables/portal/web/src/generated/api.d.ts` :: generated from openapi.json, never edit by hand [codegen]
 file `deployables/portal/web/src/DevDebug.tsx` :: dev-only debug overlay [debug]
 test `deployables/portal/web/src/editorial.test.tsx` :: editorial readers, annotation grants, mode changes and collection defaults [test, redaktion, permissions]
-test `deployables/portal/web/src/App.test.tsx` :: component tests (vitest) [test, ui]
+test `deployables/portal/web/src/App.test.tsx` :: component tests (vitest), dashboard voting participation against admitted cohort members [test, ui, dashboard, participation]
 test `deployables/portal/web/e2e/portal.spec.ts` :: Playwright journeys against a running seeded app [e2e]
 test `deployables/portal/web/e2e/verwaltung.spec.ts` :: Verwaltung e2e [e2e, admin]
 test `deployables/portal/web/e2e/responsive.spec.ts` :: phone-width layout checks [e2e, responsive]
