@@ -1,4 +1,4 @@
-import { Check, Plus } from 'lucide-react';
+import { Minus, Plus } from 'lucide-react';
 import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -258,7 +258,7 @@ export function SammlungForm({
   const single = singleKinds.includes(kind);
   const roster = useData<{ id: string; name: string }[]>('/roster', kind === 'person');
   const [allPeople, setAllPeople] = useState(sammlung?.kind === 'person' ? sammlung.all_people : true);
-  const [maxChoices, setMaxChoices] = useState(sammlung?.kind === 'person' ? sammlung.max_choices : 1);
+  const [maxChoices, setMaxChoices] = useState(sammlung?.max_choices ?? 1);
   const [selected, setSelected] = useState<string[]>(
     sammlung?.options.flatMap((o) => (o.user_id ? [o.user_id] : [])) ?? [],
   );
@@ -288,8 +288,8 @@ export function SammlungForm({
         throw new Error('Bitte mindestens zwei Optionen auswählen.');
       if (single && kind === 'person' && !allPeople && choices.length < 2)
         throw new Error('Bitte mindestens zwei Kandidat:innen auswählen.');
-      if (kind === 'person' && (!Number.isInteger(maxChoices) || maxChoices < 1 || maxChoices > 500))
-        throw new Error('Die Zahl der auswählbaren Personen muss zwischen 1 und 500 liegen.');
+      if (single && (!Number.isInteger(maxChoices) || maxChoices < 1 || maxChoices > 500))
+        throw new Error('Die Zahl der auswählbaren Optionen muss zwischen 1 und 500 liegen.');
       // A retry after a failed follow-up step must update the Sammlung saved by the first attempt, not create another.
       const target = current.current;
       const saved = await api<Category>(
@@ -301,7 +301,7 @@ export function SammlungForm({
           kind,
           allow_self_vote: single && data.get('allow_self_vote') === 'on',
           all_people: kind === 'person' && allPeople,
-          max_choices: kind === 'person' ? maxChoices : 1,
+          max_choices: single ? maxChoices : 1,
           options: choices,
         }),
       );
@@ -375,24 +375,49 @@ export function SammlungForm({
                 disabled={action.busy}
               />
             )}
-            <label className={label}>
+          </div>
+        ))}
+      {single && (
+        <>
+          <div className="space-y-2">
+            <label className={label} htmlFor="max_choices">
               Maximale Zahl der Stimmen pro Person
+            </label>
+            <div className="flex items-center gap-4">
+              <button
+                className="flex size-14 shrink-0 items-center justify-center rounded-full bg-white text-ink transition hover:bg-pill focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:cursor-not-allowed disabled:opacity-40"
+                type="button"
+                aria-label={kind === 'person' ? 'Weniger Personen' : 'Weniger Optionen'}
+                disabled={maxChoices <= 1 || action.busy}
+                onClick={() => setMaxChoices((value) => Math.min(500, Math.max(1, value - 1)))}
+              >
+                <Minus aria-hidden="true" size={24} />
+              </button>
               <input
-                className={field}
+                className="h-16 w-24 appearance-none [-moz-appearance:textfield] rounded-xl border border-transparent bg-transparent text-center text-4xl font-bold tabular-nums text-ink outline-none transition focus:border-ink focus:bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 type="number"
                 name="max_choices"
+                id="max_choices"
                 min={1}
                 max={500}
                 step={1}
                 required
                 value={maxChoices}
+                disabled={action.busy}
                 onChange={(event) => setMaxChoices(Number(event.target.value))}
+                onFocus={(event) => event.currentTarget.select()}
               />
-            </label>
+              <button
+                className="flex size-14 shrink-0 items-center justify-center rounded-full bg-white text-ink transition hover:bg-pill focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:cursor-not-allowed disabled:opacity-40"
+                type="button"
+                aria-label={kind === 'person' ? 'Mehr Personen' : 'Mehr Optionen'}
+                disabled={maxChoices >= 500 || action.busy}
+                onClick={() => setMaxChoices((value) => Math.max(1, Math.min(500, value + 1)))}
+              >
+                <Plus aria-hidden="true" size={24} />
+              </button>
+            </div>
           </div>
-        ))}
-      {single && (
-        <>
           <label className="flex items-center gap-2.5 text-[15px]">
             <input
               className="size-4 shrink-0 accent-[var(--color-accent)]"
@@ -403,8 +428,7 @@ export function SammlungForm({
             Stimme für die eigene Person erlauben
           </label>
           <p className="text-sm text-muted">
-            {kind === 'person' ? `Pro Person bis zu ${maxChoices} Stimme(n).` : 'Eine Option pro Person.'} Nach dem
-            Öffnen ist die Definition gesperrt.
+            {`Pro Person bis zu ${maxChoices} Stimme(n).`} Nach dem Öffnen ist die Definition gesperrt.
           </p>
         </>
       )}
@@ -566,12 +590,7 @@ function Ballot({ sammlung: poll }: { sammlung: Category }) {
   const { user } = useSession();
   const id = poll.id;
   const action = useAction();
-  const savedChoices =
-    poll.kind === 'person' && poll.my_option_ids?.length
-      ? poll.my_option_ids
-      : poll.my_option_id
-        ? [poll.my_option_id]
-        : [];
+  const savedChoices = poll.my_option_ids?.length ? poll.my_option_ids : poll.my_option_id ? [poll.my_option_id] : [];
   const savedChoicesKey = savedChoices.join('\u0000');
   const [choices, setChoices] = useState<string[]>(savedChoices);
   const [syncedChoicesKey, setSyncedChoicesKey] = useState(savedChoicesKey);
@@ -634,51 +653,24 @@ function Ballot({ sammlung: poll }: { sammlung: Category }) {
                 onSubmit={(e) => {
                   e.preventDefault();
                   action.run(async () => {
-                    await api(
-                      `/categories/${id}/ballot`,
-                      json('PUT', poll.kind === 'person' ? { option_ids: choices } : { option_id: choices[0] ?? null }),
-                    );
+                    await api(`/categories/${id}/ballot`, json('PUT', { option_ids: choices }));
                   }, 'Deine Stimme wurde gespeichert.');
                 }}
               >
-                {poll.kind === 'person' ? (
-                  <PeoplePicker
-                    legend={`Personen auswählen (bis zu ${poll.max_choices})`}
-                    options={poll.options.map((option) => ({
-                      id: option.id,
-                      name: option.label,
-                      user_id: option.user_id,
-                    }))}
-                    selectedIds={choices}
-                    onChange={setChoices}
-                    maxSelected={poll.max_choices}
-                    disabledUserIds={poll.allow_self_vote ? [] : [user.id]}
-                    disabled={poll.status !== 'open' || !eligible || action.busy}
-                  />
-                ) : (
-                  <fieldset className="min-w-0 space-y-2" disabled={poll.status !== 'open' || !eligible || action.busy}>
-                    <legend className="sr-only">Eine Option auswählen</legend>
-                    {poll.options.map((o) => (
-                      <label
-                        className={`flex cursor-pointer items-center gap-3 rounded-ui border-2 bg-white px-4 py-3 text-[15px] ${
-                          choices[0] === o.id ? 'border-ink' : 'border-line'
-                        }`}
-                        key={o.id}
-                      >
-                        <input
-                          className="size-4 shrink-0 accent-[var(--color-accent)]"
-                          type="radio"
-                          name="ballot"
-                          value={o.id}
-                          checked={choices[0] === o.id}
-                          onChange={() => setChoices([o.id])}
-                        />
-                        <span className="min-w-0 flex-1 break-words">{o.label}</span>
-                        {choices[0] === o.id && <Check aria-hidden="true" className="size-4 shrink-0" />}
-                      </label>
-                    ))}
-                  </fieldset>
-                )}
+                <PeoplePicker
+                  legend={`${poll.kind === 'person' ? 'Personen' : 'Optionen'} auswählen (bis zu ${poll.max_choices})`}
+                  searchLabel={poll.kind === 'person' ? 'Person suchen' : 'Option suchen'}
+                  options={poll.options.map((option) => ({
+                    id: option.id,
+                    name: option.label,
+                    user_id: option.user_id,
+                  }))}
+                  selectedIds={choices}
+                  onChange={setChoices}
+                  maxSelected={poll.max_choices}
+                  disabledUserIds={poll.allow_self_vote ? [] : [user.id]}
+                  disabled={poll.status !== 'open' || !eligible || action.busy}
+                />
                 {poll.kind === 'person' && poll.all_people && (
                   <p className="text-sm text-muted">
                     Die Personenliste wurde beim Öffnen festgelegt und bleibt gleich.
@@ -690,7 +682,7 @@ function Ballot({ sammlung: poll }: { sammlung: Category }) {
                     disabled={
                       action.busy ||
                       choices.length === 0 ||
-                      choices.length > (poll.kind === 'person' ? poll.max_choices : 1) ||
+                      choices.length > poll.max_choices ||
                       !eligible ||
                       (poll.kind === 'person' &&
                         choices.some((choice) =>

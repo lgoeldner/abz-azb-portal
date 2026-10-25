@@ -9,6 +9,9 @@ const longName = 'Mia ' + 'N'.repeat(100) + ' Beispiel aus der Q13';
 const base = {
   allow_self_vote: false,
   my_option_id: null,
+  all_people: false,
+  max_choices: 1,
+  my_option_ids: [],
   ballot_count: null as number | null,
   created_at: '2026-10-20T12:00:00Z',
   opened_at: null,
@@ -272,4 +275,37 @@ test('login error state stays readable on a narrow screen', async ({ page }) => 
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Schön, dass du da bist.' })).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test('poll count stepper supports direct input with field styling only while focused', async ({ page }) => {
+  await useFixtures(page, 'admin');
+  for (const width of [320, 390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/sammlungen?neu');
+    await page.getByRole('combobox', { name: 'Klasse', exact: true }).selectOption('proposal');
+    const count = page.getByRole('spinbutton', { name: 'Maximale Zahl der Stimmen pro Person' });
+    const more = page.getByRole('button', { name: 'Mehr Optionen' });
+    const less = page.getByRole('button', { name: 'Weniger Optionen' });
+    await expect(count).toHaveValue('1');
+    await expect(less).toBeDisabled();
+    await expect(count).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(count).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
+    for (const button of [more, less]) {
+      const box = await button.boundingBox();
+      expect(box!.width).toBeGreaterThanOrEqual(48);
+      expect(box!.width).toEqual(box!.height);
+      const radius = await button.evaluate((el) => Number.parseFloat(getComputedStyle(el).borderTopLeftRadius));
+      expect(radius).toBeGreaterThanOrEqual(box!.width / 2);
+    }
+    await more.click();
+    await expect(count).toHaveValue('2');
+    await count.click();
+    await expect(count).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await count.fill('500');
+    await expect(more).toBeDisabled();
+    await less.click();
+    await expect(count).toHaveValue('499');
+    await expect(count).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
 });

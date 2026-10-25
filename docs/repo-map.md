@@ -48,6 +48,7 @@ file `deployables/portal/server/migrations/migrations.go` :: embeds numbered SQL
 file `deployables/portal/server/migrations/001_initial.sql` :: base schema: users, categories, submissions, revisions, attachments, corrections, poll_options, ballots, ballot_audit, audit_events [schema, tables]
 file `deployables/portal/server/migrations/004_polls_become_categories.sql` :: polls merged into categories (single-answer kinds), polls table dropped [sammlung, poll, migration]
 file `deployables/portal/server/migrations/005_people_multiselect.sql` :: preserves existing votes and candidates; people mode, choice cap, unique multi-selection and grouped audit snapshots [migration, poll]
+file `deployables/portal/server/migrations/006_proposal_multiselect.sql` :: allows proposal selection caps while preserving existing poll definitions and ballots [migration, proposal, choices]
 file `deployables/portal/server/internal/portal/http.go` :: App, router (all `bind(` routes), errors, canEdit/canRead/canMutate, CSRF/session middleware [routes, permissions, middleware]
 file `deployables/portal/server/internal/portal/types.go` :: JSON types: User, Category, Submission, Revision, Correction, PollOption, PollResult, BallotAudit, AuditEvent [types, json]
 file `deployables/portal/server/internal/portal/categories.go` :: Category = Sammlung: kinds, repeatable vs single-answer, list/create/patch/status, ballot fill [sammlung, category, poll, lifecycle, draft]
@@ -66,6 +67,7 @@ test `deployables/portal/server/internal/portal/access_matrix_test.go` :: every 
 test `deployables/portal/server/internal/portal/categories_test.go` :: Sammlung invariants, all-status default exports and migration 004 [sammlung, migration]
 test `deployables/portal/server/internal/portal/poll_timeline_test.go` :: opened_at and ballot_count rules [poll, timeline]
 test `deployables/portal/server/internal/portal/people_polls_test.go` :: roster snapshots, explicit candidates, bounded atomic selections, audit and migration preservation [poll, invariants]
+test `deployables/portal/server/internal/portal/proposal_polls_test.go` :: choice-poll caps, atomic votes, results, audit privacy and exact migration preservation [proposal, invariant]
 test `deployables/portal/server/internal/portal/portal_test.go` :: pure invariants, integrationPool/emptySchemaPool helpers, author-only original mutations, annotation grants, lifecycle + ballots [helpers, lifecycle]
 test `deployables/portal/server/internal/portal/auth_test.go` :: OIDC trust/enrollment via authmock [auth]
 test `deployables/portal/server/internal/portal/user_delete_test.go` :: user delete guards [admin, delete]
@@ -99,7 +101,7 @@ route GET /auth/login, GET /auth/callback, POST /auth/logout :: outside /api/v1 
 
 file `deployables/portal/web/src/App.tsx` :: router, Layout, nav (StudentNav, EditorNav, AdminNav), StudentHome, EditorHome, AdminHome dashboard with one widget per class [routes, nav, dashboard, home]
 file `deployables/portal/web/src/sammlungen.tsx` :: Sammlungen list (Fortlaufend section, status groups, ?klasse filter), SammlungForm, SammlungDetail, all-submission editorial collection reader, read-only ballot options/results and student voting [sammlung, poll, vote, form]
-file `deployables/portal/web/src/PeoplePicker.tsx` :: shared candidate/vote search with removable chips above search and selection limits [person, picker, chips]
+file `deployables/portal/web/src/PeoplePicker.tsx` :: shared candidate/choice voting with removable chips, selection limits, and search only for 10+ options [person, picker, chips]
 file `deployables/portal/web/src/pages.tsx` :: Contributions, NewContribution, author detail and read-only editorial reader with annotations, all-submissions list, NotFound [beitrag, redaktion, export]
 file `deployables/portal/web/src/admin.tsx` :: Verwaltung: People, Categories (Sammlungen + manager grants), ActivityLog, audit action labels [verwaltung, admin, personen, protokoll]
 file `deployables/portal/web/src/ui.tsx` :: shared workspace view context, editorial/author submission links and UI: kindIcon/kindLabel (six classes), Badge, PageHead, Failure, Loading, Empty, SubmissionList, plural, newestOpened [components, icons]
@@ -111,7 +113,7 @@ file `deployables/portal/web/src/DevDebug.tsx` :: dev-only debug overlay [debug]
 test `deployables/portal/web/src/editorial.test.tsx` :: editorial readers, annotation grants, mode changes and collection defaults [test, redaktion, permissions]
 test `deployables/portal/web/src/App.test.tsx` :: component tests (vitest) [test, ui]
 test `deployables/portal/web/src/PeoplePicker.test.tsx` :: search, chip placement/removal, limits and disabled candidates [person, picker]
-test `deployables/portal/web/src/sammlungen.test.tsx` :: people-poll defaults, candidate mode and multi-vote behavior [poll, ui]
+test `deployables/portal/web/src/sammlungen.test.tsx` :: poll defaults, candidate mode, count stepper and person/proposal multi-vote behavior [poll, ui]
 test `deployables/portal/web/e2e/portal.spec.ts` :: Playwright journeys against a running seeded app [e2e]
 test `deployables/portal/web/e2e/verwaltung.spec.ts` :: Verwaltung e2e [e2e, admin]
 test `deployables/portal/web/e2e/responsive.spec.ts` :: phone-width layout checks [e2e, responsive]
@@ -127,7 +129,7 @@ page /abstimmungen[/:id], /verwaltung/rubriken, /admin :: redirects to the new r
 
 ## Domain rules
 
-rule Sammlung = categories row; kind is its class: repeatable idea/quote/memory/photo (submissions), person/proposal ballots (person: all or selected candidates, bounded multi-selection; proposal: one choice; draft->open->closed) [sammlung, class, kind, rubrik, poll]
+rule Sammlung = categories row; kind is its class: repeatable idea/quote/memory/photo (submissions), person/proposal ballots (both bounded multi-selection; person: all or selected candidates; draft->open->closed) [sammlung, class, kind, rubrik, poll]
 rule Managers read all submissions and manage/annotate assigned categories; admins manage all categories; only authors mutate pending originals and only admins see named ballots [permissions]
 rule Dev identities: subject = UUIDv5(display_slug); seeded fixtures map via fixtureSlugs in seed.go [login, fixtures]
 rule Integration tests: TEST_DATABASE_URL to a disposable DB only; never the dev `portal` DB [test, database]

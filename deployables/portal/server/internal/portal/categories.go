@@ -181,8 +181,8 @@ func validateCategory(in categoryInput) error {
 	if !validKind(in.Kind) {
 		return bad("Ungültiger Sammlungstyp.")
 	}
-	if in.MaxChoices != nil && (*in.MaxChoices < 1 || *in.MaxChoices > 500 || in.Kind != "person" && *in.MaxChoices != 1) {
-		return bad("Maximale Auswahl muss 1 bis 500 betragen; mehrere Stimmen sind nur für Personen erlaubt.")
+	if in.MaxChoices != nil && (*in.MaxChoices < 1 || *in.MaxChoices > 500 || repeatableKind(in.Kind) && *in.MaxChoices != 1) {
+		return bad("Maximale Auswahl muss 1 bis 500 betragen; fortlaufende Sammlungen haben keine Mehrfachauswahl.")
 	}
 	if in.Kind != "person" && in.AllPeople != nil && *in.AllPeople {
 		return bad("Alle Personen ist nur für Personenabstimmungen erlaubt.")
@@ -253,7 +253,7 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 		}
 		if in.MaxChoices == nil {
 			max := 1
-			if in.Kind == "person" {
+			if !repeatableKind(in.Kind) {
 				max = old.MaxChoices
 			}
 			in.MaxChoices = &max

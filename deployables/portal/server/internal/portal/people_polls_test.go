@@ -55,8 +55,11 @@ func TestPeoplePollRosterSnapshotsAndExplicitSubset(t *testing.T) {
 	for _, bad := range []string{
 		`{"name":"Bad","description":"","kind":"person","max_choices":0}`,
 		`{"name":"Bad","description":"","kind":"person","max_choices":501}`,
-		`{"name":"Bad","description":"","kind":"proposal","max_choices":2,"options":[{"label":"A"},{"label":"B"}]}`,
+		`{"name":"Bad","description":"","kind":"proposal","all_people":true,"options":[{"label":"A"},{"label":"B"}]}`,
+		`{"name":"Bad","description":"","kind":"proposal","max_choices":0,"options":[{"label":"A"},{"label":"B"}]}`,
+		`{"name":"Bad","description":"","kind":"proposal","max_choices":501,"options":[{"label":"A"},{"label":"B"}]}`,
 		`{"name":"Bad","description":"","kind":"idea","all_people":true}`,
+		`{"name":"Bad","description":"","kind":"idea","max_choices":2}`,
 	} {
 		if res := authenticatedRequest(t, app, pool, AdminID, http.MethodPost, "/api/v1/categories", bad); res.Code != 400 {
 			t.Fatalf("invalid definition accepted: %d", res.Code)

@@ -1007,10 +1007,10 @@ describe('sammlungen', () => {
   it('renders the ballot flow for a single-answer Sammlung and saves the vote', async () => {
     const calls = mount('/sammlungen/motto');
     expect(await screen.findByRole('heading', { level: 1, name: 'Abimotto' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('radio', { name: 'Zwei' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Zwei' }));
     fireEvent.click(screen.getByRole('button', { name: /Stimme speichern/ }));
     await waitFor(() =>
-      expect(calls).toEqual([{ url: '/categories/motto/ballot', method: 'PUT', body: { option_id: 'o2' } }]),
+      expect(calls).toEqual([{ url: '/categories/motto/ballot', method: 'PUT', body: { option_ids: ['o2'] } }]),
     );
     expect(screen.queryByRole('button', { name: /Beiträge prüfen/ })).toBeNull();
   });

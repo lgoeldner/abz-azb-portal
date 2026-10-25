@@ -20,6 +20,10 @@ const roster = [
   { id: 'user-alice', name: 'Alice Beispiel' },
   { id: 'user-bob', name: 'Bob Beispiel' },
   { id: 'user-cara', name: 'Cara Beispiel' },
+  ...['Anna Berg', 'Elias Koch', 'Lina Schulz', 'Noah Braun', 'Emma Wolf', 'Paul Lang', 'Clara Maier'].map((name) => ({
+    id: name,
+    name,
+  })),
 ];
 
 function personPoll(overrides: Partial<Category> = {}): Category {
@@ -66,7 +70,7 @@ function installApi(initial: Category[] = [], auditRows: unknown[] = []) {
         id: 'created-person-poll',
         name: String(body?.name ?? ''),
         description: String(body?.description ?? ''),
-        kind: 'person',
+        kind: body?.kind === 'proposal' ? 'proposal' : 'person',
         repeatable: false,
         status: 'draft',
         allow_self_vote: false,
@@ -123,13 +127,47 @@ function renderPortal(path: string, user: Me['user'], _categories: Category[] = 
   );
 }
 
-async function openPersonForm() {
+async function openPersonForm(kind = 'person') {
   fireEvent.click(screen.getByRole('button', { name: /Neue Sammlung/ }));
-  fireEvent.change(screen.getByLabelText('Klasse'), { target: { value: 'person' } });
+  fireEvent.change(screen.getByLabelText('Klasse'), { target: { value: kind } });
   expect(screen.getByLabelText('Maximale Zahl der Stimmen pro Person')).toHaveValue(1);
 }
 
 describe('Sammlungen person polls', () => {
+  it.each(['person', 'proposal'])(
+    'clamps %s count controls and saves direct input without submitting from the buttons',
+    async (kind) => {
+      const { writes } = installApi();
+      renderPortal('/sammlungen', admin);
+      await openPersonForm(kind);
+      if (kind === 'proposal')
+        fireEvent.change(screen.getByLabelText(/Antwortoptionen/), { target: { value: 'A\nB' } });
+
+      const count = screen.getByLabelText('Maximale Zahl der Stimmen pro Person');
+      const less = screen.getByRole('button', { name: kind === 'person' ? 'Weniger Personen' : 'Weniger Optionen' });
+      const more = screen.getByRole('button', { name: kind === 'person' ? 'Mehr Personen' : 'Mehr Optionen' });
+      expect(less).toBeDisabled();
+      fireEvent.click(more);
+      expect(count).toHaveValue(2);
+      expect(writes).toHaveLength(0);
+
+      fireEvent.change(count, { target: { value: '500' } });
+      expect(more).toBeDisabled();
+      fireEvent.click(less);
+      expect(count).toHaveValue(499);
+
+      fireEvent.change(count, { target: { value: '501' } });
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Abimotto-Team' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+      expect(writes).toHaveLength(0);
+
+      fireEvent.change(count, { target: { value: '500' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+      await waitFor(() => expect(writes).toHaveLength(1));
+      expect(writes[0].body).toMatchObject({ max_choices: 500 });
+    },
+  );
+
   it('defaults new person polls to all people and creates with an empty options list', async () => {
     const { writes } = installApi();
     renderPortal('/sammlungen', admin);
@@ -166,7 +204,7 @@ describe('Sammlungen person polls', () => {
     expect(aliceChip.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     fireEvent.change(search, { target: { value: 'niemand' } });
-    expect(screen.getByRole('status')).toHaveTextContent('Keine Personen gefunden.');
+    expect(screen.getByRole('status')).toHaveTextContent('Keine Auswahlmöglichkeiten gefunden.');
     fireEvent.change(search, { target: { value: 'Bob' } });
     fireEvent.click(screen.getByRole('button', { name: 'Bob Beispiel' }));
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Kandidat:innen' } });
@@ -207,6 +245,30 @@ describe('Sammlungen person polls', () => {
     );
     expect(await screen.findByText('Gespeicherte Stimmen: Bob Beispiel, Cara Beispiel')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Gesamtergebnisse' })).not.toBeInTheDocument();
+  });
+
+  it('saves and restores multiple proposal choices as removable chips without search for a short list', async () => {
+    const poll = personPoll({
+      kind: 'proposal',
+      options: [
+        { id: 'blue', label: 'Mitternachtsblau' },
+        { id: 'gold', label: 'Sonnengelb' },
+        { id: 'green', label: 'Waldgrün' },
+      ],
+    });
+    const { writes } = installApi([poll]);
+    renderPortal(`/sammlungen/${poll.id}`, student);
+    fireEvent.click(await screen.findByRole('button', { name: 'Mitternachtsblau' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sonnengelb' }));
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Waldgrün/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Mitternachtsblau entfernen' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Waldgrün' }));
+    fireEvent.click(screen.getByRole('button', { name: /Stimme speichern/ }));
+    await waitFor(() => expect(writes[0].body).toEqual({ option_ids: ['gold', 'green'] }));
+    expect(await screen.findByText('Gespeicherte Stimmen: Sonnengelb, Waldgrün')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sonnengelb entfernen' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Waldgrün entfernen' })).toBeInTheDocument();
   });
 
   it('groups each admin audit ballot into one complete selection row', async () => {
@@ -259,7 +321,8 @@ describe('Sammlungen person polls', () => {
     installApi([poll]);
     renderPortal(`/sammlungen/${poll.id}`, user, [poll]);
 
-    expect(await screen.findByRole('searchbox', { name: 'Person suchen' })).toBeDisabled();
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    await screen.findByRole('button', { name: 'Alice Beispiel' });
     expect(screen.getByRole('button', { name: 'Alice Beispiel' })).toBeDisabled();
     if (!user.admitted) expect(screen.getByText(/Nur freigegebene Mitglieder/)).toBeInTheDocument();
     if (poll.status === 'closed')

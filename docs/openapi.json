@@ -1473,7 +1473,7 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 500,
-            "description": "Maximum selections per voter; 1 for proposal and repeatable categories."
+            "description": "Maximum selections per voter for person and proposal polls; 1 for repeatable categories."
           },
           "my_option_ids": {
             "type": "array",
@@ -1852,7 +1852,7 @@
             "minimum": 1,
             "maximum": 500,
             "default": 1,
-            "description": "Maximum selections for person polls; other kinds require 1."
+            "description": "Maximum selections for person and proposal polls; repeatable kinds require 1."
           }
         },
         "required": ["name", "description", "kind"],
@@ -1999,7 +1999,7 @@
             "minimum": 1,
             "maximum": 500,
             "default": 1,
-            "description": "Maximum selections for person polls; other kinds require 1."
+            "description": "Maximum selections for person and proposal polls; repeatable kinds require 1."
           }
         },
         "required": ["name", "description", "kind", "version"],
