@@ -1,6 +1,6 @@
 import { Minus, Plus } from 'lucide-react';
 import { useRef, useState, type FormEvent } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   api,
   canEdit,
@@ -60,6 +60,7 @@ const debugData = (c: Category) => ({
   maxChoices: c.max_choices,
   hasVoted: Boolean(c.my_option_ids?.length || c.my_option_id),
 });
+const badgeLabel = (c: Category) => (c.status === 'draft' && c.opened_at ? 'Verborgen' : undefined);
 
 // ---------- list ----------
 export function Sammlungen() {
@@ -74,7 +75,7 @@ export function Sammlungen() {
   const ballots = shown.filter((c) => !c.repeatable);
   const groups: [Category['status'], string, string][] = [
     ['open', 'Offen', 'Stimme während der Öffnung änderbar'],
-    ['draft', 'Entwürfe', 'Nur für die Redaktion sichtbar'],
+    ['draft', 'Verborgen', 'Nur für die Redaktion sichtbar'],
     ['closed', 'Beendet', 'Die Abstimmung ist abgeschlossen'],
   ];
   const chip = (active: boolean) =>
@@ -189,7 +190,7 @@ function Cards({ items }: { items: Category[] }) {
                 <strong className="block text-[15px] font-semibold">{c.name}</strong>
                 <span className="block text-sm text-muted">{c.description || kindLabel[c.kind]}</span>
               </span>
-              {!c.repeatable && <Badge status={c.status} />}
+              {!c.repeatable && <Badge status={c.status} label={badgeLabel(c)} />}
               <span className="hidden text-sm text-muted sm:block">
                 {c.repeatable ? 'Beiträge lesen' : 'Ergebnisse ansehen'}
               </span>
@@ -209,7 +210,7 @@ function Cards({ items }: { items: Category[] }) {
           >
             <div className="flex items-start justify-between gap-3">
               <h3 className={`${heading} min-w-0`}>{c.name}</h3>
-              {!c.repeatable && <Badge status={c.status} />}
+              {!c.repeatable && <Badge status={c.status} label={badgeLabel(c)} />}
             </div>
             <p className="text-sm text-muted">{c.description}</p>
             <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line pt-3 text-sm text-muted">
@@ -242,7 +243,8 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
   const classes = sammlung ? (sammlung.repeatable ? repeatableKinds : singleKinds) : allKinds;
   const [kind, setKind] = useState<Kind>(sammlung?.kind ?? 'memory');
   const single = singleKinds.includes(kind);
-  const definitionLocked = !!sammlung && !sammlung.repeatable && sammlung.status !== 'draft';
+  const definitionLocked =
+    !!sammlung && !sammlung.repeatable && (sammlung.status !== 'draft' || Boolean(sammlung.opened_at));
   const users = useData<User[]>('/admin/users', user.role === 'admin');
   const [grants, setGrants] = useState<Record<string, boolean>>({});
   const managers = (users.data ?? []).filter((u) => u.role === 'manager');
@@ -649,6 +651,7 @@ function Ballot({ sammlung: poll }: { sammlung: Category }) {
   const [view] = useWorkspaceView();
   const redaktion = view === 'redaktion';
   const { user } = useSession();
+  const navigate = useNavigate();
   const id = poll.id;
   const action = useAction();
   const savedChoices = poll.my_option_ids?.length ? poll.my_option_ids : poll.my_option_id ? [poll.my_option_id] : [];
@@ -674,12 +677,24 @@ function Ballot({ sammlung: poll }: { sammlung: Category }) {
     });
     return [...groups.entries()].map(([key, rows]) => ({ key, rows }));
   })();
-  const setStatus = (status: 'open' | 'closed', message: string) =>
+  const setStatus = (status: Category['status'], message: string) =>
     action.run(() => api(`/categories/${id}/status`, json('POST', { version: poll.version, status })), message);
+  const deletePoll = () => {
+    if (
+      !window.confirm(
+        'Diese Sammlung sowie alle Stimmen und das Stimmprotokoll werden gelöscht. Möchtest du fortfahren?',
+      )
+    )
+      return;
+    action.run(async () => {
+      await api<void>(`/categories/${id}`, json('DELETE', { version: poll.version }));
+      navigate('/sammlungen');
+    }, 'Sammlung gelöscht.');
+  };
   return (
     <>
       <BackLink />
-      <PageHead title={poll.name} action={<Badge status={poll.status} />}>
+      <PageHead title={poll.name} action={<Badge status={poll.status} label={badgeLabel(poll)} />}>
         <ClassLine sammlung={poll} />
       </PageHead>
       <DevDebug label="Sammlung" data={debugData(poll)} />
@@ -698,7 +713,9 @@ function Ballot({ sammlung: poll }: { sammlung: Category }) {
                     : 'Welche Option wählst du?'
                   : poll.status === 'closed'
                     ? 'Diese Sammlung ist beendet.'
-                    : 'Diese Sammlung ist ein Entwurf.'}
+                    : poll.opened_at
+                      ? 'Diese Sammlung ist verborgen.'
+                      : 'Diese Sammlung ist ein Entwurf.'}
             </h2>
             {redaktion ? (
               <ul className="divide-y divide-line" aria-label="Auswahlmöglichkeiten">
@@ -774,15 +791,17 @@ function Ballot({ sammlung: poll }: { sammlung: Category }) {
             </p>
           </section>
           <aside className="min-w-0 space-y-6">
-            {writable && (poll.status !== 'closed' || user.role === 'admin') && (
+            {writable && (
               <section className={panel}>
                 <h3 className={heading}>Sammlung verwalten</h3>
                 <div className="mt-4 flex flex-col gap-3">
                   {poll.status === 'draft' && (
                     <>
-                      <button className={btn.secondary} onClick={() => setEditing(true)}>
-                        Definition bearbeiten
-                      </button>
+                      {!poll.opened_at && (
+                        <button className={btn.secondary} onClick={() => setEditing(true)}>
+                          Definition bearbeiten
+                        </button>
+                      )}
                       <button
                         className={btn.primary}
                         disabled={action.busy}
@@ -795,7 +814,7 @@ function Ballot({ sammlung: poll }: { sammlung: Category }) {
                       </p>
                     </>
                   )}
-                  {user.role === 'admin' && poll.status !== 'draft' && (
+                  {user.role === 'admin' && (poll.status !== 'draft' || poll.opened_at) && (
                     <button className={btn.secondary} onClick={() => setEditing(true)}>
                       Berechtigungen bearbeiten
                     </button>
@@ -807,6 +826,20 @@ function Ballot({ sammlung: poll }: { sammlung: Category }) {
                       onClick={() => setStatus('closed', 'Sammlung beendet.')}
                     >
                       Sammlung beenden
+                    </button>
+                  )}
+                  {poll.status !== 'draft' && (
+                    <button
+                      className={btn.secondary}
+                      disabled={action.busy}
+                      onClick={() => setStatus('draft', 'Sammlung verborgen.')}
+                    >
+                      Sammlung verbergen
+                    </button>
+                  )}
+                  {user.role === 'admin' && (
+                    <button className={btn.danger} disabled={action.busy} onClick={deletePoll}>
+                      Sammlung endgültig löschen
                     </button>
                   )}
                 </div>

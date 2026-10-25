@@ -148,13 +148,13 @@ const badgeTone: Record<keyof typeof statusLabels, string> = {
   closed: 'bg-pill text-muted',
   draft: 'bg-pill text-muted',
 };
-export function Badge({ status }: { status: keyof typeof statusLabels }) {
+export function Badge({ status, label }: { status: keyof typeof statusLabels; label?: string }) {
   return (
     <span
       className={`inline-flex flex-none items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${badgeTone[status]}`}
     >
       <span className="size-1.5 rounded-full bg-current" />
-      {statusLabels[status]}
+      {label ?? statusLabels[status]}
     </span>
   );
 }

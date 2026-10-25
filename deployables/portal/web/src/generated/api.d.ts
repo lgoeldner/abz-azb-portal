@@ -44,10 +44,11 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete a single-answer collection and its votes/history (admin only; 400 repeatable, 404 missing, 409 stale version) */
+        delete: operations["deleteCategoriesId"];
         options?: never;
         head?: never;
-        /** Update collection (admins or managers with grant; single-answer definitions only in draft); kind changes stay within their group */
+        /** Update collection (admins or managers with grant; single-answer definitions only before first opening); kind changes stay within their group */
         patch: operations["patchCategoriesId"];
         trace?: never;
     };
@@ -336,7 +337,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Open or close a single-answer category (400 for repeatable) */
+        /** Open, close or hide a single-answer category (admin or manager with grant; draft->open, open->closed, open/closed->draft; 400 for repeatable). Hiding preserves votes/history and first opened_at; reopening keeps candidates fixed. */
         post: operations["postCategoriesIdStatus"];
         delete?: never;
         options?: never;
@@ -423,7 +424,7 @@ export interface components {
             /** @description True for idea, quote, memory, photo (any number of submissions); false for person, proposal (single-answer ballot). */
             repeatable: boolean;
             /**
-             * @description Always open for repeatable categories.
+             * @description Always open for repeatable categories. Draft means hidden from students, including previously opened polls; opened_at distinguishes editable new drafts from locked hidden polls.
              * @enum {string}
              */
             status: "draft" | "open" | "closed";
@@ -701,6 +702,43 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Category"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteCategoriesId: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    version: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Collection deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {
@@ -1435,7 +1473,7 @@ export interface operations {
                 "application/json": {
                     version: number;
                     /** @enum {string} */
-                    status: "open" | "closed";
+                    status: "draft" | "open" | "closed";
                 };
             };
         };

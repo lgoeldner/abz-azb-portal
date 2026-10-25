@@ -16,6 +16,8 @@ const student: Me['user'] = {
   created_at: '2026-09-01T00:00:00Z',
 };
 const admin: Me['user'] = { ...student, id: 'admin-1', name: 'Ada Admin', role: 'admin' };
+const assignedManager: Me['user'] = { ...student, id: 'manager-1', role: 'manager', category_ids: ['person-poll'] };
+const unassignedManager: Me['user'] = { ...student, id: 'manager-2', role: 'manager' };
 const roster = [
   { id: 'user-alice', name: 'Alice Beispiel' },
   { id: 'user-bob', name: 'Bob Beispiel' },
@@ -89,6 +91,21 @@ function installApi(initial: Category[] = [], auditRows: unknown[] = []) {
       categories = [...categories, created];
       return Response.json(created, { status: 201 });
     }
+    if (path.endsWith('/status') && method === 'POST') {
+      writes.push({ path, method, body: body ?? {} });
+      const categoryId = path.split('/')[2];
+      const updated = categories.find((category) => category.id === categoryId);
+      if (!updated) return Response.json({ error: { message: 'Not found' } }, { status: 404 });
+      const next = { ...updated, status: body?.status as Category['status'], version: updated.version + 1 };
+      categories = categories.map((category) => (category.id === categoryId ? next : category));
+      return Response.json(next);
+    }
+    if (path.startsWith('/categories/') && method === 'DELETE') {
+      writes.push({ path, method, body: body ?? {} });
+      const categoryId = path.split('/')[2];
+      categories = categories.filter((category) => category.id !== categoryId);
+      return new Response(null, { status: 204 });
+    }
     if (path.endsWith('/results')) return Response.json([]);
     if (path.endsWith('/audit')) return Response.json(auditRows);
     if (path.endsWith('/ballot') && method === 'PUT') {
@@ -136,6 +153,129 @@ async function openPersonForm(kind = 'person') {
 }
 
 describe('Sammlungen person polls', () => {
+  it.each([
+    { role: 'admin', user: admin, canHide: true },
+    { role: 'assigned manager', user: assignedManager, canHide: true },
+    { role: 'unassigned manager', user: unassignedManager, canHide: false },
+    { role: 'student', user: student, canHide: false },
+  ])('$role permission for an open poll', async ({ user, canHide }) => {
+    const poll = personPoll();
+    installApi([poll]);
+    renderPortal(`/sammlungen/${poll.id}`, user);
+
+    await screen.findByRole('heading', { name: poll.name });
+    const hide = screen.queryByRole('button', { name: 'Sammlung verbergen' });
+    if (canHide) expect(hide).toBeInTheDocument();
+    else expect(hide).toBeNull();
+    const remove = screen.queryByRole('button', { name: 'Sammlung endgültig löschen' });
+    if (user.role === 'admin') expect(remove).toBeInTheDocument();
+    else expect(remove).toBeNull();
+  });
+
+  it.each([
+    { role: 'admin', user: admin, canHide: true },
+    { role: 'assigned manager', user: assignedManager, canHide: true },
+    { role: 'unassigned manager', user: unassignedManager, canHide: false },
+    { role: 'student', user: student, canHide: false },
+  ])('$role permission for a closed poll', async ({ user, canHide }) => {
+    const poll = personPoll({ status: 'closed' });
+    installApi([poll]);
+    renderPortal(`/sammlungen/${poll.id}`, user);
+
+    await screen.findByRole('heading', { name: poll.name });
+    const hide = screen.queryByRole('button', { name: 'Sammlung verbergen' });
+    if (canHide) expect(hide).toBeInTheDocument();
+    else expect(hide).toBeNull();
+    const remove = screen.queryByRole('button', { name: 'Sammlung endgültig löschen' });
+    if (user.role === 'admin') expect(remove).toBeInTheDocument();
+    else expect(remove).toBeNull();
+  });
+
+  it('hides an open poll with the current version and refreshes its hidden label', async () => {
+    const poll = personPoll();
+    const { fetchMock, writes } = installApi([poll]);
+    const manager = { ...student, id: 'manager-1', role: 'manager' as const, category_ids: [poll.id] };
+    renderPortal(`/sammlungen/${poll.id}`, manager);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung verbergen' }));
+
+    await screen.findByText('Verborgen');
+    expect(writes).toContainEqual({
+      path: `/categories/${poll.id}/status`,
+      method: 'POST',
+      body: { version: poll.version, status: 'draft' },
+    });
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/api/v1/categories'))).toHaveLength(2);
+  });
+
+  it('keeps a previously opened hidden poll definition locked while allowing reopening', async () => {
+    const poll = personPoll({ status: 'draft' });
+    const manager = { ...student, id: 'manager-1', role: 'manager' as const, category_ids: [poll.id] };
+    installApi([poll]);
+    renderPortal(`/sammlungen/${poll.id}`, manager);
+
+    expect(await screen.findByText('Verborgen')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Definition bearbeiten' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sammlung öffnen' })).toBeInTheDocument();
+  });
+
+  it('lets managers edit a draft that has never been opened', async () => {
+    const poll = personPoll({ status: 'draft', opened_at: null });
+    const manager = { ...student, id: 'manager-1', role: 'manager' as const, category_ids: [poll.id] };
+    installApi([poll]);
+    renderPortal(`/sammlungen/${poll.id}`, manager);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Definition bearbeiten' }));
+    expect(screen.getByLabelText('Name')).toHaveValue(poll.name);
+  });
+
+  it('lets admins edit permissions on a hidden poll without unlocking its definition', async () => {
+    const poll = personPoll({ status: 'draft' });
+    installApi([poll]);
+    renderPortal(`/sammlungen/${poll.id}`, admin);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Berechtigungen bearbeiten' }));
+
+    expect(screen.getByRole('heading', { name: 'Berechtigungen bearbeiten' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
+  });
+
+  it('does not send a delete request when an admin cancels confirmation', async () => {
+    const poll = personPoll({ status: 'closed' });
+    const { writes } = installApi([poll]);
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => false),
+    );
+    renderPortal(`/sammlungen/${poll.id}`, admin);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung endgültig löschen' }));
+
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Stimmprotokoll'));
+    expect(writes).toEqual([]);
+    expect(await screen.findByRole('heading', { name: poll.name })).toBeInTheDocument();
+  });
+
+  it('deletes for an admin after confirmation and navigates back to collections', async () => {
+    const poll = personPoll({ status: 'draft' });
+    const { writes } = installApi([poll]);
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    );
+    renderPortal(`/sammlungen/${poll.id}`, admin);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung endgültig löschen' }));
+
+    await screen.findByRole('heading', { name: 'Sammlungen' });
+    expect(writes).toContainEqual({
+      path: `/categories/${poll.id}`,
+      method: 'DELETE',
+      body: { version: poll.version },
+    });
+    expect(screen.getByText('Hier geht’s bald los. Aktuell gibt es keine Sammlungen.')).toBeInTheDocument();
+  });
+
   it.each(['person', 'proposal'])(
     'clamps %s count controls and saves direct input without submitting from the buttons',
     async (kind) => {

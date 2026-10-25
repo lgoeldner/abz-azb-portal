@@ -1038,7 +1038,7 @@ describe('sammlungen', () => {
     expect(within(fortlaufend).queryByText('Abimotto')).toBeNull();
     expect(within(section('Offen')).getByRole('link', { name: /Abimotto/ })).toHaveTextContent('Abstimmen');
     expect(within(section('Beendet')).getByRole('link', { name: /Altlast/ })).toHaveTextContent('Ansehen');
-    expect(within(main).queryByRole('region', { name: 'Entwürfe' })).toBeNull();
+    expect(within(main).queryByRole('region', { name: 'Verborgen' })).toBeNull();
     expect(within(main).queryByText('Geheimer Entwurf')).toBeNull();
     expect(within(main).queryByRole('button', { name: /Neue Sammlung/ })).toBeNull();
   });
@@ -1047,7 +1047,7 @@ describe('sammlungen', () => {
     mount('/sammlungen', manager);
     await screen.findByRole('heading', { level: 1, name: 'Sammlungen' });
     const main = screen.getByRole('main');
-    expect(await within(main).findByRole('region', { name: 'Entwürfe' })).toHaveTextContent('Geheimer Entwurf');
+    expect(await within(main).findByRole('region', { name: 'Verborgen' })).toHaveTextContent('Geheimer Entwurf');
     expect(within(main).getByRole('button', { name: /Neue Sammlung/ })).toBeInTheDocument();
   });
 

@@ -224,6 +224,7 @@ func (a *App) routes() {
 	bind("GET /api/v1/categories", a.listCategories)
 	bind("POST /api/v1/categories", a.writeCategory)
 	bind("PATCH /api/v1/categories/{id}", a.writeCategory)
+	bind("DELETE /api/v1/categories/{id}", a.deleteCategory)
 	bind("GET /api/v1/submissions", a.listSubmissions)
 	bind("POST /api/v1/submissions", a.createSubmission)
 	bind("GET /api/v1/submissions/{id}", a.getSubmission)

@@ -155,6 +155,7 @@ func TestRestrictedOperationsRejectLowerRoles(t *testing.T) {
 		{http.MethodGet, "/api/v1/categories/{id}/export"},
 	}
 	adminOnly := []contractOperation{
+		{http.MethodDelete, "/api/v1/categories/{id}"},
 		{http.MethodGet, "/api/v1/categories/{id}/audit"},
 		{http.MethodGet, "/api/v1/admin/users"},
 		{http.MethodPatch, "/api/v1/admin/users/{id}"},

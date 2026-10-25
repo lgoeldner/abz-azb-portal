@@ -270,7 +270,7 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 		if repeatableKind(in.Kind) != old.Repeatable {
 			return bad("Der Typ darf nur innerhalb seiner Gruppe geändert werden.")
 		}
-		if in.Version != old.Version || old.Status != "draft" && !old.Repeatable {
+		if in.Version != old.Version || !old.Repeatable && (old.Status != "draft" || old.OpenedAt != nil) {
 			return conflict()
 		}
 	} else {
@@ -364,7 +364,7 @@ func (a *App) statusCategory(w http.ResponseWriter, r *http.Request) error {
 	if e := decode(w, r, &in); e != nil {
 		return e
 	}
-	if in.Status != "open" && in.Status != "closed" {
+	if in.Status != "draft" && in.Status != "open" && in.Status != "closed" {
 		return bad("Ungültiger Status.")
 	}
 	tx, e := a.DB.Begin(r.Context())
@@ -382,10 +382,13 @@ func (a *App) statusCategory(w http.ResponseWriter, r *http.Request) error {
 	if c.Repeatable {
 		return bad("Diese Sammlung hat keinen Abstimmungsstatus.")
 	}
-	if in.Version != c.Version || !(c.Status == "draft" && in.Status == "open" || c.Status == "open" && in.Status == "closed") {
+	validTransition := c.Status == "draft" && in.Status == "open" ||
+		c.Status == "open" && (in.Status == "closed" || in.Status == "draft") ||
+		c.Status == "closed" && in.Status == "draft"
+	if in.Version != c.Version || !validTransition {
 		return conflict()
 	}
-	if c.AllPeople && c.Status == "draft" && in.Status == "open" {
+	if c.AllPeople && c.OpenedAt == nil && in.Status == "open" {
 		if e = refreshPeopleOptions(r.Context(), tx, c.ID); e != nil {
 			return e
 		}
@@ -397,7 +400,7 @@ func (a *App) statusCategory(w http.ResponseWriter, r *http.Request) error {
 	if len(c.Options) < 2 {
 		return bad("Mindestens zwei Optionen erforderlich.")
 	}
-	if e = tx.QueryRow(r.Context(), "UPDATE categories SET status=$2,version=version+1,opened_at=CASE WHEN $2='open' THEN now() ELSE opened_at END WHERE id=$1 RETURNING opened_at", c.ID, in.Status).Scan(&c.OpenedAt); e != nil {
+	if e = tx.QueryRow(r.Context(), "UPDATE categories SET status=$2,version=version+1,opened_at=CASE WHEN $2='open' AND opened_at IS NULL THEN now() ELSE opened_at END WHERE id=$1 RETURNING opened_at", c.ID, in.Status).Scan(&c.OpenedAt); e != nil {
 		return e
 	}
 	if e = audit(r.Context(), tx, u, "poll.status."+in.Status, c.ID); e != nil {
@@ -409,6 +412,62 @@ func (a *App) statusCategory(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	jsonOut(w, 200, c)
+	return nil
+}
+
+func (a *App) deleteCategory(w http.ResponseWriter, r *http.Request) error {
+	actor := current(r)
+	if actor.Role != "admin" {
+		return forbidden()
+	}
+	var in struct {
+		Version int `json:"version"`
+	}
+	if e := decode(w, r, &in); e != nil {
+		return e
+	}
+	id := r.PathValue("id")
+	if !validID(id) {
+		return missing()
+	}
+	tx, e := a.DB.Begin(r.Context())
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback(r.Context())
+	if _, e = tx.Exec(r.Context(), "SELECT pg_advisory_xact_lock(74120984)"); e != nil {
+		return e
+	}
+	var kind string
+	var version int
+	e = tx.QueryRow(r.Context(), "SELECT kind,version FROM categories WHERE id=$1 FOR UPDATE", id).Scan(&kind, &version)
+	if e != nil {
+		return e
+	}
+	if version != in.Version {
+		return conflict()
+	}
+	if repeatableKind(kind) {
+		return bad("Fortlaufende Sammlungen können nicht gelöscht werden.")
+	}
+	for _, table := range []string{"ballots", "ballot_audit", "poll_options"} {
+		if _, e = tx.Exec(r.Context(), "DELETE FROM "+table+" WHERE poll_id=$1", id); e != nil {
+			return e
+		}
+	}
+	if _, e = tx.Exec(r.Context(), "UPDATE users SET category_ids=array_remove(category_ids,$1::uuid) WHERE $1::uuid=ANY(category_ids)", id); e != nil {
+		return e
+	}
+	if _, e = tx.Exec(r.Context(), "DELETE FROM categories WHERE id=$1", id); e != nil {
+		return e
+	}
+	if e = audit(r.Context(), tx, actor, "poll.deleted", id); e != nil {
+		return e
+	}
+	if e = tx.Commit(r.Context()); e != nil {
+		return e
+	}
+	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
 

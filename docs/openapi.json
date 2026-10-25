@@ -118,7 +118,7 @@
     },
     "/api/v1/categories/{id}": {
       "patch": {
-        "summary": "Update collection (admins or managers with grant; single-answer definitions only in draft); kind changes stay within their group",
+        "summary": "Update collection (admins or managers with grant; single-answer definitions only before first opening); kind changes stay within their group",
         "operationId": "patchCategoriesId",
         "responses": {
           "200": {
@@ -166,6 +166,62 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CategoryEdit"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a single-answer collection and its votes/history (admin only; 400 repeatable, 404 missing, 409 stale version)",
+        "operationId": "deleteCategoriesId",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Collection deleted"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
@@ -1101,7 +1157,7 @@
     },
     "/api/v1/categories/{id}/status": {
       "post": {
-        "summary": "Open or close a single-answer category (400 for repeatable)",
+        "summary": "Open, close or hide a single-answer category (admin or manager with grant; draft->open, open->closed, open/closed->draft; 400 for repeatable). Hiding preserves votes/history and first opened_at; reopening keeps candidates fixed.",
         "operationId": "postCategoriesIdStatus",
         "responses": {
           "200": {
@@ -1155,7 +1211,7 @@
                   },
                   "status": {
                     "type": "string",
-                    "enum": ["open", "closed"]
+                    "enum": ["draft", "open", "closed"]
                   }
                 },
                 "required": ["version", "status"],
@@ -1433,7 +1489,7 @@
           "status": {
             "type": "string",
             "enum": ["draft", "open", "closed"],
-            "description": "Always open for repeatable categories."
+            "description": "Always open for repeatable categories. Draft means hidden from students, including previously opened polls; opened_at distinguishes editable new drafts from locked hidden polls."
           },
           "allow_self_vote": {
             "type": "boolean"
