@@ -75,6 +75,7 @@ it('keeps contribution debug metadata outside its navigation link and omits priv
               created_at: '2026-10-01T00:00:00Z',
               opened_at: null,
               ballot_count: null,
+              participation: null,
             },
           ]}
         />

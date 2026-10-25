@@ -25,7 +25,7 @@ func scanCategory(row pgx.Row) (Category, error) {
 	return c, e
 }
 
-// fillBallots adds options, the viewer's own choice and (editors only) the ballot count to the
+// fillBallots adds options, the viewer's own choice and (editors only) ballot counts and participation to the
 // single-answer categories of cs using one query each, however many categories there are.
 func fillBallots(ctx context.Context, db DB, u User, cs []Category) error {
 	idx := map[string]int{}
@@ -77,11 +77,15 @@ func fillBallots(ctx context.Context, db DB, u User, cs []Category) error {
 	if e != nil || !editor(u) {
 		return e
 	}
-	for _, i := range idx {
-		n := 0
-		cs[i].BallotCount = &n
-	}
-	rows, e = db.Query(ctx, "SELECT poll_id::text,count(DISTINCT user_id)::int FROM ballots WHERE poll_id=ANY($1::uuid[]) GROUP BY poll_id", ids)
+	// Count current eligibility and ballots in the same statement snapshot. Stored
+	// ballots remain in ballot_count, while participation only counts eligible voters.
+	rows, e = db.Query(ctx, `SELECT p.id::text,count(DISTINCT b.user_id)::int,
+		count(DISTINCT b.user_id) FILTER (WHERE u.admitted AND u.cohort_member)::int,
+		(SELECT count(*)::int FROM users WHERE admitted AND cohort_member)
+		FROM unnest($1::uuid[]) AS p(id)
+		LEFT JOIN ballots b ON b.poll_id=p.id
+		LEFT JOIN users u ON u.id=b.user_id
+		GROUP BY p.id`, ids)
 	if e != nil {
 		return e
 	}
@@ -89,10 +93,12 @@ func fillBallots(ctx context.Context, db DB, u User, cs []Category) error {
 	for rows.Next() {
 		var pid string
 		var n int
-		if e = rows.Scan(&pid, &n); e != nil {
+		var participation VotingParticipation
+		if e = rows.Scan(&pid, &n, &participation.Voted, &participation.Eligible); e != nil {
 			return e
 		}
 		cs[idx[pid]].BallotCount = &n
+		cs[idx[pid]].Participation = &participation
 	}
 	return rows.Err()
 }

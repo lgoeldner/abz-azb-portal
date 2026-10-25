@@ -132,9 +132,13 @@ func TestPeopleMultipleSelectionsReplaceAtomicallyAndAuditSnapshots(t *testing.T
 	if !slices.Equal(mine.MyOptionIDs, second) || mine.MyOptionID == nil || *mine.MyOptionID != second[0] || auditCount() != 4 {
 		t.Fatalf("failed request changed vote: %+v", mine)
 	}
-	count := categoriesFor(t, app, AdminID)[poll.ID].BallotCount
+	listed := categoriesFor(t, app, AdminID)[poll.ID]
+	count := listed.BallotCount
 	if count == nil || *count != 1 {
 		t.Fatalf("count must be distinct voters: %v", count)
+	}
+	if listed.Participation == nil || listed.Participation.Voted != 1 || listed.Participation.Eligible != 4 {
+		t.Fatalf("multiple selections must count as one participating person: %+v", listed.Participation)
 	}
 	var results []PollResult
 	res := authenticatedRequest(t, app, pool, ManagerID, http.MethodGet, path+"/results", "")

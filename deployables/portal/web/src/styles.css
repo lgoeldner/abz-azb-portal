@@ -2,7 +2,7 @@
 
 /* Brand tokens. Everything else is a Tailwind utility in the components. */
 @theme {
-  --font-sans: 'Bricolage Grotesque', 'Avenir Next', 'Segoe UI', sans-serif;
+  --font-sans: 'Bricolage Grotesque Variable', 'Avenir Next', 'Segoe UI', sans-serif;
   --color-paper: #f5f6ec;
   --color-ink: #15181f;
   --color-muted: #5d6270;

@@ -49,6 +49,7 @@ function personPoll(overrides: Partial<Category> = {}): Category {
     created_at: '2026-10-01T00:00:00Z',
     opened_at: '2026-10-02T00:00:00Z',
     ballot_count: null,
+    participation: null,
     ...overrides,
   };
 }
@@ -83,6 +84,7 @@ function installApi(initial: Category[] = [], auditRows: unknown[] = []) {
         created_at: '2026-10-25T00:00:00Z',
         opened_at: null,
         ballot_count: null,
+        participation: null,
       } as Category;
       categories = [...categories, created];
       return Response.json(created, { status: 201 });

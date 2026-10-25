@@ -104,6 +104,8 @@ New person polls default to all admitted cohort members, refreshed at opening an
 
 The selection cap uses 56px circular buttons around a 36px editable number. At rest the input has transparent background and border; focus reveals a white field with the workspace focus color. Both person and choice polls support bounded multiple selections and removable chips. Search is hidden for fewer than ten listed options, including candidate setup.
 
-- `make check` passed against disposable PostgreSQL `portal_stepper_test_20261025`, including 69 frontend tests and all race, contract, build and lint checks. Independent review found no defects.
+- `make check` passed against disposable PostgreSQL `portal_stepper_test_20261025`, including 75 frontend tests and all race, contract, build and lint checks. Independent review found no defects.
 - Nine responsive journeys passed across the existing 320–1920px widths. The focused stepper journey verifies circular geometry, direct input, 1/500 bounds and focus-only field styling at 320, 390 and 1440px. Desktop and phone screenshots were inspected; no horizontal overflow was found.
 - Migration 006 preserves definitions, options, current votes and history; proposal vote invariants cover atomic selection replacement, limits, turnout, results and audit privacy. Full recovery drill passed with both person and proposal multiple selections. Restored table signatures and immutable upload hashes matched, and the non-empty target guard refused restoration. Throwaway snapshot: `5115b7d9bc8295c588b8b56beea49e6bc4429968adca08e3fd2608085e17bd52`.
+
+The final integration with the concurrent participation dashboard and bundled-font updates passed `make check` again. Independent integration review confirmed that proposal multiselect retains distinct participation counts and privacy.
