@@ -26,7 +26,7 @@ export interface paths {
         /** List collections (students: no drafts; ballot_count editors only) */
         get: operations["getCategories"];
         put?: never;
-        /** Create collection (admins; managers for single-answer kinds only) */
+        /** Create collection of any kind (admins and managers; manager creator receives a category grant atomically) */
         post: operations["postCategories"];
         delete?: never;
         options?: never;
@@ -47,7 +47,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update collection (admin for repeatable kinds; editors with grant for single-answer drafts); kind changes stay within their group */
+        /** Update collection (admins or managers with grant; single-answer definitions only in draft); kind changes stay within their group */
         patch: operations["patchCategoriesId"];
         trace?: never;
     };

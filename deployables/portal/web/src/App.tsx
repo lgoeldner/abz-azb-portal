@@ -10,7 +10,6 @@ import {
   Plus,
   ScrollText,
   Settings,
-  Tags,
   UserCheck,
   Users,
   Vote,
@@ -48,7 +47,7 @@ import {
   useWorkspaceView,
   type View,
 } from './ui';
-import { ActivityLog, Categories, People } from './admin';
+import { ActivityLog, People } from './admin';
 import { ContributionDetail, Contributions, Editorial, NewContribution, NotFound } from './pages';
 import { SammlungDetail, Sammlungen } from './sammlungen';
 import { DevDebug } from './DevDebug';
@@ -131,7 +130,7 @@ export function App() {
             path="verwaltung/sammlungen"
             element={
               <RoleGuard admin>
-                <Categories />
+                <RedirectKeepSearch to="/sammlungen" />
               </RoleGuard>
             }
           />
@@ -481,9 +480,6 @@ function AdminNav({ onNavigate }: { onNavigate: () => void }) {
         <div id="nav-verwaltung" className="flex flex-col gap-1">
           <NavItem to="/verwaltung/personen" icon={Users}>
             Personen
-          </NavItem>
-          <NavItem to="/verwaltung/sammlungen" icon={Tags}>
-            Sammlungen
           </NavItem>
           <NavItem to="/verwaltung/protokoll" icon={ScrollText}>
             Aktivitätsprotokoll

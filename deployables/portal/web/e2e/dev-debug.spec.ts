@@ -152,7 +152,7 @@ test('editor and admin diagnostics preserve short-screen navigation', async ({ p
     await fixtures(page, role);
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(debugMenus(page).filter({ hasText: poll.id })).toHaveCount(1);
-    // The admin home is a dashboard with class widgets; admin Sammlung diagnostics are checked under /verwaltung below.
+    // The admin home is a dashboard with class widgets; admin Sammlung diagnostics are checked in the shared collection view below.
     if (role === 'manager')
       await expect(
         debugMenus(page)
@@ -168,8 +168,8 @@ test('editor and admin diagnostics preserve short-screen navigation', async ({ p
     });
     await expect(aside.getByRole('button', { name: /Abmelden/ })).toBeInViewport();
     if (role === 'admin') {
-      await page.goto('/verwaltung/sammlungen', { waitUntil: 'domcontentloaded' });
-      const menu = debugMenus(page).filter({ hasText: category.id });
+      await page.goto(`/sammlungen/${category.id}`, { waitUntil: 'domcontentloaded' });
+      const menu = debugMenus(page).filter({ has: page.getByText('Debug: Sammlung', { exact: true }) });
       await expect(menu).toHaveCount(1);
       await menu.locator('summary').click();
       await expect(menu).not.toContainText(/PRIVATE_/);
@@ -190,7 +190,7 @@ test('production builds omit debug controls for every role and view', async ({ p
       '/beitraege/debug-submission',
       '/sammlungen',
       '/sammlungen/debug-poll',
-      ...(role === 'admin' ? ['/verwaltung/sammlungen'] : []),
+      ...(role === 'admin' ? [`/sammlungen/${category.id}`] : []),
     ];
     for (const path of paths) {
       await page.goto(`${path}?debug=true`, { waitUntil: 'domcontentloaded' });
@@ -198,7 +198,7 @@ test('production builds omit debug controls for every role and view', async ({ p
       await expect(debugMenus(page)).toHaveCount(0);
       await expect(page.getByText('Debug', { exact: true })).toHaveCount(0);
       await expect(page.locator('[data-dev-debug]')).toHaveCount(0);
-      if (path === '/verwaltung/sammlungen') {
+      if (path === `/sammlungen/${category.id}`) {
         await expect(page.getByRole('button', { name: 'Sammlung bearbeiten' })).toBeVisible();
         await expect(debugMenus(page)).toHaveCount(0);
       }

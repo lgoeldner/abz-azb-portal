@@ -168,61 +168,160 @@ func TestCategoryVisibilityByRole(t *testing.T) {
 	}
 }
 
-func TestManagerCreatesAndOwnsSingleAnswerCategories(t *testing.T) {
+func TestManagersCreateAndManageAllGrantedCategoryKinds(t *testing.T) {
 	app, pool := timelineApp(t)
 	ctx := context.Background()
-	body := `{"name":"Lieblingslehrkraft","description":"","kind":"proposal","allow_self_vote":false,"options":[{"label":"A"},{"label":"B"}]}`
-	created := decodeCategory(t, authenticatedRequest(t, app, pool, ManagerID, http.MethodPost, "/api/v1/categories", body), http.StatusCreated)
-	if created.Status != "draft" || created.Repeatable || created.OpenedAt != nil {
-		t.Fatalf("created: %+v", created)
+	type categoryCase struct {
+		kind, name, body string
+		repeatable       bool
 	}
-	var granted bool
-	if err := pool.QueryRow(ctx, "SELECT $1::uuid=ANY(category_ids) FROM users WHERE id=$2", created.ID, ManagerID).Scan(&granted); err != nil || !granted {
-		t.Fatalf("creator was not granted the new category (%v)", err)
+	cases := []categoryCase{
+		{"idea", "Manager idea", `{"name":"Manager idea","description":"","kind":"idea","options":[]}`, true},
+		{"quote", "Manager quote", `{"name":"Manager quote","description":"","kind":"quote","options":[]}`, true},
+		{"memory", "Manager memory", `{"name":"Manager memory","description":"","kind":"memory","options":[]}`, true},
+		{"photo", "Manager photo", `{"name":"Manager photo","description":"","kind":"photo","options":[]}`, true},
+		{"person", "Manager person", fmt.Sprintf(`{"name":"Manager person","description":"","kind":"person","all_people":false,"max_choices":2,"options":[{"label":"Mia","user_id":%q},{"label":"Leon","user_id":%q}]}`, MiaID, LeonID), false},
+		{"proposal", "Manager proposal", `{"name":"Manager proposal","description":"","kind":"proposal","options":[{"label":"A"},{"label":"B"}]}`, false},
 	}
-	edit := strings.Replace(body, `"options"`, fmt.Sprintf(`"version":%d,"options"`, created.Version), 1)
-	edited := decodeCategory(t, authenticatedRequest(t, app, pool, ManagerID, http.MethodPatch, "/api/v1/categories/"+created.ID, strings.Replace(edit, "Lieblingslehrkraft", "Lieblingsfach", 1)), http.StatusOK)
-	if edited.Name != "Lieblingsfach" || edited.Version != created.Version+1 {
-		t.Fatalf("edited: %+v", edited)
+	createdByKind := map[string]Category{}
+	editedByKind := map[string]Category{}
+	editBodies := map[string][]byte{}
+	for _, tc := range cases {
+		created := decodeCategory(t, authenticatedRequest(t, app, pool, ManagerID, http.MethodPost, "/api/v1/categories", tc.body), http.StatusCreated)
+		if created.Kind != tc.kind || created.Repeatable != tc.repeatable {
+			t.Fatalf("created %s category: %+v", tc.kind, created)
+		}
+		wantStatus := "draft"
+		if tc.repeatable {
+			wantStatus = "open"
+		}
+		if created.Status != wantStatus {
+			t.Fatalf("created %s status = %s, want %s", tc.kind, created.Status, wantStatus)
+		}
+		var granted bool
+		if err := pool.QueryRow(ctx, "SELECT $1::uuid=ANY(category_ids) FROM users WHERE id=$2", created.ID, ManagerID).Scan(&granted); err != nil || !granted {
+			t.Fatalf("manager creator was not granted %s category in the same create (%v)", tc.kind, err)
+		}
+		createdByKind[tc.kind] = created
+
+		var edit map[string]any
+		if err := json.Unmarshal([]byte(tc.body), &edit); err != nil {
+			t.Fatal(err)
+		}
+		edit["name"] = tc.name + " edited"
+		edit["version"] = created.Version
+		editBody, err := json.Marshal(edit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		editBodies[tc.kind] = editBody
+		edited := decodeCategory(t, authenticatedRequest(t, app, pool, ManagerID, http.MethodPatch, "/api/v1/categories/"+created.ID, string(editBody)), http.StatusOK)
+		if edited.Name != tc.name+" edited" || edited.Version != created.Version+1 {
+			t.Fatalf("manager edit of newly created %s category: %+v", tc.kind, edited)
+		}
+		editedByKind[tc.kind] = edited
+		if res := authenticatedRequest(t, app, pool, ManagerID, http.MethodPatch, "/api/v1/categories/"+created.ID, string(editBody)); res.Code != http.StatusConflict {
+			t.Fatalf("stale %s version: %d %s", tc.kind, res.Code, res.Body)
+		}
 	}
-	// A stale version is a conflict, for single-answer and repeatable categories alike.
-	if res := authenticatedRequest(t, app, pool, ManagerID, http.MethodPatch, "/api/v1/categories/"+created.ID, edit); res.Code != http.StatusConflict {
-		t.Fatalf("stale single-answer edit: %d", res.Code)
+
+	// A creator's newly persisted grant works immediately for annotation as well as management.
+	idea := createdByKind["idea"]
+	submission := authenticatedRequest(t, app, pool, MiaID, http.MethodPost, "/api/v1/submissions", submissionBody(idea.ID))
+	if submission.Code != http.StatusCreated {
+		t.Fatalf("student contribution to new category: %d %s", submission.Code, submission.Body)
 	}
-	repBody := `{"name":"Zitate neu","description":"","kind":"quote","version":%d}`
-	if res := authenticatedRequest(t, app, pool, AdminID, http.MethodPatch, "/api/v1/categories/"+categoryID(2), fmt.Sprintf(repBody, 99)); res.Code != http.StatusConflict {
-		t.Fatalf("stale repeatable edit: %d", res.Code)
+	var sub Submission
+	if err := json.Unmarshal(submission.Body.Bytes(), &sub); err != nil {
+		t.Fatal(err)
 	}
-	rep := decodeCategory(t, authenticatedRequest(t, app, pool, AdminID, http.MethodPatch, "/api/v1/categories/"+categoryID(2), fmt.Sprintf(repBody, 1)), http.StatusOK)
-	if rep.Version != 2 || rep.Name != "Zitate neu" || rep.Status != "open" {
-		t.Fatalf("repeatable edit: %+v", rep)
+	annotation := authenticatedRequest(t, app, pool, ManagerID, http.MethodPost, "/api/v1/submissions/"+sub.ID+"/corrections", `{"body":"Please check this entry"}`)
+	if annotation.Code != http.StatusCreated {
+		t.Fatalf("creator could not annotate immediately: %d %s", annotation.Code, annotation.Body)
 	}
-	opened := decodeCategory(t, authenticatedRequest(t, app, pool, ManagerID, http.MethodPost, "/api/v1/categories/"+created.ID+"/status", fmt.Sprintf(`{"version":%d,"status":"open"}`, edited.Version)), http.StatusOK)
-	if opened.Status != "open" || opened.OpenedAt == nil {
-		t.Fatalf("opened: %+v", opened)
+
+	// Revoking a grant takes effect on the next request for both category edits and annotations.
+	if _, err := pool.Exec(ctx, "UPDATE users SET category_ids=array_remove(category_ids,$2::uuid) WHERE id=$1", ManagerID, idea.ID); err != nil {
+		t.Fatal(err)
 	}
-	// Once open, the definition is frozen.
-	if res := authenticatedRequest(t, app, pool, ManagerID, http.MethodPatch, "/api/v1/categories/"+created.ID, strings.Replace(edit, `"version":1`, fmt.Sprintf(`"version":%d`, opened.Version), 1)); res.Code != http.StatusConflict {
-		t.Fatalf("edit of open category: %d", res.Code)
+	edit := editBodies["idea"]
+	if res := authenticatedRequest(t, app, pool, ManagerID, http.MethodPatch, "/api/v1/categories/"+idea.ID, string(edit)); res.Code != http.StatusForbidden {
+		t.Fatalf("manager edited after grant revocation: %d %s", res.Code, res.Body)
 	}
-	// Managers cannot create repeatable categories nor edit ones they are not granted.
-	if res := authenticatedRequest(t, app, pool, ManagerID, http.MethodPost, "/api/v1/categories", `{"name":"Neu","description":"","kind":"idea"}`); res.Code != http.StatusForbidden {
-		t.Fatalf("manager created repeatable category: %d", res.Code)
+	if res := authenticatedRequest(t, app, pool, ManagerID, http.MethodPost, "/api/v1/submissions/"+sub.ID+"/corrections", `{"body":"Unassigned annotation"}`); res.Code != http.StatusForbidden {
+		t.Fatalf("manager annotated after grant revocation: %d %s", res.Code, res.Body)
 	}
-	if res := authenticatedRequest(t, app, pool, ManagerID, http.MethodPatch, "/api/v1/categories/"+categoryID(1), fmt.Sprintf(`{"name":"X","description":"","kind":"idea","version":%d}`, 1)); res.Code != http.StatusForbidden {
-		t.Fatalf("manager edited repeatable category: %d", res.Code)
+
+	// The manager cannot edit another manager's category; admins retain access to every category.
+	adminBody := `{"name":"Admin collection","description":"","kind":"quote","options":[]}`
+	adminMade := decodeCategory(t, authenticatedRequest(t, app, pool, AdminID, http.MethodPost, "/api/v1/categories", adminBody), http.StatusCreated)
+	adminEdit := fmt.Sprintf(`{"name":"Admin collection updated","description":"","kind":"quote","version":%d,"options":[]}`, adminMade.Version)
+	if res := authenticatedRequest(t, app, pool, ManagerID, http.MethodPatch, "/api/v1/categories/"+adminMade.ID, adminEdit); res.Code != http.StatusForbidden {
+		t.Fatalf("unassigned manager edited admin category: %d %s", res.Code, res.Body)
 	}
-	// An admin-created single-answer category is not editable by a manager without a grant.
-	adminMade := decodeCategory(t, authenticatedRequest(t, app, pool, AdminID, http.MethodPost, "/api/v1/categories", body), http.StatusCreated)
-	if res := authenticatedRequest(t, app, pool, ManagerID, http.MethodPatch, "/api/v1/categories/"+adminMade.ID, strings.Replace(edit, `"version":1`, fmt.Sprintf(`"version":%d`, adminMade.Version), 1)); res.Code != http.StatusForbidden {
-		t.Fatalf("ungranted manager edit: %d", res.Code)
+	if updated := decodeCategory(t, authenticatedRequest(t, app, pool, AdminID, http.MethodPatch, "/api/v1/categories/"+adminMade.ID, adminEdit), http.StatusOK); updated.Name != "Admin collection updated" {
+		t.Fatalf("admin could not edit category: %+v", updated)
 	}
-	if res := authenticatedRequest(t, app, pool, ManagerID, http.MethodPost, "/api/v1/categories/"+adminMade.ID+"/status", fmt.Sprintf(`{"version":%d,"status":"open"}`, adminMade.Version)); res.Code != http.StatusForbidden {
-		t.Fatalf("ungranted manager status change: %d", res.Code)
+
+	// Single-answer categories remain draft-only and keep their ballot lifecycle lock.
+	proposal := createdByKind["proposal"]
+	openedProposal := decodeCategory(t, authenticatedRequest(t, app, pool, ManagerID, http.MethodPost, "/api/v1/categories/"+proposal.ID+"/status", fmt.Sprintf(`{"version":%d,"status":"open"}`, editedByKind["proposal"].Version)), http.StatusOK)
+	proposalEdit := map[string]any{}
+	if err := json.Unmarshal(editBodies["proposal"], &proposalEdit); err != nil {
+		t.Fatal(err)
 	}
-	// Students cannot create anything.
-	if res := authenticatedRequest(t, app, pool, MiaID, http.MethodPost, "/api/v1/categories", body); res.Code != http.StatusForbidden {
+	proposalEdit["version"] = openedProposal.Version
+	proposalEdit["name"] = "Manager proposal after opening"
+	proposalEditBody, err := json.Marshal(proposalEdit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res := authenticatedRequest(t, app, pool, ManagerID, http.MethodPatch, "/api/v1/categories/"+proposal.ID, string(proposalEditBody)); res.Code != http.StatusConflict {
+		t.Fatalf("manager edited an open single-answer category: %d %s", res.Code, res.Body)
+	}
+
+	// Failed option validation rolls back the manager grant and category row together.
+	rolledBackName := "Manager rollback check"
+	invalidPerson := fmt.Sprintf(`{"name":%q,"description":"","kind":"person","all_people":false,"options":[{"label":"A","user_id":%q},{"label":"Unknown","user_id":"99999999-0000-4000-8000-000000000009"}]}`, rolledBackName, MiaID)
+	var grantsBefore, grantsAfter int
+	if err := pool.QueryRow(ctx, "SELECT cardinality(category_ids) FROM users WHERE id=$1", ManagerID).Scan(&grantsBefore); err != nil {
+		t.Fatal(err)
+	}
+	if res := authenticatedRequest(t, app, pool, ManagerID, http.MethodPost, "/api/v1/categories", invalidPerson); res.Code != http.StatusBadRequest {
+		t.Fatalf("invalid category create: %d %s", res.Code, res.Body)
+	}
+	var orphanCount int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM categories WHERE name=$1", rolledBackName).Scan(&orphanCount); err != nil || orphanCount != 0 {
+		t.Fatalf("failed create left a category row: %d (%v)", orphanCount, err)
+	}
+	if err := pool.QueryRow(ctx, "SELECT cardinality(category_ids) FROM users WHERE id=$1", ManagerID).Scan(&grantsAfter); err != nil || grantsAfter != grantsBefore {
+		t.Fatalf("failed create changed manager grants: before=%d after=%d (%v)", grantsBefore, grantsAfter, err)
+	}
+
+	// Students can neither create nor edit categories.
+	if res := authenticatedRequest(t, app, pool, MiaID, http.MethodPost, "/api/v1/categories", cases[0].body); res.Code != http.StatusForbidden {
 		t.Fatalf("student create: %d", res.Code)
+	}
+	if res := authenticatedRequest(t, app, pool, MiaID, http.MethodPatch, "/api/v1/categories/"+adminMade.ID, adminEdit); res.Code != http.StatusForbidden {
+		t.Fatalf("student edit: %d", res.Code)
+	}
+
+	// Admin creation and edits still work for all six kinds.
+	for _, tc := range cases {
+		created := decodeCategory(t, authenticatedRequest(t, app, pool, AdminID, http.MethodPost, "/api/v1/categories", tc.body), http.StatusCreated)
+		var edit map[string]any
+		if err := json.Unmarshal([]byte(tc.body), &edit); err != nil {
+			t.Fatal(err)
+		}
+		edit["name"] = "Admin " + tc.name
+		edit["version"] = created.Version
+		body, err := json.Marshal(edit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res := authenticatedRequest(t, app, pool, AdminID, http.MethodPatch, "/api/v1/categories/"+created.ID, string(body)); res.Code != http.StatusOK {
+			t.Errorf("admin create/edit %s: %d %s", tc.kind, res.Code, res.Body)
+		}
 	}
 }
 

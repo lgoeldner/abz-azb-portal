@@ -98,14 +98,14 @@ route GET /auth/login, GET /auth/callback, POST /auth/logout :: outside /api/v1 
 ## Frontend (deployables/portal/web)
 
 file `deployables/portal/web/src/App.tsx` :: router, Layout, nav (StudentNav, EditorNav, AdminNav), StudentHome, EditorHome, AdminHome dashboard with one widget per class [routes, nav, dashboard, home]
-file `deployables/portal/web/src/sammlungen.tsx` :: Sammlungen list (Fortlaufend section, status groups, ?klasse filter), SammlungForm, SammlungDetail, all-submission editorial collection reader, read-only ballot options/results and student voting [sammlung, poll, vote, form]
+file `deployables/portal/web/src/sammlungen.tsx` :: Shared Sammlungen workspace (Fortlaufend section, status groups, ?klasse filter), all-kind editor creation and grant-controlled definition edits, admin manager assignments in SammlungForm, SammlungDetail, all-submission editorial collection reader, read-only ballot options/results and student voting [sammlung, poll, vote, form]
 file `deployables/portal/web/src/PeoplePicker.tsx` :: shared candidate/vote search with removable chips above search and selection limits [person, picker, chips]
 file `deployables/portal/web/src/pages.tsx` :: Contributions, NewContribution, author detail and read-only editorial reader with annotations, all-submissions list, NotFound [beitrag, redaktion, export]
-file `deployables/portal/web/src/admin.tsx` :: Verwaltung: People, Categories (Sammlungen + manager grants), ActivityLog, audit action labels [verwaltung, admin, personen, protokoll]
+file `deployables/portal/web/src/admin.tsx` :: Verwaltung: People, ActivityLog, audit action labels [verwaltung, admin, personen, protokoll]
 file `deployables/portal/web/src/ui.tsx` :: shared workspace view context, editorial/author submission links and UI: kindIcon/kindLabel (six classes), Badge, PageHead, Failure, Loading, Empty, SubmissionList, plural, newestOpened [components, icons]
 file `deployables/portal/web/src/styles.css` :: student brand tokens and cobalt-accented Redaktion reading-desk theme including Verwaltung, rounded list hover surfaces and distinct chip hover states [styles, theme, redaktion]
 file `deployables/portal/web/public/favicon.svg` :: tab icon, the sidebar Mark with fixed colors; fonts are self-hosted via @fontsource-variable (imported in main.tsx), never Google Fonts [favicon, fonts, gdpr]
-file `deployables/portal/web/src/api.ts` :: fetch wrapper, CSRF header [api, fetch]
+file `deployables/portal/web/src/api.ts` :: fetch wrapper, CSRF header, shared user PATCH payload [api, fetch, grants]
 file `deployables/portal/web/src/api-types.ts` :: aliases over generated types [types]
 file `deployables/portal/web/src/generated/api.d.ts` :: generated from openapi.json, never edit by hand [codegen]
 file `deployables/portal/web/src/DevDebug.tsx` :: dev-only debug overlay [debug]
@@ -123,13 +123,13 @@ page / :: Overview (StudentHome/EditorHome/AdminHome by role and view) [home]
 page /sammlungen, /sammlungen/:id :: Sammlungen list and detail; ?klasse=<kind>, ?neu [sammlung]
 page /beitraege, /beitraege/neu, /beitraege/:id :: own submissions [beitrag]
 page /redaktion, /redaktion/beitraege/:id :: all collected submissions, ?sammlung= filter [redaktion]
-page /verwaltung/personen, /verwaltung/sammlungen, /verwaltung/protokoll :: admin-only within Redaktion; direct bookmarks activate editorial mode and theme [verwaltung]
-page /abstimmungen[/:id], /verwaltung/rubriken, /admin :: redirects to the new routes [redirect, legacy]
+page /verwaltung/personen, /verwaltung/protokoll :: admin-only within Redaktion; direct bookmarks activate editorial mode and theme [verwaltung]
+page /abstimmungen[/:id], /verwaltung/sammlungen, /verwaltung/rubriken, /admin :: redirects to the new routes [redirect, legacy]
 
 ## Domain rules
 
 rule Sammlung = categories row; kind is its class: repeatable idea/quote/memory/photo (submissions), person/proposal ballots (person: all or selected candidates, bounded multi-selection; proposal: one choice; draft->open->closed) [sammlung, class, kind, rubrik, poll]
-rule Managers read all submissions and manage/annotate assigned categories; admins manage all categories; only authors mutate pending originals and only admins see named ballots [permissions]
+rule Managers create all six kinds with atomic creator grants, read all submissions and manage/annotate assigned categories; admins manage all categories and assign grants; only authors mutate pending originals and only admins see named ballots [permissions]
 rule Dev identities: subject = UUIDv5(display_slug); seeded fixtures map via fixtureSlugs in seed.go [login, fixtures]
 rule Integration tests: TEST_DATABASE_URL to a disposable DB only; never the dev `portal` DB [test, database]
 

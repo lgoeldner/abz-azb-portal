@@ -71,7 +71,11 @@ func sessionFor(t *testing.T, app *App, userID string) (token, csrf string) {
 }
 
 func send(app *App, op contractOperation, token, csrf, origin string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(op.method, op.path, strings.NewReader("{}"))
+	return sendBody(app, op, token, csrf, origin, "{}")
+}
+
+func sendBody(app *App, op contractOperation, token, csrf, origin, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(op.method, op.path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	if token != "" {
 		req.AddCookie(&http.Cookie{Name: "portal_session", Value: token})
@@ -145,12 +149,12 @@ func TestRestrictedOperationsRejectLowerRoles(t *testing.T) {
 	app, _ := timelineApp(t)
 	editorial := []contractOperation{
 		{http.MethodPost, "/api/v1/categories"},
+		{http.MethodPatch, "/api/v1/categories/{id}"}, // granted managers may edit repeatable categories too
 		{http.MethodPost, "/api/v1/categories/{id}/status"},
 		{http.MethodGet, "/api/v1/categories/{id}/results"},
 		{http.MethodGet, "/api/v1/categories/{id}/export"},
 	}
 	adminOnly := []contractOperation{
-		{http.MethodPatch, "/api/v1/categories/{id}"}, // the fixture id is a repeatable category
 		{http.MethodGet, "/api/v1/categories/{id}/audit"},
 		{http.MethodGet, "/api/v1/admin/users"},
 		{http.MethodPatch, "/api/v1/admin/users/{id}"},
@@ -166,25 +170,57 @@ func TestRestrictedOperationsRejectLowerRoles(t *testing.T) {
 		token, csrf := sessionFor(t, app, id)
 		sessions[id] = [2]string{token, csrf}
 	}
-	check := func(op contractOperation, denied ...string) {
-		op.path = concretePath(op.path)
-		if !documented[op] {
-			t.Errorf("%s %s is not in docs/openapi.json", op.method, op.path)
+	checkOnPath := func(contractOp, requestOp contractOperation, denied ...string) {
+		documentedOp := contractOperation{contractOp.method, concretePath(contractOp.path)}
+		if !documented[documentedOp] {
+			t.Errorf("%s %s is not in docs/openapi.json", documentedOp.method, documentedOp.path)
 		}
 		for _, id := range denied {
-			if res := send(app, op, sessions[id][0], sessions[id][1], ""); res.Code != http.StatusForbidden && res.Code != http.StatusNotFound {
-				t.Errorf("%s %s as %s: status=%d, want 403/404", op.method, op.path, id, res.Code)
+			if res := send(app, requestOp, sessions[id][0], sessions[id][1], ""); res.Code != http.StatusForbidden && res.Code != http.StatusNotFound {
+				t.Errorf("%s %s as %s: status=%d, want 403/404", requestOp.method, requestOp.path, id, res.Code)
 			}
 		}
-		if res := send(app, op, sessions[AdminID][0], sessions[AdminID][1], ""); res.Code == http.StatusUnauthorized || res.Code == http.StatusForbidden {
-			t.Errorf("%s %s as admin: status=%d, the request never reached authorization", op.method, op.path, res.Code)
+		if res := send(app, requestOp, sessions[AdminID][0], sessions[AdminID][1], ""); res.Code == http.StatusUnauthorized || res.Code == http.StatusForbidden {
+			t.Errorf("%s %s as admin: status=%d, the request never reached authorization", requestOp.method, requestOp.path, res.Code)
 		}
+	}
+	check := func(op contractOperation, denied ...string) {
+		requestOp := op
+		requestOp.path = concretePath(requestOp.path)
+		checkOnPath(op, requestOp, denied...)
 	}
 	for _, op := range editorial {
 		check(op, MiaID, GuestID)
 	}
 	for _, op := range adminOnly {
 		check(op, MiaID, GuestID, ManagerID)
+	}
+
+	// A manager can edit an assigned repeatable category, but the same route
+	// rejects them when the repeatable category is unassigned.
+	patchTemplate := contractOperation{http.MethodPatch, "/api/v1/categories/{id}"}
+	assignedPatch := contractOperation{http.MethodPatch, "/api/v1/categories/" + categoryID(1)}
+	assignedBody := `{"name":"Ideen","description":"Vorschläge für unsere Abizeitung","kind":"idea","version":1,"options":[]}`
+	if res := sendBody(app, assignedPatch, sessions[ManagerID][0], sessions[ManagerID][1], "", assignedBody); res.Code != http.StatusOK {
+		t.Errorf("manager could not edit assigned repeatable category: status=%d body=%s", res.Code, res.Body)
+	}
+	unassignedPatch := contractOperation{http.MethodPatch, "/api/v1/categories/" + categoryID(2)}
+	checkOnPath(patchTemplate, unassignedPatch, MiaID, GuestID, ManagerID)
+
+	// POST /categories is manager-authorized for every supported category kind.
+	managerCreateBodies := []string{
+		`{"name":"Manager idea","description":"","kind":"idea","options":[]}`,
+		`{"name":"Manager quote","description":"","kind":"quote","options":[]}`,
+		`{"name":"Manager memory","description":"","kind":"memory","options":[]}`,
+		`{"name":"Manager photo","description":"","kind":"photo","options":[]}`,
+		`{"name":"Manager person","description":"","kind":"person","all_people":false,"max_choices":2,"options":[{"label":"Mia","user_id":"` + MiaID + `"},{"label":"Leon","user_id":"` + LeonID + `"}]}`,
+		`{"name":"Manager proposal","description":"","kind":"proposal","options":[{"label":"A"},{"label":"B"}]}`,
+	}
+	createOp := contractOperation{http.MethodPost, "/api/v1/categories"}
+	for _, body := range managerCreateBodies {
+		if res := sendBody(app, createOp, sessions[ManagerID][0], sessions[ManagerID][1], "", body); res.Code != http.StatusCreated {
+			t.Errorf("manager create category: status=%d body=%s", res.Code, res.Body)
+		}
 	}
 }
 

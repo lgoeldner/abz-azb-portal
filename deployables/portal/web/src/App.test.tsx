@@ -288,6 +288,8 @@ describe('verwaltung', () => {
     localStorage.clear();
     mount('/');
     const toggle = await screen.findByRole('button', { name: 'Verwaltung' });
+    expect(document.querySelector('aside a[href="/verwaltung/sammlungen"]')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Alle Sammlungen' })).toHaveAttribute('href', '/sammlungen');
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     const aside = screen.getByRole('complementary');
     expect(within(aside).getByRole('link', { name: 'Aktivitätsprotokoll' })).toHaveAttribute(
@@ -443,7 +445,7 @@ describe('verwaltung', () => {
   });
 
   it('lets an admin assign a single-answer Sammlung to a manager and saves it as a draft definition', async () => {
-    const calls = mount('/verwaltung/sammlungen');
+    const calls = mount('/sammlungen');
     fireEvent.click(await screen.findByRole('button', { name: /Neue Sammlung/ }));
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Motto' } });
     fireEvent.change(screen.getByLabelText('Klasse'), { target: { value: 'proposal' } });
@@ -456,7 +458,7 @@ describe('verwaltung', () => {
   });
 
   it('grants a new category to a manager with the full user payload', async () => {
-    const calls = mount('/verwaltung/sammlungen');
+    const calls = mount('/sammlungen');
     fireEvent.click(await screen.findByRole('button', { name: /Neue Sammlung/ }));
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Neu' } });
     fireEvent.click(await screen.findByLabelText('Sam Redaktion'));
@@ -479,11 +481,12 @@ describe('verwaltung', () => {
   it('does not carry unsaved grant changes over to another Sammlung', async () => {
     const quotes = sammlung('quotes', 'Zitate', 'quote');
     const photos = sammlung('photos', 'Fotos', 'photo');
-    const calls = mount('/verwaltung/sammlungen', admin, undefined, undefined, [category, quotes, photos]);
-    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung bearbeiten: Zitate' }));
+    const calls = mount('/sammlungen/quotes', admin, undefined, undefined, [category, quotes, photos]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung bearbeiten' }));
     fireEvent.click(await screen.findByLabelText('Sam Redaktion'));
     expect(screen.getByLabelText('Sam Redaktion')).toBeChecked();
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung bearbeiten: Fotos' }));
+    fireEvent.click(within(screen.getByRole('complementary')).getByRole('link', { name: /Fotos/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung bearbeiten' }));
     await waitFor(() => expect(screen.getByLabelText('Name')).toHaveValue('Fotos'));
     expect(screen.getByLabelText('Sam Redaktion')).not.toBeChecked();
     fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
@@ -496,7 +499,7 @@ describe('verwaltung', () => {
     let server = { ...editor, category_ids: ['memory'] };
     let failGrant = true;
     const calls = mount(
-      '/verwaltung/sammlungen',
+      '/sammlungen',
       admin,
       (c) => {
         if (c.url === '/admin/users/mgr-1') {
@@ -524,6 +527,25 @@ describe('verwaltung', () => {
     await waitFor(() => expect(server.category_ids).toEqual(['memory', 'quotes', 'new-cat']));
     expect(calls.filter((c) => c.url === '/categories' && c.method === 'POST')).toHaveLength(1);
   });
+
+  it.each(['open', 'closed'])(
+    'lets admins change grants on a %s ballot without changing its definition',
+    async (status) => {
+      const ballot = sammlung('ballot', 'Motto', 'proposal', { status });
+      const calls = mount('/sammlungen/ballot', admin, undefined, undefined, [ballot]);
+      fireEvent.click(await screen.findByRole('button', { name: 'Berechtigungen bearbeiten' }));
+      expect(screen.queryByLabelText('Name')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Definition bearbeiten' })).toBeNull();
+      fireEvent.click(await screen.findByLabelText('Sam Redaktion'));
+      fireEvent.click(screen.getByRole('button', { name: 'Berechtigungen speichern' }));
+      await waitFor(() => expect(calls).toHaveLength(1));
+      expect(calls[0]).toMatchObject({
+        url: '/admin/users/mgr-1',
+        method: 'PATCH',
+        body: { category_ids: ['memory', 'ballot'] },
+      });
+    },
+  );
 });
 
 describe('navigation by view', () => {
@@ -974,7 +996,7 @@ describe('sammlungen', () => {
       '/api/v1/categories/memory/export?status=all',
     );
     expect(within(main).queryByRole('link', { name: /Beitrag einreichen/ })).toBeNull();
-    expect(within(main).queryByRole('button', { name: /bearbeiten/i })).toBeNull();
+    expect(within(main).queryByRole('button', { name: 'Sammlung bearbeiten' })).toBeNull();
   });
 
   it('keeps Redaktion active when following a collection from a direct editorial link', async () => {
@@ -986,9 +1008,9 @@ describe('sammlungen', () => {
     expect(screen.queryByRole('link', { name: /Beitrag einreichen/ })).toBeNull();
   });
 
-  it('keeps repeatable collection definitions editable in Verwaltung', async () => {
-    const calls = mount('/verwaltung/sammlungen', admin);
-    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung bearbeiten: Erinnerungen' }));
+  it('edits repeatable collection definitions in the shared collection view', async () => {
+    const calls = mount('/sammlungen/memory', admin);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung bearbeiten' }));
     expect(
       within(screen.getByLabelText('Klasse'))
         .getAllByRole('option')
@@ -1025,14 +1047,15 @@ describe('sammlungen', () => {
     );
   });
 
-  it('offers managers only single-answer classes in the create form and posts a draft', async () => {
+  it('offers managers all six classes and creates a choice poll', async () => {
     const calls = mount('/sammlungen?neu', manager);
     const klasse = await screen.findByLabelText('Klasse');
     expect(
       within(klasse)
         .getAllByRole('option')
         .map((o) => o.textContent),
-    ).toEqual(['Personenwahl', 'Vorschlagswahl']);
+    ).toEqual(['Ideen', 'Zitate', 'Erinnerungen', 'Fotos', 'Personenwahl', 'Vorschlagswahl']);
+    fireEvent.change(klasse, { target: { value: 'proposal' } });
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Neues Motto' } });
     fireEvent.change(screen.getByLabelText(/Antwortoptionen/), { target: { value: 'A\nB' } });
     fireEvent.click(screen.getByLabelText(/eigene Person/));
@@ -1051,6 +1074,42 @@ describe('sammlungen', () => {
         options: [{ label: 'A' }, { label: 'B' }],
       },
     });
+  });
+
+  it.each(['idea', 'quote', 'memory', 'photo'])(
+    'lets managers create a %s collection without admin controls',
+    async (kind) => {
+      const calls = mount('/sammlungen?neu', manager);
+      fireEvent.change(await screen.findByLabelText('Klasse'), { target: { value: kind } });
+      expect(screen.queryByText('Wer darf bearbeiten')).toBeNull();
+      expect(screen.queryByLabelText(/Antwortoptionen/)).toBeNull();
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Neue Sammlung' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+      await waitFor(() => expect(calls).toHaveLength(1));
+      expect(calls[0]).toMatchObject({ url: '/categories', method: 'POST', body: { kind, options: [] } });
+      expect(vi.mocked(fetch).mock.calls.some(([path]) => String(path).includes('/admin/'))).toBe(false);
+    },
+  );
+
+  it('lets assigned managers edit repeatable definitions in the shared view', async () => {
+    const calls = mount('/sammlungen/memory', { ...manager, category_ids: ['memory'] });
+    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung bearbeiten' }));
+    expect(screen.queryByText('Wer darf bearbeiten')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Unsere Erinnerungen' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]).toMatchObject({
+      url: '/categories/memory',
+      method: 'PATCH',
+      body: { version: 1, name: 'Unsere Erinnerungen' },
+    });
+  });
+
+  it('keeps an unassigned manager collection view read-only', async () => {
+    mount('/sammlungen/memory', { ...manager, category_ids: [] });
+    await screen.findByRole('heading', { name: 'Gesammelte Beiträge' });
+    expect(screen.queryByRole('button', { name: 'Sammlung bearbeiten' })).toBeNull();
+    expect(screen.queryByText('Wer darf bearbeiten')).toBeNull();
   });
 
   it('offers admins all six classes and hides option fields for repeatable ones', async () => {
