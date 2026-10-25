@@ -1,0 +1,268 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { describe, expect, it, vi } from 'vitest';
+import type { Category, Me } from './api';
+import { Sammlungen, SammlungDetail } from './sammlungen';
+import { Session, WorkspaceView, type View } from './ui';
+
+const student: Me['user'] = {
+  id: 'student-1',
+  name: 'Mia Beispiel',
+  role: 'student',
+  admitted: true,
+  cohort_member: true,
+  category_ids: [],
+  created_at: '2026-09-01T00:00:00Z',
+};
+const admin: Me['user'] = { ...student, id: 'admin-1', name: 'Ada Admin', role: 'admin' };
+const roster = [
+  { id: 'user-alice', name: 'Alice Beispiel' },
+  { id: 'user-bob', name: 'Bob Beispiel' },
+  { id: 'user-cara', name: 'Cara Beispiel' },
+];
+
+function personPoll(overrides: Partial<Category> = {}): Category {
+  return {
+    id: 'person-poll',
+    name: 'Abimotto-Team',
+    description: '',
+    kind: 'person',
+    repeatable: false,
+    status: 'open',
+    allow_self_vote: false,
+    options: [
+      { id: 'self', label: 'Mia Beispiel', user_id: student.id },
+      { id: 'alice', label: 'Alice Beispiel', user_id: 'user-alice' },
+      { id: 'bob', label: 'Bob Beispiel', user_id: 'user-bob' },
+      { id: 'cara', label: 'Cara Beispiel', user_id: 'user-cara' },
+    ],
+    my_option_id: null,
+    my_option_ids: [],
+    all_people: false,
+    max_choices: 2,
+    version: 1,
+    created_at: '2026-10-01T00:00:00Z',
+    opened_at: '2026-10-02T00:00:00Z',
+    ballot_count: null,
+    ...overrides,
+  };
+}
+
+function installApi(initial: Category[] = [], auditRows: unknown[] = []) {
+  let categories = [...initial];
+  const writes: { path: string; method: string; body: Record<string, unknown> }[] = [];
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input), window.location.origin);
+    const path = url.pathname.replace('/api/v1', '');
+    const method = init?.method ?? 'GET';
+    const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : undefined;
+
+    if (path === '/categories' && method === 'GET') return Response.json(categories);
+    if (path === '/roster') return Response.json(roster);
+    if (path === '/categories' && method === 'POST') {
+      writes.push({ path, method, body: body ?? {} });
+      const created: Category = {
+        id: 'created-person-poll',
+        name: String(body?.name ?? ''),
+        description: String(body?.description ?? ''),
+        kind: 'person',
+        repeatable: false,
+        status: 'draft',
+        allow_self_vote: false,
+        options: (body?.options as Category['options'] | undefined) ?? [],
+        my_option_id: null,
+        my_option_ids: [],
+        all_people: body?.all_people === true,
+        max_choices: Number(body?.max_choices ?? 1),
+        version: 1,
+        created_at: '2026-10-25T00:00:00Z',
+        opened_at: null,
+        ballot_count: null,
+      } as Category;
+      categories = [...categories, created];
+      return Response.json(created, { status: 201 });
+    }
+    if (path.endsWith('/results')) return Response.json([]);
+    if (path.endsWith('/audit')) return Response.json(auditRows);
+    if (path.endsWith('/ballot') && method === 'PUT') {
+      writes.push({ path, method, body: body ?? {} });
+      const optionIds =
+        (body?.option_ids as string[] | undefined) ?? (body?.option_id ? [body.option_id as string] : []);
+      const pollId = path.split('/')[2];
+      categories = categories.map((category) =>
+        category.id === pollId
+          ? { ...category, my_option_ids: optionIds, my_option_id: optionIds[0] ?? null }
+          : category,
+      );
+      return Response.json({ option_ids: optionIds, option_id: optionIds[0] ?? null });
+    }
+    return Response.json([]);
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return { fetchMock, writes };
+}
+
+function renderPortal(path: string, user: Me['user'], _categories: Category[] = [], view: View = 'schueler') {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const me: Me = { user, csrf_token: 'csrf' };
+  const workspaceView: [View, (next: View) => void] = [view, vi.fn()];
+  return render(
+    <QueryClientProvider client={client}>
+      <Session.Provider value={me}>
+        <WorkspaceView.Provider value={workspaceView}>
+          <MemoryRouter initialEntries={[path]}>
+            <Routes>
+              <Route path="/sammlungen" element={<Sammlungen />} />
+              <Route path="/sammlungen/:id" element={<SammlungDetail />} />
+            </Routes>
+          </MemoryRouter>
+        </WorkspaceView.Provider>
+      </Session.Provider>
+    </QueryClientProvider>,
+  );
+}
+
+async function openPersonForm() {
+  fireEvent.click(screen.getByRole('button', { name: /Neue Sammlung/ }));
+  fireEvent.change(screen.getByLabelText('Klasse'), { target: { value: 'person' } });
+  expect(screen.getByLabelText('Maximale Zahl der Stimmen pro Person')).toHaveValue(1);
+}
+
+describe('Sammlungen person polls', () => {
+  it('defaults new person polls to all people and creates with an empty options list', async () => {
+    const { writes } = installApi();
+    renderPortal('/sammlungen', admin);
+    await openPersonForm();
+
+    expect(screen.getByRole('switch', { name: 'Alle freigegebenen Personen zur Abstimmung zulassen' })).toBeChecked();
+    expect(screen.getByLabelText('Maximale Zahl der Stimmen pro Person')).toHaveValue(1);
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Abimotto-Team' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toMatchObject({
+      path: '/categories',
+      method: 'POST',
+      body: {
+        kind: 'person',
+        all_people: true,
+        max_choices: 1,
+        options: [],
+      },
+    });
+  });
+
+  it('searches and removes selected subset candidates before creating the poll', async () => {
+    const { writes } = installApi();
+    renderPortal('/sammlungen', admin);
+    await openPersonForm();
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Alle freigegebenen Personen zur Abstimmung zulassen' }));
+    const search = await screen.findByRole('searchbox', { name: 'Person suchen' });
+    fireEvent.change(search, { target: { value: 'Alice' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Alice Beispiel' }));
+    const aliceChip = screen.getByRole('button', { name: 'Alice Beispiel entfernen' });
+    expect(aliceChip.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.change(search, { target: { value: 'niemand' } });
+    expect(screen.getByRole('status')).toHaveTextContent('Keine Personen gefunden.');
+    fireEvent.change(search, { target: { value: 'Bob' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Bob Beispiel' }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Kandidat:innen' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0].body).toMatchObject({
+      kind: 'person',
+      all_people: false,
+      options: [
+        { label: 'Alice Beispiel', user_id: 'user-alice' },
+        { label: 'Bob Beispiel', user_id: 'user-bob' },
+      ],
+    });
+  });
+
+  it('saves a replaceable multi-person ballot within its limit and restores the saved chips', async () => {
+    const poll = personPoll();
+    const { writes } = installApi([poll]);
+    renderPortal(`/sammlungen/${poll.id}`, student, [poll]);
+
+    expect(await screen.findByRole('button', { name: /Mia Beispiel.*Eigene Stimme nicht erlaubt/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Alice Beispiel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Bob Beispiel' }));
+    expect(screen.getByText('2 von 2 ausgewählt')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Cara Beispiel/ })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Alice Beispiel entfernen' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cara Beispiel' }));
+    fireEvent.click(screen.getByRole('button', { name: /Stimme speichern/ }));
+
+    await waitFor(() =>
+      expect(writes).toContainEqual({
+        path: `/categories/${poll.id}/ballot`,
+        method: 'PUT',
+        body: { option_ids: ['bob', 'cara'] },
+      }),
+    );
+    expect(await screen.findByText('Gespeicherte Stimmen: Bob Beispiel, Cara Beispiel')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Gesamtergebnisse' })).not.toBeInTheDocument();
+  });
+
+  it('groups each admin audit ballot into one complete selection row', async () => {
+    const poll = personPoll();
+    const auditRows = [
+      {
+        user_id: student.id,
+        user_name: student.name,
+        option_id: 'alice',
+        option_label: 'Alice Beispiel',
+        created_at: '2026-10-24T10:00:00Z',
+        ballot_id: 'ballot-1',
+      },
+      {
+        user_id: student.id,
+        user_name: student.name,
+        option_id: 'bob',
+        option_label: 'Bob Beispiel',
+        created_at: '2026-10-24T10:00:00Z',
+        ballot_id: 'ballot-1',
+      },
+      {
+        user_id: student.id,
+        user_name: student.name,
+        option_id: 'cara',
+        option_label: 'Cara Beispiel',
+        created_at: '2026-10-24T11:00:00Z',
+        ballot_id: 'ballot-2',
+      },
+    ];
+    installApi([poll], auditRows);
+    renderPortal(`/sammlungen/${poll.id}`, admin, [poll], 'redaktion');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Namentliches Stimmprotokoll öffnen' }));
+    const table = await screen.findByRole('table');
+    const rows = table.querySelectorAll('tbody tr');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].querySelectorAll('td')[0]).toHaveTextContent('Mia Beispiel');
+    expect([...rows[0].querySelectorAll('td')[1].querySelectorAll('li')].map((item) => item.textContent)).toEqual([
+      'Alice Beispiel',
+      'Bob Beispiel',
+    ]);
+    expect(rows[1].querySelectorAll('td')[1]).toHaveTextContent('Cara Beispiel');
+  });
+
+  it.each([
+    ['closed', personPoll({ status: 'closed' }), student],
+    ['ineligible', personPoll(), { ...student, admitted: false }],
+  ] as const)('disables candidate search for a %s voter', async (_name, poll, user) => {
+    installApi([poll]);
+    renderPortal(`/sammlungen/${poll.id}`, user, [poll]);
+
+    expect(await screen.findByRole('searchbox', { name: 'Person suchen' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Alice Beispiel' })).toBeDisabled();
+    if (!user.admitted) expect(screen.getByText(/Nur freigegebene Mitglieder/)).toBeInTheDocument();
+    if (poll.status === 'closed')
+      expect(screen.queryByRole('button', { name: /Stimme speichern/ })).not.toBeInTheDocument();
+  });
+});

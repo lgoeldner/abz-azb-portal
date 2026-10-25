@@ -315,6 +315,9 @@ func TestMigration004TurnsPollsIntoCategoriesKeepingBallots(t *testing.T) {
 	// The poll keeps its id and definition; the old repeatable category is open and unchanged.
 	got := categoriesFor(t, app, mgr)
 	p := got[poll]
+	if p.AllPeople || p.MaxChoices != 1 {
+		t.Fatalf("migration changed candidate mode or choice limit: %+v", p)
+	}
 	if p.Name != "Motto" || p.Description != "Beschreibung" || p.Kind != "proposal" || p.Repeatable || p.Status != "open" || !p.AllowSelfVote || p.Version != 4 || len(p.Options) != 2 || p.Options[0].Label != "Eins" {
 		t.Fatalf("migrated poll: %+v", p)
 	}
@@ -332,6 +335,9 @@ func TestMigration004TurnsPollsIntoCategoriesKeepingBallots(t *testing.T) {
 	}
 	// Votes and results survived; the named audit history is intact.
 	annView := categoriesFor(t, app, ann)
+	if !slices.Equal(annView[poll].MyOptionIDs, []string{o1}) {
+		t.Fatal("migration lost current selection")
+	}
 	if annView[poll].MyOptionID == nil || *annView[poll].MyOptionID != o1 || annView[poll].BallotCount != nil {
 		t.Fatalf("ann's view: %+v", annView[poll])
 	}
@@ -347,6 +353,11 @@ func TestMigration004TurnsPollsIntoCategoriesKeepingBallots(t *testing.T) {
 	res = authenticatedRequest(t, app, pool, admin, http.MethodGet, "/api/v1/categories/"+poll+"/audit", "")
 	if res.Code != 200 || json.Unmarshal(res.Body.Bytes(), &audits) != nil || len(audits) != 3 {
 		t.Fatalf("audit: %d %s", res.Code, res.Body)
+	}
+	for _, entry := range audits {
+		if entry.BallotID != nil {
+			t.Fatal("migration rewrote legacy audit grouping")
+		}
 	}
 	// Grants: the manager of the former category now holds every migrated poll; others hold nothing.
 	var ids []string

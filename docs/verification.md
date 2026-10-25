@@ -66,3 +66,12 @@ Top three visual issues and outcomes:
 1. Original student upload UI obscured collected submissions (before desktop/phone): replaced with the collection ledger.
 2. Selected navigation and display-scale headings reduced readability (first after screenshots): neutral selection, readable ink, 28/24px titles.
 3. Status tags cramped phone titles (collection mobile): metadata and status now wrap below the full title. A short original can still leave unused desktop space beside a longer notes rail; natural content height is retained.
+
+## People polls — 25 October 2026
+
+New person polls default to all admitted cohort members, refreshed at opening and fixed thereafter. Editors can switch to explicit candidates and set 1–500 selections per voter. Creation and voting share searchable candidates with removable chips above the search field. Migration 005 preserves existing explicit candidates, votes and named audit history. Changed selections create complete grouped history visible only to admins.
+
+- `make check` passed against disposable PostgreSQL `portal_people_test_20261025`, including race tests, vet, 62 frontend tests, type checking, production build, generated contract, repo-map checks and all linters.
+- Invariant tests cover bounded atomic replacement, concurrent multiple selections, self/foreign/duplicate/closed rejection, distinct voter counts, history snapshots, permissions, roster freezing and migration preservation. Independent review found no remaining defects.
+- Live Chromium against a separate seeded database exercised default switch, explicit candidate search/chips, opening, saving two choices, reloading, chip removal and empty search results. Desktop 1440px and phone 390px screenshots were inspected; phone and tablet 900px had no horizontal overflow.
+- Full Docker recovery drill passed with current migrations, multiple current selections and both legacy and grouped audit rows. Table signatures and attachment hashes matched after restoring; a non-empty target was correctly refused. The throwaway Restic snapshot was `eb0250d73e343db2e34cd4abbd70dc567002f6c35c20a2dc2b82544c90ea8e94` and was cleaned up by the drill.

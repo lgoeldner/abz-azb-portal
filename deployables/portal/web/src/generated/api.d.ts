@@ -352,7 +352,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Cast or change named ballot (single-answer only) */
+        /** Cast or replace a named ballot with up to max_choices distinct options */
         put: operations["putCategoriesIdBallot"];
         post?: never;
         delete?: never;
@@ -430,7 +430,7 @@ export interface components {
             allow_self_vote: boolean;
             /** @description Empty for repeatable categories. */
             options: components["schemas"]["PollOption"][];
-            /** @description The viewer's current choice; null for repeatable categories. */
+            /** @description First current selection in canonical ID order (legacy compatibility), or null. */
             my_option_id: string | null;
             version: number;
             /** Format: date-time */
@@ -440,8 +440,14 @@ export interface components {
              * @description Set once when a single-answer category moves from draft to open; creation time for repeatable ones.
              */
             opened_at: string | null;
-            /** @description Number of current ballots. Editors only; null for students and repeatable categories. */
+            /** @description Number of distinct current voters. Editors only; null for students and repeatable categories. */
             ballot_count: number | null;
+            /** @description Person polls only: all admitted cohort members, refreshed when opening and fixed thereafter. Existing polls retain explicit candidates. */
+            all_people: boolean;
+            /** @description Maximum selections per voter; 1 for proposal and repeatable categories. */
+            max_choices: number;
+            /** @description Viewer’s complete current selection; empty for repeatable categories or before voting. */
+            my_option_ids: string[];
         };
         Attachment: {
             id: string;
@@ -506,6 +512,8 @@ export interface components {
             option_label: string;
             /** Format: date-time */
             created_at: string;
+            /** @description Groups the complete selection from one ballot change. Null for legacy single-choice history. */
+            ballot_id: string | null;
         };
         AuditEvent: {
             id: string;
@@ -536,11 +544,18 @@ export interface components {
             /** @enum {string} */
             kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal";
             allow_self_vote?: boolean;
-            /** @description Empty for repeatable kinds; 2-500 unique options for person and proposal. */
+            /** @description Empty for repeatable kinds and all_people person polls; otherwise 2–500 unique options. Person options must reference admitted cohort members. */
             options?: {
                 label: string;
                 user_id?: string;
             }[];
+            /** @description Person polls: all admitted cohort members instead of explicit options. Defaults true on creation; omission preserves mode on edit. Other kinds require false. */
+            all_people?: boolean;
+            /**
+             * @description Maximum selections for person polls; other kinds require 1.
+             * @default 1
+             */
+            max_choices: number;
         };
         SubmissionInput: {
             idempotency_key: string;
@@ -575,12 +590,19 @@ export interface components {
             /** @enum {string} */
             kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal";
             allow_self_vote?: boolean;
-            /** @description Empty for repeatable kinds; 2-500 unique options for person and proposal. */
+            /** @description Empty for repeatable kinds and all_people person polls; otherwise 2–500 unique options. Person options must reference admitted cohort members. */
             options?: {
                 label: string;
                 user_id?: string;
             }[];
             version: number;
+            /** @description Person polls: all admitted cohort members instead of explicit options. Defaults true on creation; omission preserves mode on edit. Other kinds require false. */
+            all_people?: boolean;
+            /**
+             * @description Maximum selections for person polls; other kinds require 1.
+             * @default 1
+             */
+            max_choices: number;
         };
     };
     responses: never;
@@ -1445,8 +1467,9 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    option_id: string;
-                };
+                    option_id?: string;
+                    option_ids?: string[];
+                } & (unknown | unknown);
             };
         };
         responses: {
@@ -1458,6 +1481,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         option_id: string;
+                        option_ids: string[];
                     };
                 };
             };

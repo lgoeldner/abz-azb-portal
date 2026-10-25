@@ -24,6 +24,9 @@ const sammlung = (id: string, name: string, kind: string, extra: Record<string, 
   allow_self_vote: false,
   options: [],
   my_option_id: null,
+  my_option_ids: [],
+  all_people: false,
+  max_choices: 1,
   version: 1,
   created_at: '2026-10-01T00:00:00Z',
   opened_at: null,
@@ -568,7 +571,7 @@ describe('navigation by view', () => {
       polls: [
         poll('p-open', 'Abimotto', { opened_at: iso(3) }),
         poll('p-newer', 'Lehrerzitat', { opened_at: iso(1) }),
-        poll('p-voted', 'Mottowoche', { my_option_id: 'p-voted-a' }),
+        poll('p-voted', 'Mottowoche', { my_option_id: 'p-voted-a', my_option_ids: ['p-voted-a'] }),
         poll('p-closed', 'Altlast', { status: 'closed' }),
         poll('p-draft', 'Geheimer Entwurf', { status: 'draft', opened_at: null }),
       ],
@@ -1030,6 +1033,8 @@ describe('sammlungen', () => {
         name: 'Neues Motto',
         description: '',
         kind: 'proposal',
+        all_people: false,
+        max_choices: 1,
         allow_self_vote: true,
         options: [{ label: 'A' }, { label: 'B' }],
       },
@@ -1048,7 +1053,9 @@ describe('sammlungen', () => {
     fireEvent.change(klasse, { target: { value: 'proposal' } });
     expect(screen.getByLabelText(/Antwortoptionen/)).toBeInTheDocument();
     fireEvent.change(klasse, { target: { value: 'person' } });
-    expect(await screen.findByLabelText('Anna')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: /Alle freigegebenen Personen/ })).toBeChecked();
+    fireEvent.click(screen.getByRole('switch', { name: /Alle freigegebenen Personen/ }));
+    expect(await screen.findByRole('button', { name: 'Anna' })).toBeInTheDocument();
   });
 
   it('offers only repeatable Sammlungen on the editorial review page', async () => {
