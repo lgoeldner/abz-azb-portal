@@ -1,11 +1,10 @@
 import { useRef, useState, type FormEvent } from 'react';
-import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   api,
   ApiError,
   canEdit,
   date,
-  editorial,
   json,
   statusLabels,
   type Attachment,
@@ -31,6 +30,7 @@ import {
   useAction,
   useData,
   useSession,
+  useWorkspaceView,
 } from './ui';
 import { DevDebug } from './DevDebug';
 function photoValidationError(files: File[]) {
@@ -68,9 +68,7 @@ export function Contributions() {
     ) ?? [];
   return (
     <>
-      <PageHead title="Meine Beiträge">
-        Alles, was du beigesteuert hast. Von der ersten Idee bis zur fertigen Seite.
-      </PageHead>
+      <PageHead title="Meine Beiträge">Deine Beiträge in den Sammlungen des Jahrgangs.</PageHead>
       <div className="mb-6 flex flex-wrap items-end gap-3">
         <label className={`${label} min-w-0 w-full sm:flex-1`}>
           Suchen
@@ -78,6 +76,7 @@ export function Contributions() {
             type="search"
             className={field}
             placeholder="Geschichte finden …"
+            maxLength={200}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -109,6 +108,7 @@ export function Contributions() {
   );
 }
 export function NewContribution() {
+  const [view] = useWorkspaceView();
   const categories = useData<Category[]>('/categories');
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -152,13 +152,15 @@ export function NewContribution() {
     });
   }
 
+  if (view === 'redaktion') return <Navigate to="/redaktion" replace />;
+
   return (
     <>
       <Link className="mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink" to="/beitraege">
         ← Meine Beiträge
       </Link>
       <PageHead title={category ? `Beitrag für „${category.name}“` : 'Was sollen wir festhalten?'}>
-        Dein Beitrag wird erst nach der Prüfung durch die Redaktion für die Zeitung übernommen.
+        Dein Beitrag wird in der Sammlung gespeichert. Die Redaktion sichtet die Sammlung nach dem Sammelzeitraum.
       </PageHead>
       {categories.isPending ? (
         <Loading />
@@ -257,7 +259,7 @@ export function NewContribution() {
             </p>
             <hr className="my-4 border-line" />
             <strong className="block text-ink">Dein Beitrag bleibt bearbeitbar.</strong>
-            <p className="mt-1">Solange er in Prüfung ist, kannst du Text und Bilder jederzeit ändern.</p>
+            <p className="mt-1">Solange dein Beitrag eingereicht ist, kannst du Text und Bilder jederzeit ändern.</p>
             <small className="mt-4 block">
               Bitte lade nur Bilder hoch, die du für unsere Abizeitung verwenden darfst.
             </small>
@@ -269,7 +271,10 @@ export function NewContribution() {
 }
 export function ContributionDetail() {
   const { id } = useParams();
+  const location = useLocation();
   const { user } = useSession();
+  const [view] = useWorkspaceView();
+  const isRedaktion = view === 'redaktion' || location.pathname.startsWith('/redaktion');
   const item = useData<Submission>(`/submissions/${id}`);
   const categories = useData<Category[]>('/categories');
   const revisions = useData<Revision[]>(`/submissions/${id}/revisions`);
@@ -289,8 +294,7 @@ export function ContributionDetail() {
   if (item.error) return <Failure error={item.error} retry={() => item.refetch()} />;
   const s = item.data;
   const own = s.author_id === user.id;
-  const writable = (s.status === 'pending' && own) || canEdit(user, s.category_id);
-  const editable = writable && (s.status === 'pending' || editorial(user));
+  const editable = own && s.status === 'pending' && !isRedaktion;
   const categoryName = categories.data?.find((c) => c.id === s.category_id)?.name;
   const beginEdit = () => {
     setDraft({
@@ -327,13 +331,110 @@ export function ContributionDetail() {
       setFile(null);
     }, 'Datei hochgeladen.');
   }
+  const annotationPanel = (
+    <section className={`${panel} space-y-4`}>
+      <h2 className={heading}>Anmerkungen</h2>
+      {corrections.isPending ? (
+        <Loading />
+      ) : corrections.error ? (
+        <Failure error={corrections.error} />
+      ) : corrections.data?.length ? (
+        corrections.data.map((c) => (
+          <article className="border-t border-line pt-4" key={c.id}>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <strong>{c.author_name}</strong>
+              <small className="text-muted">
+                <span className="flex flex-wrap gap-x-2">
+                  <span>{date(c.created_at)}</span>
+                  <span>{c.resolved ? 'Erledigt' : 'Offen'}</span>
+                </span>
+              </small>
+            </div>
+            <p className="mt-1 whitespace-pre-wrap break-words">{c.body}</p>
+            {!c.resolved && isRedaktion && canEdit(user, s.category_id) && (
+              <button
+                className={`${btn.secondary} mt-3`}
+                disabled={action.busy}
+                onClick={() =>
+                  action.run(
+                    () => api(`/submissions/${id}/corrections/${c.id}/resolve`, json('POST')),
+                    'Anmerkung als erledigt markiert.',
+                  )
+                }
+              >
+                Als erledigt markieren
+              </button>
+            )}
+          </article>
+        ))
+      ) : (
+        <p className="text-sm text-muted">Noch keine Anmerkungen.</p>
+      )}
+      {isRedaktion && canEdit(user, s.category_id) && (
+        <form
+          className="space-y-3 border-t border-line pt-5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            action.run(async () => {
+              await api(`/submissions/${id}/corrections`, json('POST', { body: correction }));
+              setCorrection('');
+            }, 'Anmerkung gespeichert.');
+          }}
+        >
+          <label className={label}>
+            Anmerkung
+            <textarea
+              className={field}
+              rows={3}
+              value={correction}
+              maxLength={10000}
+              required
+              onChange={(e) => setCorrection(e.target.value)}
+              placeholder="Optionale Anmerkung zu diesem Beitrag"
+            />
+          </label>
+          <button className={btn.secondary} disabled={action.busy}>
+            Anmerkung speichern
+          </button>
+        </form>
+      )}
+      {!isRedaktion && own && s.status !== 'pending' && (
+        <form
+          className="space-y-3 border-t border-line pt-5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            action.run(async () => {
+              await api(`/submissions/${id}/corrections`, json('POST', { body: correction }));
+              setCorrection('');
+            }, 'Korrekturwunsch gesendet.');
+          }}
+        >
+          <label className={label}>
+            Korrekturwunsch an die Redaktion
+            <textarea
+              className={field}
+              rows={3}
+              value={correction}
+              maxLength={10000}
+              required
+              onChange={(e) => setCorrection(e.target.value)}
+              placeholder="Was soll korrigiert werden?"
+            />
+          </label>
+          <button className={btn.secondary} disabled={action.busy}>
+            Korrekturwunsch senden
+          </button>
+        </form>
+      )}
+    </section>
+  );
   return (
     <>
       <Link
         className="mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink"
-        to={own ? '/beitraege' : '/redaktion'}
+        to={isRedaktion ? `/sammlungen/${s.category_id}` : own ? '/beitraege' : '/redaktion'}
       >
-        ← {own ? 'Meine Beiträge' : 'Redaktion'}
+        ← {isRedaktion ? 'Zur Sammlung' : own ? 'Meine Beiträge' : 'Redaktion'}
       </Link>
       <PageHead title={s.title} action={<Badge status={s.status} />}>
         <span className="flex flex-wrap gap-x-2">
@@ -372,7 +473,7 @@ export function ContributionDetail() {
       )}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start">
         <div className="min-w-0 space-y-6">
-          {editing ? (
+          {editing && editable ? (
             <form className={`${panel} space-y-5`} onSubmit={save}>
               <label className={label}>
                 Titel
@@ -430,7 +531,9 @@ export function ContributionDetail() {
           ) : null}
           <article className={panel}>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className={heading}>{editing ? 'Aktueller Stand' : 'Deine Geschichte'}</h2>
+              <h2 className={heading}>
+                {editing && editable ? 'Aktueller Stand' : isRedaktion ? 'Beitrag' : 'Dein Beitrag'}
+              </h2>
               {editable && !editing && (
                 <button className={btn.secondary} onClick={beginEdit}>
                   Bearbeiten <Arrow />
@@ -489,113 +592,41 @@ export function ContributionDetail() {
             )}
             {!s.attachments?.length && !editable && <p className="mt-3 text-sm text-muted">Keine Fotos vorhanden.</p>}
           </section>
-          <section className={`${panel} space-y-4`}>
-            <h2 className={heading}>Korrekturwünsche</h2>
-            {corrections.isPending ? (
-              <Loading />
-            ) : corrections.error ? (
-              <Failure error={corrections.error} />
-            ) : corrections.data?.length ? (
-              corrections.data.map((c) => (
-                <article className="border-t border-line pt-4" key={c.id}>
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                    <strong>{c.author_name}</strong>
-                    <small className="text-muted">
-                      <span className="flex flex-wrap gap-x-2">
-                        <span>{date(c.created_at)}</span>
-                        <span>{c.resolved ? 'Erledigt' : 'Offen'}</span>
-                      </span>
-                    </small>
-                  </div>
-                  <p className="mt-1 whitespace-pre-wrap break-words">{c.body}</p>
-                  {!c.resolved && canEdit(user, s.category_id) && (
-                    <button
-                      className={`${btn.secondary} mt-3`}
-                      disabled={action.busy}
-                      onClick={() =>
-                        action.run(
-                          () => api(`/submissions/${id}/corrections/${c.id}/resolve`, json('POST')),
-                          'Korrektur als erledigt markiert.',
-                        )
-                      }
-                    >
-                      Als erledigt markieren
-                    </button>
-                  )}
-                </article>
-              ))
-            ) : (
-              <p className="text-sm text-muted">Noch keine Korrekturwünsche.</p>
-            )}
-            {own && s.status !== 'pending' && (
-              <form
-                className="space-y-3 border-t border-line pt-5"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  action.run(async () => {
-                    await api(`/submissions/${id}/corrections`, json('POST', { body: correction }));
-                    setCorrection('');
-                  }, 'Korrekturwunsch gesendet.');
-                }}
-              >
-                <label className={label}>
-                  Änderung an die Redaktion
-                  <textarea
-                    className={field}
-                    rows={3}
-                    value={correction}
-                    required
-                    onChange={(e) => setCorrection(e.target.value)}
-                    placeholder="Was soll korrigiert werden?"
-                  />
-                </label>
-                <button className={btn.secondary} disabled={action.busy}>
-                  Korrekturwunsch senden
-                </button>
-              </form>
-            )}
-          </section>
+          {!isRedaktion && annotationPanel}
         </div>
         <aside className="min-w-0 space-y-6">
           <section className={`${panel} space-y-4`}>
-            <h3 className={heading}>
-              {s.status === 'pending' ? 'Die Redaktion liest mit.' : 'Dein Beitrag ist geprüft.'}
-            </h3>
-            <p className="text-sm text-muted">
-              {s.status === 'pending'
-                ? 'Bis zur Entscheidung kannst du deinen Beitrag noch anpassen.'
-                : 'Du hast noch eine Änderung? Schicke einen Korrekturwunsch an das Team.'}
-            </p>
-            {own && s.status === 'pending' && (
+            <h3 className={heading}>{isRedaktion ? 'Beitragsdetails' : 'Dein Beitrag'}</h3>
+            {isRedaktion ? (
+              <dl className="space-y-3 text-sm">
+                <div>
+                  <dt className="text-muted">Eingegangen</dt>
+                  <dd>{date(s.created_at)}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted">Sammlung</dt>
+                  <dd>{categoryName ?? 'Beitrag'}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="text-sm text-muted">
+                {s.status === 'pending'
+                  ? 'Du kannst deinen eingereichten Beitrag noch anpassen.'
+                  : 'Du kannst eine Änderung als Korrekturwunsch an die Redaktion senden.'}
+              </p>
+            )}
+            {!isRedaktion && own && s.status === 'pending' && (
               <button className={btn.danger} disabled={action.busy} onClick={() => setStatus('withdrawn')}>
                 Beitrag zurückziehen
               </button>
             )}
-            {canEdit(user, s.category_id) &&
-              (s.status === 'pending' ? (
-                <div className="flex flex-col gap-3">
-                  <button
-                    className={editing ? btn.secondary : btn.primary}
-                    disabled={action.busy}
-                    onClick={() => setStatus('accepted')}
-                  >
-                    Für die Zeitung annehmen ✓
-                  </button>
-                  <button className={btn.danger} disabled={action.busy} onClick={() => setStatus('rejected')}>
-                    Ablehnen
-                  </button>
-                </div>
-              ) : (
-                <button className={btn.secondary} disabled={action.busy} onClick={() => setStatus('pending')}>
-                  Erneut zur Prüfung öffnen
-                </button>
-              ))}
-            {editorial(user) && !canEdit(user, s.category_id) && (
+            {isRedaktion && !canEdit(user, s.category_id) && (
               <p className="text-sm text-muted">
-                Du hast Leserechte. Zum Bearbeiten brauchst du eine Zuweisung zu dieser Sammlung.
+                Du hast Leserechte. Für Anmerkungen brauchst du eine Zuweisung zu dieser Sammlung.
               </p>
             )}
           </section>
+          {isRedaktion && annotationPanel}
           <section className={panel}>
             <h3 className={heading}>Versionsverlauf</h3>
             {revisions.isPending ? (
@@ -670,7 +701,7 @@ export function Editorial() {
   const category = params.get('sammlung') ?? '';
   const setCategory = (id: string) => setParams(id ? { sammlung: id } : {}, { replace: true });
   const sammlungen = categories.data?.filter(submittable) ?? [];
-  const [status, setStatus] = useState('pending');
+  const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const { user } = useSession();
   const path = `/submissions?${new URLSearchParams({
@@ -679,12 +710,10 @@ export function Editorial() {
     q: search,
   })}`;
   const items = useData<Submission[]>(path);
-  const [exportStatus, setExportStatus] = useState('accepted');
+  const [exportStatus, setExportStatus] = useState('all');
   return (
     <>
-      <PageHead title="Aus Geschichten wird Zeitung.">
-        Alle Beiträge im Blick. Du bearbeitest die Sammlungen, die dir zugewiesen sind.
-      </PageHead>
+      <PageHead title="Beiträge">Beiträge aus allen Sammlungen und Status.</PageHead>
       <div className="mb-6 flex flex-wrap items-end gap-3">
         <label className={`${label} min-w-0 w-full sm:w-56`}>
           Sammlung
@@ -716,6 +745,7 @@ export function Editorial() {
             className={field}
             value={search}
             placeholder="Titel, Text, Name …"
+            maxLength={200}
             onChange={(e) => setSearch(e.target.value)}
           />
         </label>
@@ -725,7 +755,7 @@ export function Editorial() {
       ) : items.error ? (
         <Failure error={items.error} retry={() => items.refetch()} />
       ) : items.data?.length ? (
-        <SubmissionList items={items.data} categories={categories.data ?? []} showAuthor />
+        <SubmissionList items={items.data} categories={categories.data ?? []} showAuthor editorialView />
       ) : (
         <Empty>In dieser Auswahl sind noch keine Beiträge.</Empty>
       )}
@@ -751,8 +781,8 @@ export function Editorial() {
           <label className={`${label} min-w-0 w-full sm:w-56`}>
             Umfang
             <select className={field} value={exportStatus} onChange={(e) => setExportStatus(e.target.value)}>
+              <option value="all">Alle Beiträge</option>
               <option value="accepted">Nur angenommene Beiträge</option>
-              <option value="all">Alle Beiträge inklusive abgelehnter</option>
             </select>
           </label>
           {category ? (

@@ -275,7 +275,7 @@ func (a *App) exportCategory(w http.ResponseWriter, r *http.Request) error {
 	}
 	status := r.URL.Query().Get("status")
 	if status == "" {
-		status = "accepted"
+		status = "all"
 	}
 	if status != "all" && !validSubmissionStatus(status) {
 		return bad("Ungültiger Exportstatus.")

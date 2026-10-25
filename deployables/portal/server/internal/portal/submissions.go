@@ -66,7 +66,7 @@ func (a *App) listSubmissions(w http.ResponseWriter, r *http.Request) error {
 	if len(search) > 200 {
 		return bad("Suchtext zu lang.")
 	}
-	rows, e := a.DB.Query(r.Context(), "SELECT s.id::text FROM submissions s WHERE ($1 OR s.author_id=$2::uuid) AND ($3='' OR s.category_id::text=$3) AND ($4='' OR s.status=$4) AND ($5='' OR s.title ILIKE '%'||$5||'%' OR s.body ILIKE '%'||$5||'%') ORDER BY s.updated_at DESC,s.id", editor(u), u.ID, cat, status, search)
+	rows, e := a.DB.Query(r.Context(), "SELECT s.id::text FROM submissions s JOIN users u ON u.id=s.author_id WHERE ($1 OR s.author_id=$2::uuid) AND ($3='' OR s.category_id::text=$3) AND ($4='' OR s.status=$4) AND ($5='' OR s.title ILIKE '%'||$5||'%' OR s.body ILIKE '%'||$5||'%' OR u.name ILIKE '%'||$5||'%') ORDER BY s.updated_at DESC,s.id", editor(u), u.ID, cat, status, search)
 	if e != nil {
 		return e
 	}
@@ -356,11 +356,13 @@ func (a *App) addCorrection(w http.ResponseWriter, r *http.Request) error {
 	if !canRead(u, s) {
 		return missing()
 	}
-	if s.AuthorID != u.ID {
-		return forbidden()
-	}
-	if s.Status == "pending" {
-		return conflict()
+	if !canEdit(u, s.CategoryID) {
+		if s.AuthorID != u.ID {
+			return forbidden()
+		}
+		if s.Status == "pending" {
+			return conflict()
+		}
 	}
 	c := Correction{ID: ID(), SubmissionID: s.ID, AuthorName: u.Name, Body: in.Body}
 	e = tx.QueryRow(r.Context(), "INSERT INTO corrections(id,submission_id,author_id,body) VALUES($1,$2,$3,$4) RETURNING created_at", c.ID, s.ID, u.ID, c.Body).Scan(&c.CreatedAt)

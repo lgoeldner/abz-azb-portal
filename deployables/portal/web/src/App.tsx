@@ -6,6 +6,7 @@ import {
   Hourglass,
   House,
   Library,
+  Menu,
   Plus,
   ScrollText,
   Settings,
@@ -15,7 +16,7 @@ import {
   Vote,
   type LucideIcon,
 } from 'lucide-react';
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, editorial, json, setCsrf, type Category, type Me, type Submission, type User } from './api';
 import {
@@ -43,6 +44,8 @@ import {
   useData,
   useSession,
   useView,
+  WorkspaceView,
+  useWorkspaceView,
   type View,
 } from './ui';
 import { ActivityLog, Categories, People } from './admin';
@@ -107,6 +110,14 @@ export function App() {
               </RoleGuard>
             }
           />
+          <Route
+            path="redaktion/beitraege/:id"
+            element={
+              <RoleGuard>
+                <ContributionDetail />
+              </RoleGuard>
+            }
+          />
           <Route path="admin" element={<Navigate to="/verwaltung/personen" replace />} />
           <Route
             path="verwaltung/personen"
@@ -154,7 +165,6 @@ const time = (value: string | null | undefined) => (value ? new Date(value).getT
 const statusOrder = { open: 0, draft: 1, closed: 2 } as const;
 
 // The sidebar switch and the home page must agree on the view, so Layout owns the single hook instance.
-const ViewContext = createContext<[View, (view: View) => void]>(['schueler', () => {}]);
 
 function Mark({ className = 'size-8' }: { className?: string }) {
   return (
@@ -261,115 +271,123 @@ const groupLabel = 'px-3.5 text-sm font-bold text-ink';
 
 function Layout() {
   const { user } = useSession();
-  const view = useView();
+  const preference = useView();
   const [menu, setMenu] = useState(false);
   const location = useLocation();
+  const [preferredView, setView] = preference;
+  const editorialRoute = editorial(user) && location.pathname.startsWith('/redaktion');
+  useEffect(() => {
+    if (editorialRoute && preferredView !== 'redaktion') setView('redaktion');
+  }, [editorialRoute, preferredView, setView]);
+  const view: [View, (view: View) => void] = [editorialRoute ? 'redaktion' : preferredView, setView];
   return (
-    <ViewContext.Provider value={view}>
-      <a
-        className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-full focus:bg-white focus:px-3 focus:py-2 focus:text-sm"
-        href="#inhalt"
-      >
-        Zum Inhalt
-      </a>
-      <header className="fixed inset-x-0 top-0 z-30 flex h-12 items-center gap-3 bg-chrome px-2 min-[651px]:hidden">
-        <button
-          type="button"
-          className="grid size-10 place-items-center rounded-full text-xl hover:bg-pill"
-          aria-label={menu ? 'Menü schließen' : 'Menü öffnen'}
-          aria-expanded={menu}
-          onClick={() => setMenu(!menu)}
+    <WorkspaceView.Provider value={view}>
+      <div data-workspace={view[0]}>
+        <a
+          className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-full focus:bg-white focus:px-3 focus:py-2 focus:text-sm"
+          href="#inhalt"
         >
-          <span aria-hidden="true">☰</span>
-        </button>
-        <Brand />
-      </header>
-      {menu && (
-        <button
-          type="button"
-          tabIndex={-1}
-          aria-hidden="true"
-          className="fixed inset-0 z-30 bg-ink/30 min-[651px]:hidden"
-          onClick={() => setMenu(false)}
-        />
-      )}
-      <aside
-        aria-label="Seitenleiste"
-        className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col overflow-y-auto bg-chrome max-[651px]:top-12 max-[651px]:w-[min(86vw,320px)] max-[651px]:transition-transform ${menu ? '' : 'max-[651px]:invisible max-[651px]:-translate-x-full'}`}
-      >
-        <Link
-          to="/"
-          className="flex-none rounded-full px-5 pb-4 pt-5 max-[651px]:hidden"
-          aria-label="AbiZeitBetrug Startseite"
-          onClick={() => setMenu(false)}
-        >
+          Zum Inhalt
+        </a>
+        <header className="fixed inset-x-0 top-0 z-30 flex h-12 items-center gap-3 bg-chrome px-2 min-[651px]:hidden">
+          <button
+            type="button"
+            className="grid size-10 place-items-center rounded-full text-xl hover:bg-pill"
+            aria-label={menu ? 'Menü schließen' : 'Menü öffnen'}
+            aria-expanded={menu}
+            onClick={() => setMenu(!menu)}
+          >
+            <Menu aria-hidden="true" className="size-5" />
+          </button>
           <Brand />
-        </Link>
-        <nav
-          aria-label="Hauptnavigation"
-          className="flex min-h-24 flex-1 flex-col gap-6 overflow-y-auto px-3 py-2 max-[651px]:pt-4"
-          onClick={(e) => {
-            if ((e.target as Element).closest('a')) setMenu(false);
-          }}
+        </header>
+        {menu && (
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-hidden="true"
+            className="fixed inset-0 z-30 bg-ink/30 min-[651px]:hidden"
+            onClick={() => setMenu(false)}
+          />
+        )}
+        <aside
+          aria-label="Seitenleiste"
+          className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col overflow-y-auto bg-chrome max-[651px]:top-12 max-[651px]:w-[min(86vw,320px)] max-[651px]:transition-transform ${menu ? '' : 'max-[651px]:invisible max-[651px]:-translate-x-full'}`}
         >
-          <NavItem to="/" icon={House}>
-            Überblick
-          </NavItem>
-          {view[0] === 'redaktion' && editorial(user) ? <EditorNav /> : <StudentNav />}
-        </nav>
-        {user.role === 'admin' && <AdminNav onNavigate={() => setMenu(false)} />}
-        <div className="flex flex-none flex-col gap-3 bg-pill px-3 py-4">
-          {editorial(user) && <ViewSwitch onSwitch={() => setMenu(false)} />}
-          <div className="flex items-center gap-3 px-1">
-            <span
-              className="grid size-9 flex-none place-items-center rounded-full bg-pop text-[13px] font-bold"
-              aria-hidden="true"
-            >
-              {user.name
-                .split(' ')
-                .map((n) => n[0])
-                .slice(0, 2)
-                .join('')}
-            </span>
-            <div className="min-w-0 leading-tight">
-              <strong className="block truncate text-[15px] font-semibold">{user.name}</strong>
-              <small className="text-[13px] text-muted">{roleName(user.role)}</small>
+          <Link
+            to="/"
+            className="flex-none rounded-full px-5 pb-4 pt-5 max-[651px]:hidden"
+            aria-label="AbiZeitBetrug Startseite"
+            onClick={() => setMenu(false)}
+          >
+            <Brand />
+          </Link>
+          <nav
+            aria-label="Hauptnavigation"
+            className="flex min-h-24 flex-1 flex-col gap-6 overflow-y-auto px-3 py-2 max-[651px]:pt-4"
+            onClick={(e) => {
+              if ((e.target as Element).closest('a')) setMenu(false);
+            }}
+          >
+            <NavItem to="/" icon={House}>
+              Überblick
+            </NavItem>
+            {view[0] === 'redaktion' && editorial(user) ? <EditorNav /> : <StudentNav />}
+          </nav>
+          {user.role === 'admin' && <AdminNav onNavigate={() => setMenu(false)} />}
+          <div className="flex flex-none flex-col gap-3 bg-pill px-3 py-4">
+            {editorial(user) && <ViewSwitch onSwitch={() => setMenu(false)} />}
+            <div className="flex items-center gap-3 px-1">
+              <span
+                className="grid size-9 flex-none place-items-center rounded-full bg-pop text-[13px] font-bold"
+                aria-hidden="true"
+              >
+                {user.name
+                  .split(' ')
+                  .map((n) => n[0])
+                  .slice(0, 2)
+                  .join('')}
+              </span>
+              <div className="min-w-0 leading-tight">
+                <strong className="block truncate text-[15px] font-semibold">{user.name}</strong>
+                <small className="text-[13px] text-muted">{roleName(user.role)}</small>
+              </div>
+            </div>
+            <div className="px-3.5">
+              <Logout />
             </div>
           </div>
-          <div className="px-3.5">
-            <Logout />
-          </div>
+        </aside>
+        <div className="flex min-h-screen flex-col bg-paper max-[651px]:pt-12 min-[651px]:pl-[260px]">
+          <main id="inhalt" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-8 sm:py-10">
+            <Outlet />
+            {import.meta.env.DEV && (
+              <div className="mt-8">
+                <DevDebug
+                  label="Sitzung"
+                  data={{
+                    role: user.role,
+                    view: view[0],
+                    admitted: user.admitted,
+                    cohort: user.cohort_member,
+                    grants: user.category_ids.length,
+                    route: location.pathname,
+                  }}
+                />
+              </div>
+            )}
+          </main>
+          <footer className="px-4 pb-6 text-[13px] text-muted sm:px-8">
+            AbiZeitBetrug. Privater Jahrgangsbereich LMGU 2027
+          </footer>
         </div>
-      </aside>
-      <div className="flex min-h-screen flex-col bg-paper max-[651px]:pt-12 min-[651px]:pl-[260px]">
-        <main id="inhalt" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-8 sm:py-10">
-          <Outlet />
-          {import.meta.env.DEV && (
-            <div className="mt-8">
-              <DevDebug
-                label="Sitzung"
-                data={{
-                  role: user.role,
-                  view: view[0],
-                  admitted: user.admitted,
-                  cohort: user.cohort_member,
-                  grants: user.category_ids.length,
-                  route: location.pathname,
-                }}
-              />
-            </div>
-          )}
-        </main>
-        <footer className="px-4 pb-6 text-[13px] text-muted sm:px-8">
-          AbiZeitBetrug. Privater Jahrgangsbereich LMGU 2027
-        </footer>
       </div>
-    </ViewContext.Provider>
+    </WorkspaceView.Provider>
   );
 }
 
 function ViewSwitch({ onSwitch }: { onSwitch: () => void }) {
-  const [view, setView] = useContext(ViewContext);
+  const [view, setView] = useWorkspaceView();
   const navigate = useNavigate();
   const choose = (next: View) => {
     setView(next);
@@ -592,7 +610,7 @@ function StudentNav() {
                   key={c.id}
                   to={`/sammlungen/${c.id}`}
                   title={c.name}
-                  sub={c.my_option_id ? '✓ abgestimmt' : 'beendet'}
+                  sub={c.my_option_id ? 'abgestimmt' : 'beendet'}
                 />
               ))
             )}
@@ -672,7 +690,7 @@ function EditorNav() {
                   to={`/sammlungen/${c.id}`}
                   icon={kindIcon[c.kind]}
                   title={c.name}
-                  sub={`${plural(mine.length, 'Beitrag', 'Beiträge')}, ${mine.filter((s) => s.status === 'pending').length} offen`}
+                  sub={plural(mine.length, 'Beitrag', 'Beiträge')}
                 />
               );
             })
@@ -693,7 +711,7 @@ function RoleGuard({ children, admin = false }: { children: ReactNode; admin?: b
 // ---------- home ----------
 function Overview() {
   const { user } = useSession();
-  const [view] = useContext(ViewContext);
+  const [view] = useWorkspaceView();
   return view === 'redaktion' && editorial(user) ? (
     user.role === 'admin' ? (
       <AdminHome />
@@ -861,9 +879,7 @@ function StudentHome() {
                   className="flex items-center justify-between gap-4 px-5 py-3 text-[15px] hover:bg-pop/30"
                 >
                   <span className="min-w-0">{p.name}</span>
-                  <span className="flex-none text-[13px] text-muted">
-                    {p.my_option_id ? '✓ abgestimmt' : 'beendet'}
-                  </span>
+                  <span className="flex-none text-[13px] text-muted">{p.my_option_id ? 'abgestimmt' : 'beendet'}</span>
                 </Link>
               </li>
             ))}
@@ -1131,12 +1147,12 @@ function AdminHome() {
 function EditorHome() {
   const categories = useData<Category[]>('/categories');
   const submissions = useData<Submission[]>('/submissions');
-  const pending = (submissions.data ?? []).filter((s) => s.status === 'pending').length;
+  const collected = (submissions.data ?? []).length;
   const open = (categories.data ?? []).filter((c) => !c.repeatable && c.status === 'open').length;
   const fact =
     !categories.data || !submissions.data
       ? ''
-      : `${pending === 0 ? 'Keine Beiträge warten auf Prüfung' : pending === 1 ? '1 Beitrag wartet auf Prüfung' : `${pending} Beiträge warten auf Prüfung`}, ${open === 0 ? 'keine Wahl offen' : plural(open, 'Wahl', 'Wahlen') + ' offen'}`;
+      : `${plural(collected, 'Beitrag', 'Beiträge')} gesammelt, ${open === 0 ? 'keine Wahl offen' : plural(open, 'Wahl', 'Wahlen') + ' offen'}`;
   const ballots = (categories.data ?? [])
     .filter((c) => !c.repeatable)
     .sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || newestOpened(a, b));
@@ -1227,7 +1243,6 @@ function EditorHome() {
                   meta={c.description || kindLabel[c.kind]}
                   count={mine.length}
                   unit={['Beitrag', 'Beiträge']}
-                  extra={`${mine.filter((s) => s.status === 'pending').length} offen`}
                   debug={{
                     label: 'Sammlung',
                     data: {

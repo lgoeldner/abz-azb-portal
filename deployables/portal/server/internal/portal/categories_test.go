@@ -3,9 +3,12 @@ package portal
 import (
 	"abizeitbetrug/auth-mock/authmock"
 	"abizeitbetrug/server/migrations"
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"slices"
 	"strings"
@@ -84,6 +87,38 @@ func TestSubmissionsRequireRepeatableCategoryAndBallotsRequireSingleAnswer(t *te
 	}
 	if res := authenticatedRequest(t, app, pool, AdminID, http.MethodGet, "/api/v1/categories/"+rep+"/export?status=all", ""); res.Code != http.StatusOK {
 		t.Fatalf("export of repeatable category: %d", res.Code)
+	}
+	readExportCSV := func(resBody []byte) string {
+		t.Helper()
+		archive, err := zip.NewReader(bytes.NewReader(resBody), int64(len(resBody)))
+		if err != nil {
+			t.Fatalf("read export ZIP: %v", err)
+		}
+		for _, file := range archive.File {
+			if file.Name != "submissions.csv" {
+				continue
+			}
+			entry, err := file.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := io.ReadAll(entry)
+			entry.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			return string(data)
+		}
+		t.Fatal("export ZIP has no submissions.csv")
+		return ""
+	}
+	defaultExport := authenticatedRequest(t, app, pool, AdminID, http.MethodGet, "/api/v1/categories/"+rep+"/export", "")
+	if defaultExport.Code != http.StatusOK || !strings.Contains(readExportCSV(defaultExport.Body.Bytes()), "Eine Playlist für unseren Jahrgang") {
+		t.Fatalf("default export did not include pending submissions: status=%d", defaultExport.Code)
+	}
+	acceptedExport := authenticatedRequest(t, app, pool, AdminID, http.MethodGet, "/api/v1/categories/"+rep+"/export?status=accepted", "")
+	if acceptedExport.Code != http.StatusOK || strings.Contains(readExportCSV(acceptedExport.Body.Bytes()), "Eine Playlist für unseren Jahrgang") {
+		t.Fatalf("explicit accepted export included a pending submission: status=%d", acceptedExport.Code)
 	}
 }
 

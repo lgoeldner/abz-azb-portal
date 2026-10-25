@@ -62,7 +62,7 @@ func canEdit(u User, category string) bool {
 }
 func canRead(u User, s Submission) bool { return editor(u) || s.AuthorID == u.ID }
 func canMutate(u User, s Submission) bool {
-	return canEdit(u, s.CategoryID) || (s.AuthorID == u.ID && s.Status == "pending")
+	return s.AuthorID == u.ID && s.Status == "pending"
 }
 func digest(s string) string { h := sha256.Sum256([]byte(s)); return hex.EncodeToString(h[:]) }
 func validID(s string) bool {

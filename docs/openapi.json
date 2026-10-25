@@ -313,7 +313,7 @@
         ]
       },
       "patch": {
-        "summary": "Edit with optimistic concurrency",
+        "summary": "Edit own pending contribution with optimistic concurrency; editorial roles cannot change another author’s original",
         "operationId": "patchSubmissionsId",
         "responses": {
           "200": {
@@ -466,7 +466,7 @@
     },
     "/api/v1/submissions/{id}/attachments": {
       "post": {
-        "summary": "Upload image",
+        "summary": "Attach image to own pending contribution; original content stays author-owned",
         "operationId": "postSubmissionsIdAttachments",
         "responses": {
           "200": {
@@ -523,10 +523,7 @@
                     "type": "integer"
                   }
                 },
-                "required": [
-                  "file",
-                  "version"
-                ],
+                "required": ["file", "version"],
                 "additionalProperties": false
               }
             }
@@ -536,7 +533,7 @@
     },
     "/api/v1/submissions/{id}/attachments/{attachmentID}": {
       "delete": {
-        "summary": "Soft-delete image",
+        "summary": "Remove attachment from own pending contribution",
         "operationId": "deleteSubmissionsIdAttachmentsAttachmentid",
         "responses": {
           "200": {
@@ -597,9 +594,7 @@
                     "type": "integer"
                   }
                 },
-                "required": [
-                  "version"
-                ],
+                "required": ["version"],
                 "additionalProperties": false
               }
             }
@@ -726,7 +721,7 @@
         ]
       },
       "post": {
-        "summary": "Request correction",
+        "summary": "Add editorial annotation with category grant (any status), or author correction request on locked contribution",
         "operationId": "postSubmissionsIdCorrections",
         "responses": {
           "201": {
@@ -779,9 +774,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "body"
-                ],
+                "required": ["body"],
                 "additionalProperties": false
               }
             }
@@ -876,7 +869,7 @@
     },
     "/api/v1/categories/{id}/export": {
       "get": {
-        "summary": "Editorial CSV and original-photo ZIP (repeatable categories only)",
+        "summary": "Export all collected contributions by default, with optional explicit status filter (editors, repeatable only)",
         "operationId": "getCategoriesIdExport",
         "responses": {
           "200": {
@@ -915,8 +908,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string"
-            }
+              "type": "string",
+              "default": "all"
+            },
+            "description": "Defaults to all statuses; explicit status filtering remains available for later moderation."
           }
         ]
       }
@@ -1160,16 +1155,10 @@
                   },
                   "status": {
                     "type": "string",
-                    "enum": [
-                      "open",
-                      "closed"
-                    ]
+                    "enum": ["open", "closed"]
                   }
                 },
-                "required": [
-                  "version",
-                  "status"
-                ],
+                "required": ["version", "status"],
                 "additionalProperties": false
               }
             }
@@ -1193,9 +1182,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "option_id"
-                  ],
+                  "required": ["option_id"],
                   "additionalProperties": false
                 }
               }
@@ -1241,9 +1228,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "option_id"
-                ],
+                "required": ["option_id"],
                 "additionalProperties": false
               }
             }
@@ -1354,11 +1339,7 @@
           },
           "role": {
             "type": "string",
-            "enum": [
-              "student",
-              "manager",
-              "admin"
-            ]
+            "enum": ["student", "manager", "admin"]
           },
           "admitted": {
             "type": "boolean"
@@ -1398,10 +1379,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "user",
-          "csrf_token"
-        ],
+        "required": ["user", "csrf_token"],
         "additionalProperties": false
       },
       "Category": {
@@ -1418,14 +1396,7 @@
           },
           "kind": {
             "type": "string",
-            "enum": [
-              "idea",
-              "quote",
-              "memory",
-              "photo",
-              "person",
-              "proposal"
-            ]
+            "enum": ["idea", "quote", "memory", "photo", "person", "proposal"]
           },
           "repeatable": {
             "type": "boolean",
@@ -1433,11 +1404,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "draft",
-              "open",
-              "closed"
-            ],
+            "enum": ["draft", "open", "closed"],
             "description": "Always open for repeatable categories."
           },
           "allow_self_vote": {
@@ -1451,10 +1418,7 @@
             "description": "Empty for repeatable categories."
           },
           "my_option_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "description": "The viewer's current choice; null for repeatable categories."
           },
           "version": {
@@ -1465,18 +1429,12 @@
             "format": "date-time"
           },
           "opened_at": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time",
             "description": "Set once when a single-answer category moves from draft to open; creation time for repeatable ones."
           },
           "ballot_count": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "description": "Number of current ballots. Editors only; null for students and repeatable categories."
           }
         },
@@ -1555,12 +1513,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "pending",
-              "accepted",
-              "rejected",
-              "withdrawn"
-            ]
+            "enum": ["pending", "accepted", "rejected", "withdrawn"]
           },
           "version": {
             "type": "integer"
@@ -1619,12 +1572,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "pending",
-              "accepted",
-              "rejected",
-              "withdrawn"
-            ]
+            "enum": ["pending", "accepted", "rejected", "withdrawn"]
           },
           "created_at": {
             "type": "string",
@@ -1689,10 +1637,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "label"
-        ],
+        "required": ["id", "label"],
         "additionalProperties": false
       },
       "PollResult": {
@@ -1708,11 +1653,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "option_id",
-          "label",
-          "count"
-        ],
+        "required": ["option_id", "label", "count"],
         "additionalProperties": false
       },
       "BallotAudit": {
@@ -1764,23 +1705,14 @@
             "format": "date-time"
           }
         },
-        "required": [
-          "id",
-          "actor_name",
-          "action",
-          "entity_id",
-          "created_at"
-        ],
+        "required": ["id", "actor_name", "action", "entity_id", "created_at"],
         "additionalProperties": false
       },
       "SystemStatus": {
         "type": "object",
         "properties": {
           "backup_last_success": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "backup_stale": {
             "type": "boolean"
@@ -1789,11 +1721,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "backup_last_success",
-          "backup_stale",
-          "upload_bytes"
-        ],
+        "required": ["backup_last_success", "backup_stale", "upload_bytes"],
         "additionalProperties": false
       },
       "RosterEntry": {
@@ -1806,10 +1734,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "name"
-        ],
+        "required": ["id", "name"],
         "additionalProperties": false
       },
       "Error": {
@@ -1825,16 +1750,11 @@
                 "type": "string"
               }
             },
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "additionalProperties": false
           }
         },
-        "required": [
-          "error"
-        ],
+        "required": ["error"],
         "additionalProperties": false
       },
       "CategoryInput": {
@@ -1848,14 +1768,7 @@
           },
           "kind": {
             "type": "string",
-            "enum": [
-              "idea",
-              "quote",
-              "memory",
-              "photo",
-              "person",
-              "proposal"
-            ]
+            "enum": ["idea", "quote", "memory", "photo", "person", "proposal"]
           },
           "allow_self_vote": {
             "type": "boolean"
@@ -1872,19 +1785,13 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "label"
-              ],
+              "required": ["label"],
               "additionalProperties": false
             },
             "description": "Empty for repeatable kinds; 2-500 unique options for person and proposal."
           }
         },
-        "required": [
-          "name",
-          "description",
-          "kind"
-        ],
+        "required": ["name", "description", "kind"],
         "additionalProperties": false
       },
       "SubmissionInput": {
@@ -1934,13 +1841,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "version",
-          "category_id",
-          "title",
-          "body",
-          "context"
-        ],
+        "required": ["version", "category_id", "title", "body", "context"],
         "additionalProperties": false
       },
       "StatusInput": {
@@ -1951,18 +1852,10 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "pending",
-              "accepted",
-              "rejected",
-              "withdrawn"
-            ]
+            "enum": ["pending", "accepted", "rejected", "withdrawn"]
           }
         },
-        "required": [
-          "version",
-          "status"
-        ],
+        "required": ["version", "status"],
         "additionalProperties": false
       },
       "UserEdit": {
@@ -1973,11 +1866,7 @@
           },
           "role": {
             "type": "string",
-            "enum": [
-              "student",
-              "manager",
-              "admin"
-            ]
+            "enum": ["student", "manager", "admin"]
           },
           "admitted": {
             "type": "boolean"
@@ -2012,14 +1901,7 @@
           },
           "kind": {
             "type": "string",
-            "enum": [
-              "idea",
-              "quote",
-              "memory",
-              "photo",
-              "person",
-              "proposal"
-            ]
+            "enum": ["idea", "quote", "memory", "photo", "person", "proposal"]
           },
           "allow_self_vote": {
             "type": "boolean"
@@ -2036,9 +1918,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "label"
-              ],
+              "required": ["label"],
               "additionalProperties": false
             },
             "description": "Empty for repeatable kinds; 2-500 unique options for person and proposal."
@@ -2047,12 +1927,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "name",
-          "description",
-          "kind",
-          "version"
-        ],
+        "required": ["name", "description", "kind", "version"],
         "additionalProperties": false
       }
     }

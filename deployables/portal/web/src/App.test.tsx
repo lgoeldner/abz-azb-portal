@@ -643,13 +643,13 @@ describe('navigation by view', () => {
     expect(await within(main).findByRole('heading', { level: 1, name: 'Redaktion' })).toBeInTheDocument();
     if (role === 'admin') expect(within(main).getByRole('region', { name: 'Personen' })).toBeInTheDocument();
     else {
-      expect(await within(main).findByText('3 Beiträge warten auf Prüfung, 1 Wahl offen')).toBeInTheDocument();
+      expect(await within(main).findByText('4 Beiträge gesammelt, 1 Wahl offen')).toBeInTheDocument();
       expect(within(main).getByRole('link', { name: /Abimotto/ })).toHaveTextContent(/34\s*Stimmen/);
-      expect(within(main).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent(/3\s*Beiträge.*2 offen/);
-      expect(within(main).getByRole('link', { name: /Zitate/ })).toHaveTextContent(/1\s*Beitrag1 offen/);
+      expect(within(main).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent(/3\s*Beiträge/);
+      expect(within(main).getByRole('link', { name: /Zitate/ })).toHaveTextContent(/1\s*Beitrag/);
     }
     expect(within(aside).getByRole('link', { name: /Abimotto/ })).toHaveTextContent('34 Stimmen');
-    expect(within(aside).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('3 Beiträge, 2 offen');
+    expect(within(aside).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('3 Beiträge');
     expect(
       within(within(aside).getByRole('group', { name: 'Fortlaufend' })).getByRole('link', { name: /Erinnerungen/ }),
     ).toHaveAttribute('href', '/sammlungen/memory');
@@ -822,8 +822,9 @@ describe('sammlungen', () => {
   const quotes = sammlung('quotes', 'Zitate', 'quote', { description: 'Sprüche' });
   const all = [category, quotes, motto, old, draft];
   type Call = { url: string; method: string; body: Record<string, unknown> | undefined };
-  function mount(path: string, me: Record<string, unknown> = user, list: unknown[] = all) {
+  function mount(path: string, me: Record<string, unknown> = user, list: unknown[] = all, initialView?: string) {
     localStorage.clear();
+    if (initialView) localStorage.setItem('view', initialView);
     const calls: Call[] = [];
     vi.stubGlobal(
       'fetch',
@@ -845,7 +846,7 @@ describe('sammlungen', () => {
             { id: 'u1', name: 'Anna' },
             { id: 'u2', name: 'Ben' },
           ]);
-        if (url === '/submissions')
+        if (url.startsWith('/submissions'))
           return Response.json([
             {
               id: 's1',
@@ -945,22 +946,34 @@ describe('sammlungen', () => {
     expect(screen.queryByRole('link', { name: 'Beiträge prüfen' })).toBeNull();
   });
 
-  it('offers editors review and export for a repeatable Sammlung, and editing only to admins', async () => {
+  it('opens a read-only collection list for editors with all-status export', async () => {
     mount('/sammlungen/memory', manager);
-    expect(await screen.findByRole('link', { name: 'Beiträge prüfen' })).toHaveAttribute(
+    expect(await screen.findByRole('heading', { name: 'Gesammelte Beiträge' })).toBeInTheDocument();
+    const main = screen.getByRole('main');
+    expect(await within(main).findByRole('link', { name: /Mein Beitrag/ })).toHaveAttribute(
       'href',
-      '/redaktion?sammlung=memory',
+      '/redaktion/beitraege/s1',
     );
-    expect(screen.getByRole('link', { name: /ZIP herunterladen/ })).toHaveAttribute(
+    expect(within(main).getByRole('link', { name: /Alle Beiträge als ZIP/ })).toHaveAttribute(
       'href',
-      '/api/v1/categories/memory/export?status=accepted',
+      '/api/v1/categories/memory/export?status=all',
     );
-    expect(screen.queryByRole('button', { name: 'Sammlung bearbeiten' })).toBeNull();
+    expect(within(main).queryByRole('link', { name: /Beitrag einreichen/ })).toBeNull();
+    expect(within(main).queryByRole('button', { name: /bearbeiten/i })).toBeNull();
   });
 
-  it('lets an admin edit a repeatable Sammlung within its group and sends the version', async () => {
-    const calls = mount('/sammlungen/memory', admin);
-    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung bearbeiten' }));
+  it('keeps Redaktion active when following a collection from a direct editorial link', async () => {
+    mount('/redaktion', manager, all, 'schueler');
+    await screen.findByRole('heading', { level: 1, name: 'Beiträge' });
+    const aside = screen.getByRole('complementary', { name: 'Seitenleiste' });
+    fireEvent.click(within(aside).getByRole('link', { name: /Erinnerungen/ }));
+    expect(await screen.findByRole('heading', { name: 'Gesammelte Beiträge' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Beitrag einreichen/ })).toBeNull();
+  });
+
+  it('keeps repeatable collection definitions editable in Verwaltung', async () => {
+    const calls = mount('/verwaltung/sammlungen', admin);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung bearbeiten: Erinnerungen' }));
     expect(
       within(screen.getByLabelText('Klasse'))
         .getAllByRole('option')

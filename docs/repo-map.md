@@ -51,7 +51,7 @@ file `deployables/portal/server/internal/portal/http.go` :: App, router (all `bi
 file `deployables/portal/server/internal/portal/types.go` :: JSON types: User, Category, Submission, Revision, Correction, PollOption, PollResult, BallotAudit, AuditEvent [types, json]
 file `deployables/portal/server/internal/portal/categories.go` :: Category = Sammlung: kinds, repeatable vs single-answer, list/create/patch/status, ballot fill [sammlung, category, poll, lifecycle, draft]
 file `deployables/portal/server/internal/portal/polls.go` :: vote (row lock), results, ballot audit, roster [ballot, vote, results, roster]
-file `deployables/portal/server/internal/portal/submissions.go` :: submission CRUD, status transitions, revisions, corrections [beitrag, submission, revision, correction]
+file `deployables/portal/server/internal/portal/submissions.go` :: author-owned submission CRUD, author search, status transitions, revisions, editorial annotations/correction requests [beitrag, submission, revision, correction]
 file `deployables/portal/server/internal/portal/files.go` :: uploads, previews, downloads, ZIP export, disk usage [attachment, upload, export, zip]
 file `deployables/portal/server/internal/portal/admin.go` :: user list/edit/delete, audit log, system status [admin, users, audit, backup status]
 file `deployables/portal/server/internal/portal/auth.go` :: OIDC login/callback/logout, sessions [auth, oidc, session, cookie]
@@ -62,9 +62,9 @@ file `deployables/portal/server/internal/portal/seed.go` :: dev fixtures: users 
 ## Backend tests (need TEST_DATABASE_URL to a disposable DB)
 
 test `deployables/portal/server/internal/portal/access_matrix_test.go` :: every contract route enforces session, admission, CSRF, roles [permissions, matrix]
-test `deployables/portal/server/internal/portal/categories_test.go` :: Sammlung invariants and migration 004 [sammlung, migration]
+test `deployables/portal/server/internal/portal/categories_test.go` :: Sammlung invariants, all-status default exports and migration 004 [sammlung, migration]
 test `deployables/portal/server/internal/portal/poll_timeline_test.go` :: opened_at and ballot_count rules [poll, timeline]
-test `deployables/portal/server/internal/portal/portal_test.go` :: pure invariants, integrationPool/emptySchemaPool helpers, lifecycle + ballots [helpers, lifecycle]
+test `deployables/portal/server/internal/portal/portal_test.go` :: pure invariants, integrationPool/emptySchemaPool helpers, author-only original mutations, annotation grants, lifecycle + ballots [helpers, lifecycle]
 test `deployables/portal/server/internal/portal/auth_test.go` :: OIDC trust/enrollment via authmock [auth]
 test `deployables/portal/server/internal/portal/user_delete_test.go` :: user delete guards [admin, delete]
 test `deployables/portal/server/internal/portal/user_created_at_test.go` :: users.created_at backfill [migration]
@@ -96,14 +96,16 @@ route GET /auth/login, GET /auth/callback, POST /auth/logout :: outside /api/v1 
 ## Frontend (deployables/portal/web)
 
 file `deployables/portal/web/src/App.tsx` :: router, Layout, nav (StudentNav, EditorNav, AdminNav), StudentHome, EditorHome, AdminHome dashboard with one widget per class [routes, nav, dashboard, home]
-file `deployables/portal/web/src/sammlungen.tsx` :: Sammlungen list (Fortlaufend section, status groups, ?klasse filter), SammlungForm, SammlungDetail, Ballot [sammlung, poll, vote, form]
-file `deployables/portal/web/src/pages.tsx` :: Contributions, NewContribution, ContributionDetail, Editorial review, NotFound [beitrag, redaktion, export]
+file `deployables/portal/web/src/sammlungen.tsx` :: Sammlungen list (Fortlaufend section, status groups, ?klasse filter), SammlungForm, SammlungDetail, all-submission editorial collection reader, read-only ballot options/results and student voting [sammlung, poll, vote, form]
+file `deployables/portal/web/src/pages.tsx` :: Contributions, NewContribution, author detail and read-only editorial reader with annotations, all-submissions list, NotFound [beitrag, redaktion, export]
 file `deployables/portal/web/src/admin.tsx` :: Verwaltung: People, Categories (Sammlungen + manager grants), ActivityLog, audit action labels [verwaltung, admin, personen, protokoll]
-file `deployables/portal/web/src/ui.tsx` :: shared UI: kindIcon/kindLabel (six classes), Badge, PageHead, Failure, Loading, Empty, SubmissionList, plural, newestOpened [components, icons]
+file `deployables/portal/web/src/ui.tsx` :: shared workspace view context, editorial/author submission links and UI: kindIcon/kindLabel (six classes), Badge, PageHead, Failure, Loading, Empty, SubmissionList, plural, newestOpened [components, icons]
+file `deployables/portal/web/src/styles.css` :: student brand tokens and neutral Redaktion reading-desk theme, responsive list rows [styles, theme, redaktion]
 file `deployables/portal/web/src/api.ts` :: fetch wrapper, CSRF header [api, fetch]
 file `deployables/portal/web/src/api-types.ts` :: aliases over generated types [types]
 file `deployables/portal/web/src/generated/api.d.ts` :: generated from openapi.json, never edit by hand [codegen]
 file `deployables/portal/web/src/DevDebug.tsx` :: dev-only debug overlay [debug]
+test `deployables/portal/web/src/editorial.test.tsx` :: editorial readers, annotation grants, mode changes and collection defaults [test, redaktion, permissions]
 test `deployables/portal/web/src/App.test.tsx` :: component tests (vitest) [test, ui]
 test `deployables/portal/web/e2e/portal.spec.ts` :: Playwright journeys against a running seeded app [e2e]
 test `deployables/portal/web/e2e/verwaltung.spec.ts` :: Verwaltung e2e [e2e, admin]
@@ -114,13 +116,15 @@ test `deployables/portal/web/e2e/responsive.spec.ts` :: phone-width layout check
 page / :: Overview (StudentHome/EditorHome/AdminHome by role and view) [home]
 page /sammlungen, /sammlungen/:id :: Sammlungen list and detail; ?klasse=<kind>, ?neu [sammlung]
 page /beitraege, /beitraege/neu, /beitraege/:id :: own submissions [beitrag]
-page /redaktion :: editorial review, ?sammlung= filter [redaktion]
+page /redaktion, /redaktion/beitraege/:id :: all collected submissions, ?sammlung= filter [redaktion]
 page /verwaltung/personen, /verwaltung/sammlungen, /verwaltung/protokoll :: admin [verwaltung]
 page /abstimmungen[/:id], /verwaltung/rubriken, /admin :: redirects to the new routes [redirect, legacy]
 
 ## Domain rules
 
 rule Sammlung = categories row; kind is its class: repeatable idea/quote/memory/photo (submissions), single-answer person/proposal (one ballot each, draft->open->closed) [sammlung, class, kind, rubrik, poll]
-rule Managers read everything, edit only categories in users.category_ids; admins edit all; only admins see named ballots [permissions]
+rule Managers read all submissions and manage/annotate assigned categories; admins manage all categories; only authors mutate pending originals and only admins see named ballots [permissions]
 rule Dev identities: subject = UUIDv5(display_slug); seeded fixtures map via fixtureSlugs in seed.go [login, fixtures]
 rule Integration tests: TEST_DATABASE_URL to a disposable DB only; never the dev `portal` DB [test, database]
+
+rule Redaktion is a read-only collection desk: originals and photos are author-owned, annotations require category grants, all statuses listed/exported by default, moderation after collection [redaktion, permissions, workflow]

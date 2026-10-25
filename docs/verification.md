@@ -29,3 +29,40 @@ Separate tests verify backup-lock release after failure and restore refusal safe
 ## External launch dependencies
 
 Actual school SSO needs the school's provider registration and credentials. Production hosting, independent backup storage, the external missed-backup monitor, and the four-hour recovery target must be verified in the chosen hosting environment. No public production deployment was performed during local verification.
+
+## Redaktion collection workspace — 25 October 2026
+
+The collection phase now lists every authorized contribution and exports all statuses by default. Redaktion reads originals and photos, adds optional annotations, and does not require individual acceptance. Original text/photo mutations require the pending submission's author. Existing historical statuses and later moderation endpoints are preserved; no migration or data rewrite was needed. Students keep their submission and voting flows in Schüler mode.
+
+Validation:
+
+- `make check` passed with `TEST_DATABASE_URL` targeting the disposable `portal_test` database: Go race tests and vet, backup-lock and restore-safety tests, TypeScript, 54 frontend tests, production build, generated API contract (28 routes), repo-map validation, and linters.
+- Independent critical review found no remaining defects. The direct-editorial-link mode persistence issue found during review was fixed and regression-tested.
+- Chromium journeys cover submitting, reading, annotations without content mutations, all-status export, aggregate ballot results, administration, private diagnostics, and supported widths from 320 to 1920px. Long ballot option wrapping was corrected after the first responsive run. Final result: 19 journeys passed; one production-only diagnostic check was skipped on the development server.
+- No schema migration changed. The backup/restore safety tests ran; the full recovery drill above was not rerun for this UI/permission change.
+
+Design record:
+
+- Invoked design-taste-frontend, app-screen workflow. Direction: **Achromatic ledger**, seed **765100827**, existing Bricolage Grotesque kept. Neutral gray `#f4f5f6`, white reading panels, ink `#17191c`, data blue `#1d5fbf`. The collection ledger answers “Welche Beiträge liegen in dieser Sammlung vor?”; the reader answers “Was wurde eingereicht und welche Anmerkungen liegen dazu vor?”
+- Face: the yeargroup's paper-and-ink reading desk. Signature element: a collection ledger preserving named originals, opening each reader in one click, with separate notes. The idea sentence: “The yeargroup's collected originals become the reading desk's ledger.”
+- Two shell redraws: initial No sidebar could not carry the existing named collections; Icon rail also could not label those destinations; the second draw returned No sidebar. The existing labelled sidebar was retained under the restyle rule and app shell default. No palette redraw, new dependencies, external imagery, or production sample content.
+- The inspector ran on static DOM snapshots captured from the authenticated local app (not a mock app); browser journeys separately exercised the live controls. All listed final screenshots, including full-page contact sheets, were opened. Source lint: 0 failures, 0 warnings. Collection inspector at 1440/768/390: 0 failures, 0 warnings. Reader: 0 failures and one desktop ragged-row warning; the independently sized annotation/history rail intentionally follows its real content rather than padding the short original.
+- Before/after: title 48/48/36px → 28/28/24px; collection inspector 1 failure and 4 warnings → 0/0. The selected-nav contrast, oversized mobile title and phone row truncation were corrected across three visual rounds.
+
+Final critique, round 3:
+
+Seen in one second: a distinct Redaktion desk with a collection of named originals.
+
+Idea: collected yeargroup originals form a readable ledger, with notes beside them.
+
+Live thing: search by title/text/author, open a reader, record an annotation.
+
+Layout words by section: shell=labelled collections / collection=searchable ledger / reader=original and notes / phone=single-column reading.
+
+Scores (self-assessment): design 7.5 · usability 8.5 · creativity 7 · content 8 → overall 7.8. App-screen caps applied; no marketing imagery or motion floor.
+
+Top three visual issues and outcomes:
+
+1. Original student upload UI obscured collected submissions (before desktop/phone): replaced with the collection ledger.
+2. Selected navigation and display-scale headings reduced readability (first after screenshots): neutral selection, readable ink, 28/24px titles.
+3. Status tags cramped phone titles (collection mobile): metadata and status now wrap below the full title. A short original can still leave unused desktop space beside a longer notes rail; natural content height is retained.

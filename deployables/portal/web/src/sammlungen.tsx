@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react';
+import { Check, Plus } from 'lucide-react';
 import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -37,6 +37,7 @@ import {
   useAction,
   useData,
   useSession,
+  useWorkspaceView,
   type Kind,
 } from './ui';
 import { DevDebug } from './DevDebug';
@@ -168,6 +169,28 @@ export function Sammlungen() {
 }
 
 function Cards({ items }: { items: Category[] }) {
+  const [view] = useWorkspaceView();
+  if (view === 'redaktion')
+    return (
+      <ul className="collection-ledger divide-y divide-line rounded-ui bg-white" aria-label="Sammlungen">
+        {items.map((c) => (
+          <li key={c.id}>
+            <Link to={`/sammlungen/${c.id}`} className="flex min-h-20 items-center gap-4 px-5 py-4 hover:bg-soft">
+              <KindIcon icon={kindIcon[c.kind]} className="size-4 text-muted" />
+              <span className="min-w-0 flex-1">
+                <strong className="block text-[15px] font-semibold">{c.name}</strong>
+                <span className="block text-sm text-muted">{c.description || kindLabel[c.kind]}</span>
+              </span>
+              {!c.repeatable && <Badge status={c.status} />}
+              <span className="hidden text-sm text-muted sm:block">
+                {c.repeatable ? 'Beiträge lesen' : 'Ergebnisse ansehen'}
+              </span>
+              <Arrow />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    );
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {items.map((c) => (
@@ -187,7 +210,7 @@ function Cards({ items }: { items: Category[] }) {
                 <span>
                   {kindLabel[c.kind]}
                   {!c.repeatable &&
-                    `, ${c.my_option_id ? '✓ Deine Stimme ist gespeichert' : plural(c.options.length, 'Option', 'Optionen')}`}
+                    `, ${c.my_option_id ? 'Deine Stimme ist gespeichert' : plural(c.options.length, 'Option', 'Optionen')}`}
                 </span>
               </span>
               <span className="inline-flex flex-none items-center gap-1 whitespace-nowrap font-semibold text-ink">
@@ -388,13 +411,81 @@ function ClassLine({ sammlung }: { sammlung: Category }) {
 }
 
 function Fortlaufend({ sammlung }: { sammlung: Category }) {
+  const [view] = useWorkspaceView();
+  return view === 'redaktion' ? <CollectionReader sammlung={sammlung} /> : <StudentCollection sammlung={sammlung} />;
+}
+
+function CollectionReader({ sammlung }: { sammlung: Category }) {
+  const [search, setSearch] = useState('');
+  const submissions = useData<Submission[]>(`/submissions?category_id=${sammlung.id}`);
+  const items = (submissions.data ?? []).filter((s) =>
+    `${s.title} ${s.body} ${s.author_name}`.toLocaleLowerCase('de').includes(search.toLocaleLowerCase('de')),
+  );
+  return (
+    <>
+      <BackLink />
+      <PageHead
+        title={sammlung.name}
+        action={
+          <a className={btn.secondary} href={`/api/v1/categories/${sammlung.id}/export?status=all`}>
+            Alle Beiträge als ZIP <Arrow />
+          </a>
+        }
+      >
+        <ClassLine sammlung={sammlung} />
+      </PageHead>
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 className={heading}>Gesammelte Beiträge</h2>
+          <p className="mt-1 text-sm text-muted">
+            Originale lesen und Anmerkungen für die spätere Moderation festhalten.
+          </p>
+        </div>
+        <label className={`${label} w-full sm:w-72`}>
+          Suchen
+          <input
+            type="search"
+            maxLength={200}
+            className={field}
+            placeholder="Titel, Text, Name …"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </label>
+      </div>
+      {submissions.isPending ? (
+        <Loading />
+      ) : submissions.error ? (
+        <Failure error={submissions.error} retry={() => submissions.refetch()} />
+      ) : (
+        <>
+          <p className="mb-3 text-sm tabular-nums text-muted">
+            {search ? (
+              `${items.length} von ${submissions.data.length} Beiträgen`
+            ) : (
+              <>
+                <strong style={{ color: 'var(--editorial-data)' }}>{items.length}</strong>{' '}
+                {items.length === 1 ? 'Beitrag' : 'Beiträge'}
+              </>
+            )}
+          </p>
+          {items.length ? (
+            <SubmissionList items={items} categories={[sammlung]} showAuthor editorialView />
+          ) : (
+            <Empty>{search ? 'Keine Beiträge zu dieser Suche.' : 'Hier sind noch keine Beiträge eingegangen.'}</Empty>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+function StudentCollection({ sammlung }: { sammlung: Category }) {
   const { user } = useSession();
-  const [editing, setEditing] = useState(false);
   const submissions = useData<Submission[]>('/submissions');
   const categories = useData<Category[]>('/categories');
   const mine = (submissions.data ?? []).filter((s) => s.category_id === sammlung.id);
   const own = mine.filter((s) => s.author_id === user.id);
-  const pending = mine.filter((s) => s.status === 'pending').length;
   return (
     <>
       <BackLink />
@@ -402,60 +493,35 @@ function Fortlaufend({ sammlung }: { sammlung: Category }) {
         <ClassLine sammlung={sammlung} />
       </PageHead>
       <DevDebug label="Sammlung" data={debugData(sammlung)} />
-      {editing ? (
-        <SammlungForm sammlung={sammlung} onSaved={() => setEditing(false)} />
-      ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start">
-          <section className={`${panel} min-w-0 space-y-5`}>
-            <h2 className={heading}>Beliebig oft beitragen</h2>
-            <p className="text-sm text-muted">
-              Du kannst hier so viele Beiträge einreichen, wie du möchtest. Jeder Beitrag wird von der Redaktion
-              geprüft.
-            </p>
-            <Link className={btn.primary} to={`/beitraege/neu?kategorie=${sammlung.id}`}>
-              Beitrag einreichen <Arrow />
-            </Link>
-            <h3 className="pt-2 text-sm font-bold">Deine Beiträge hier</h3>
-            {submissions.isPending ? (
-              <Loading />
-            ) : submissions.error ? (
-              <Failure error={submissions.error} retry={() => submissions.refetch()} />
-            ) : own.length ? (
-              <SubmissionList items={own} categories={categories.data ?? []} />
-            ) : (
-              <Empty>Du hast hier noch nichts eingereicht.</Empty>
-            )}
-          </section>
-          {editorial(user) && (
-            <aside className="min-w-0 space-y-6">
-              <section className={panel}>
-                <h3 className={heading}>Sammlung verwalten</h3>
-                <p className="mt-1 text-sm text-muted">
-                  {plural(mine.length, 'Beitrag', 'Beiträge')}, {pending} in Prüfung
-                </p>
-                <div className="mt-4 flex flex-col gap-3">
-                  <Link className={btn.secondary} to={`/redaktion?sammlung=${sammlung.id}`}>
-                    Beiträge prüfen
-                  </Link>
-                  <a className={btn.secondary} href={`/api/v1/categories/${sammlung.id}/export?status=accepted`}>
-                    ZIP herunterladen ↓
-                  </a>
-                  {user.role === 'admin' && (
-                    <button className={btn.text} onClick={() => setEditing(true)}>
-                      Sammlung bearbeiten
-                    </button>
-                  )}
-                </div>
-              </section>
-            </aside>
+      <div>
+        <section className={`${panel} min-w-0 space-y-5`}>
+          <h2 className={heading}>Beliebig oft beitragen</h2>
+          <p className="text-sm text-muted">
+            Du kannst hier so viele Beiträge einreichen, wie du möchtest. Nach der Sammlung kümmert sich die Redaktion
+            um die Auswahl für die Zeitung.
+          </p>
+          <Link className={btn.primary} to={`/beitraege/neu?kategorie=${sammlung.id}`}>
+            Beitrag einreichen <Arrow />
+          </Link>
+          <h3 className="pt-2 text-sm font-bold">Deine Beiträge hier</h3>
+          {submissions.isPending ? (
+            <Loading />
+          ) : submissions.error ? (
+            <Failure error={submissions.error} retry={() => submissions.refetch()} />
+          ) : own.length ? (
+            <SubmissionList items={own} categories={categories.data ?? []} />
+          ) : (
+            <Empty>Du hast hier noch nichts eingereicht.</Empty>
           )}
-        </div>
-      )}
+        </section>
+      </div>
     </>
   );
 }
 
 function Ballot({ sammlung: poll }: { sammlung: Category }) {
+  const [view] = useWorkspaceView();
+  const redaktion = view === 'redaktion';
   const { user } = useSession();
   const id = poll.id;
   const action = useAction();
@@ -489,74 +555,86 @@ function Ballot({ sammlung: poll }: { sammlung: Category }) {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start">
           <section className={`${panel} min-w-0 space-y-5`}>
             <h2 className={heading}>
-              {poll.status === 'open'
-                ? 'Wem gibst du deine Stimme?'
-                : poll.status === 'closed'
-                  ? 'Diese Sammlung ist beendet.'
-                  : 'Diese Sammlung ist ein Entwurf.'}
+              {redaktion
+                ? 'Auswahlmöglichkeiten'
+                : poll.status === 'open'
+                  ? 'Wem gibst du deine Stimme?'
+                  : poll.status === 'closed'
+                    ? 'Diese Sammlung ist beendet.'
+                    : 'Diese Sammlung ist ein Entwurf.'}
             </h2>
-            <form
-              className="space-y-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                action.run(async () => {
-                  await api(`/categories/${id}/ballot`, json('PUT', { option_id: choice }));
-                }, 'Deine Stimme wurde gespeichert.');
-              }}
-            >
-              <fieldset className="min-w-0 space-y-2" disabled={poll.status !== 'open' || !eligible || action.busy}>
-                <legend className="sr-only">Eine Option auswählen</legend>
-                {poll.options.map((o) => {
-                  const self = o.user_id === user.id && !poll.allow_self_vote;
-                  return (
-                    <label
-                      className={`flex cursor-pointer items-center gap-3 rounded-ui border-2 bg-white px-4 py-3 text-[15px] ${
-                        choice === o.id ? 'border-ink' : 'border-line'
-                      }`}
-                      key={o.id}
-                    >
-                      <input
-                        className="size-4 shrink-0 accent-[var(--color-accent)]"
-                        type="radio"
-                        name="ballot"
-                        value={o.id}
-                        checked={choice === o.id}
-                        onChange={() => setChoice(o.id)}
-                        disabled={self}
-                      />
-                      <span className="min-w-0 flex-1 break-words">
-                        {o.label}
-                        {self && (
-                          <small className="block text-sm text-muted">
-                            Eine Stimme für dich selbst ist hier nicht erlaubt.
-                          </small>
-                        )}
-                      </span>
-                      {choice === o.id && <span className="font-semibold text-ink">✓</span>}
-                    </label>
-                  );
-                })}
-              </fieldset>
-              {poll.status === 'open' && (
-                <button
-                  className={btn.primary}
-                  disabled={
-                    action.busy ||
-                    !choice ||
-                    !eligible ||
-                    poll.options.some((o) => o.id === choice && o.user_id === user.id && !poll.allow_self_vote)
-                  }
-                >
-                  {poll.my_option_id ? 'Stimme ändern' : 'Stimme speichern'} <Arrow />
-                </button>
-              )}
-              {!eligible && <p className={notice}>Nur freigegebene Mitglieder des Jahrgangs dürfen abstimmen.</p>}
-              {poll.my_option_id && (
-                <p className="text-sm font-semibold text-ok">
-                  ✓ Gespeicherte Stimme: {poll.options.find((o) => o.id === poll.my_option_id)?.label}
-                </p>
-              )}
-            </form>
+            {redaktion ? (
+              <ul className="divide-y divide-line" aria-label="Auswahlmöglichkeiten">
+                {poll.options.map((o) => (
+                  <li key={o.id} className="min-w-0 break-words py-3 text-[15px]">
+                    {o.label}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <form
+                className="space-y-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  action.run(async () => {
+                    await api(`/categories/${id}/ballot`, json('PUT', { option_id: choice }));
+                  }, 'Deine Stimme wurde gespeichert.');
+                }}
+              >
+                <fieldset className="min-w-0 space-y-2" disabled={poll.status !== 'open' || !eligible || action.busy}>
+                  <legend className="sr-only">Eine Option auswählen</legend>
+                  {poll.options.map((o) => {
+                    const self = o.user_id === user.id && !poll.allow_self_vote;
+                    return (
+                      <label
+                        className={`flex cursor-pointer items-center gap-3 rounded-ui border-2 bg-white px-4 py-3 text-[15px] ${
+                          choice === o.id ? 'border-ink' : 'border-line'
+                        }`}
+                        key={o.id}
+                      >
+                        <input
+                          className="size-4 shrink-0 accent-[var(--color-accent)]"
+                          type="radio"
+                          name="ballot"
+                          value={o.id}
+                          checked={choice === o.id}
+                          onChange={() => setChoice(o.id)}
+                          disabled={self}
+                        />
+                        <span className="min-w-0 flex-1 break-words">
+                          {o.label}
+                          {self && (
+                            <small className="block text-sm text-muted">
+                              Eine Stimme für dich selbst ist hier nicht erlaubt.
+                            </small>
+                          )}
+                        </span>
+                        {choice === o.id && <Check aria-hidden="true" className="size-4 shrink-0" />}
+                      </label>
+                    );
+                  })}
+                </fieldset>
+                {poll.status === 'open' && (
+                  <button
+                    className={btn.primary}
+                    disabled={
+                      action.busy ||
+                      !choice ||
+                      !eligible ||
+                      poll.options.some((o) => o.id === choice && o.user_id === user.id && !poll.allow_self_vote)
+                    }
+                  >
+                    {poll.my_option_id ? 'Stimme ändern' : 'Stimme speichern'} <Arrow />
+                  </button>
+                )}
+                {!eligible && <p className={notice}>Nur freigegebene Mitglieder des Jahrgangs dürfen abstimmen.</p>}
+                {poll.my_option_id && (
+                  <p className="text-sm font-semibold text-ok">
+                    Gespeicherte Stimme: {poll.options.find((o) => o.id === poll.my_option_id)?.label}
+                  </p>
+                )}
+              </form>
+            )}
             <p className="text-sm text-muted">
               Namentliche Abstimmung: Die Administration kann deine Stimme und Änderungen zuordnen. Während der Öffnung
               kannst du deine Auswahl ändern. Ergebnisse sind für Schüler:innen nicht sichtbar.
@@ -616,6 +694,7 @@ function Ballot({ sammlung: poll }: { sammlung: Category }) {
                           <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-pill">
                             <span
                               className="block h-full rounded-full bg-ink"
+                              data-ballot-result
                               style={{
                                 width: `${total ? (r.count / total) * 100 : 0}%`,
                               }}

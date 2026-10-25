@@ -40,7 +40,7 @@ test('student signs in, submits a contribution, and can reach a ballot', async (
     .fill('Eine Geschichte aus dem Testlauf.');
   await page.getByRole('button', { name: /Beitrag einreichen/ }).click();
   await expect(page.getByRole('heading', { name: /E2E Erinnerung/ })).toBeVisible();
-  await expect(page.getByText('In Prüfung').first()).toBeVisible();
+  await expect(page.getByText('Eingereicht').first()).toBeVisible();
   await page.getByRole('complementary', { name: 'Seitenleiste' }).getByRole('link', { name: 'Meine Beiträge' }).click();
   await expect(page.getByRole('link', { name: /E2E Erinnerung/ }).first()).toBeVisible();
   await openFirstPoll(page);
@@ -57,7 +57,7 @@ test('student casts a ballot in the seeded open poll', async ({ page }) => {
   await expect(page.getByText('Deine Stimme wurde gespeichert.')).toBeVisible();
 });
 
-test('editor reviews and accepts an assigned contribution, exports it, and sees ballot results', async ({ page }) => {
+test('editor reads and annotates an original, exports without approval, and sees ballot results', async ({ page }) => {
   await signInAs(page, 'Jahrgang');
   const title = `E2E Redaktion ${Date.now()}`;
   await page
@@ -68,7 +68,7 @@ test('editor reviews and accepts an assigned contribution, exports it, and sees 
   await page.getByPlaceholder('Gib deiner Erinnerung einen Namen').fill(title);
   await page
     .getByPlaceholder('Was ist passiert? Welcher Spruch darf nicht fehlen?')
-    .fill('Ein Beitrag für den Prüfablauf.');
+    .fill('Ein Original für die spätere Moderation.');
   await page.getByRole('button', { name: /Beitrag einreichen/ }).click();
   await expect(page.getByRole('heading', { name: title })).toBeVisible();
 
@@ -81,10 +81,17 @@ test('editor reviews and accepts an assigned contribution, exports it, and sees 
   await expect(review, 'the submitted contribution is visible to the editor').toBeVisible();
   await review.click();
   await expect(page.getByRole('heading', { name: title })).toBeVisible();
-  await page.getByRole('button', { name: /Für die Zeitung annehmen/ }).click();
-  await expect(page.getByText('Angenommen').first()).toBeVisible();
+  await expect(page).toHaveURL(/\/redaktion\/beitraege\/[^/]+$/);
+  await expect(page.getByText('Eingereicht').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Bearbeiten/ })).toHaveCount(0);
+  await expect(page.locator('input[type=file]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /annehmen|Ablehnen|Prüfung öffnen/ })).toHaveCount(0);
+  await page.getByLabel('Anmerkung').fill('Nach der Sammlung im Team besprechen.');
+  await page.getByRole('button', { name: 'Anmerkung speichern' }).click();
+  await expect(page.getByText('Nach der Sammlung im Team besprechen.')).toBeVisible();
   await page.getByRole('complementary', { name: 'Seitenleiste' }).getByRole('link', { name: 'Alle Beiträge' }).click();
   await page.getByRole('combobox', { name: 'Sammlung' }).last().selectOption('10000000-0000-4000-8000-000000000001'); // export picker, seeded "Ideen"
+  await expect(page.getByRole('link', { name: /ZIP herunterladen/ })).toHaveAttribute('href', /status=all/);
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('link', { name: /ZIP herunterladen/ }).click();
   await expect(downloadPromise).resolves.toBeTruthy();
@@ -95,6 +102,7 @@ test('editor reviews and accepts an assigned contribution, exports it, and sees 
     .click();
   await expect(page.getByRole('heading', { name: /Unser Abimotto/ })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Gesamtergebnisse' })).toBeVisible();
+  await expect(page.getByRole('radio')).toHaveCount(0);
   await expect(page.getByText(/Nur für die Redaktion\W+\d+ abgegebene Stimme/)).toBeVisible();
 });
 

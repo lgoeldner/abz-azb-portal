@@ -144,6 +144,36 @@ func authenticatedRequest(t *testing.T, app *App, pool *pgxpool.Pool, userID, me
 	return res
 }
 
+func authenticatedFileUpload(t *testing.T, app *App, pool *pgxpool.Pool, userID, path string, version int, name string, data []byte) *httptest.ResponseRecorder {
+	t.Helper()
+	var body bytes.Buffer
+	form := multipart.NewWriter(&body)
+	if err := form.WriteField("version", fmt.Sprint(version)); err != nil {
+		t.Fatal(err)
+	}
+	part, err := form.CreateFormFile("file", name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(data); err != nil {
+		t.Fatal(err)
+	}
+	if err := form.Close(); err != nil {
+		t.Fatal(err)
+	}
+	token, csrf := randomToken(), randomToken()
+	if _, err := pool.Exec(context.Background(), "INSERT INTO sessions(token_hash,user_id,csrf,expires_at) VALUES($1,$2,$3,$4)", digest(token), userID, csrf, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, path, &body)
+	req.Header.Set("Content-Type", form.FormDataContentType())
+	req.Header.Set("X-CSRF-Token", csrf)
+	req.AddCookie(&http.Cookie{Name: "portal_session", Value: token})
+	res := httptest.NewRecorder()
+	app.ServeHTTP(res, req)
+	return res
+}
+
 func TestPostgresAuthorizationLifecycleAndBallots(t *testing.T) {
 	pool := integrationPool(t)
 	ctx := context.Background()
@@ -172,6 +202,24 @@ func TestPostgresAuthorizationLifecycleAndBallots(t *testing.T) {
 	if err := json.Unmarshal(created.Body.Bytes(), &sub); err != nil {
 		t.Fatal(err)
 	}
+	authorSearch := authenticatedRequest(t, app, pool, ManagerID, http.MethodGet, "/api/v1/submissions?q=Mia", "")
+	var searched []Submission
+	if authorSearch.Code != http.StatusOK {
+		t.Fatalf("editor search by author name: status=%d", authorSearch.Code)
+	}
+	if err := json.Unmarshal(authorSearch.Body.Bytes(), &searched); err != nil {
+		t.Fatalf("decode author search response: %v", err)
+	}
+	foundSearchResult := false
+	for _, result := range searched {
+		if result.ID == sub.ID {
+			foundSearchResult = true
+			break
+		}
+	}
+	if !foundSearchResult {
+		t.Fatal("editor search by author name did not return the matching submission")
+	}
 	if got := authenticatedRequest(t, app, pool, LeonID, http.MethodGet, "/api/v1/submissions/"+sub.ID, ""); got.Code != http.StatusNotFound {
 		t.Fatalf("other student read status=%d", got.Code)
 	}
@@ -184,31 +232,31 @@ func TestPostgresAuthorizationLifecycleAndBallots(t *testing.T) {
 		t.Fatalf("changed retry status=%d", changedRetry.Code)
 	}
 
-	// Manager grants are checked against the live user record for each write.
+	// Editors may read this category and later moderate its status, but cannot change student content.
 	managerWrite := authenticatedRequest(t, app, pool, ManagerID, http.MethodPatch, "/api/v1/submissions/"+sub.ID, fmt.Sprintf(`{"version":1,"category_id":%q,"title":"Edited","body":"body","context":""}`, cat))
-	if managerWrite.Code != http.StatusOK {
-		t.Fatalf("assigned manager write status=%d: %s", managerWrite.Code, managerWrite.Body)
+	adminWrite := authenticatedRequest(t, app, pool, AdminID, http.MethodPatch, "/api/v1/submissions/"+sub.ID, fmt.Sprintf(`{"version":1,"category_id":%q,"title":"Edited","body":"body","context":""}`, cat))
+	if managerWrite.Code != http.StatusForbidden || adminWrite.Code != http.StatusForbidden {
+		t.Fatalf("editor text write statuses: manager=%d admin=%d", managerWrite.Code, adminWrite.Code)
+	}
+	authorEdit := authenticatedRequest(t, app, pool, MiaID, http.MethodPatch, "/api/v1/submissions/"+sub.ID, fmt.Sprintf(`{"version":1,"category_id":%q,"title":"Author revision","body":"body","context":""}`, cat))
+	if authorEdit.Code != http.StatusOK {
+		t.Fatalf("pending author edit status=%d: %s", authorEdit.Code, authorEdit.Body)
 	}
 	stale := authenticatedRequest(t, app, pool, MiaID, http.MethodPatch, "/api/v1/submissions/"+sub.ID, fmt.Sprintf(`{"version":1,"category_id":%q,"title":"Stale","body":"body","context":""}`, cat))
 	if stale.Code != http.StatusConflict {
 		t.Fatalf("stale version status=%d", stale.Code)
 	}
-	if _, err := pool.Exec(ctx, "UPDATE users SET category_ids='{}' WHERE id=$1", ManagerID); err != nil {
-		t.Fatal(err)
+	pendingAnnotation := authenticatedRequest(t, app, pool, ManagerID, http.MethodPost, "/api/v1/submissions/"+sub.ID+"/corrections", `{"body":"Bitte Kontext ergänzen"}`)
+	if pendingAnnotation.Code != http.StatusCreated {
+		t.Fatalf("assigned editor annotation on pending submission status=%d: %s", pendingAnnotation.Code, pendingAnnotation.Body)
 	}
-	revoked := authenticatedRequest(t, app, pool, ManagerID, http.MethodPatch, "/api/v1/submissions/"+sub.ID, fmt.Sprintf(`{"version":2,"category_id":%q,"title":"Denied","body":"body","context":""}`, cat))
-	if revoked.Code != http.StatusForbidden {
-		t.Fatalf("revoked grant write status=%d", revoked.Code)
-	}
-
-	// Closed contributions remain visible to their author; correction requests work.
-	accept := authenticatedRequest(t, app, pool, ManagerID, http.MethodPost, "/api/v1/submissions/"+sub.ID+"/status", `{"version":2,"status":"accepted"}`)
-	if accept.Code != http.StatusForbidden {
-		t.Fatalf("revoked manager transitioned status=%d", accept.Code)
-	}
-	accept = authenticatedRequest(t, app, pool, AdminID, http.MethodPost, "/api/v1/submissions/"+sub.ID+"/status", `{"version":2,"status":"accepted"}`)
+	accept := authenticatedRequest(t, app, pool, AdminID, http.MethodPost, "/api/v1/submissions/"+sub.ID+"/status", `{"version":2,"status":"accepted"}`)
 	if accept.Code != http.StatusOK {
 		t.Fatalf("admin accepted status=%d: %s", accept.Code, accept.Body)
+	}
+	acceptedAnnotation := authenticatedRequest(t, app, pool, ManagerID, http.MethodPost, "/api/v1/submissions/"+sub.ID+"/corrections", `{"body":"Prüfen, ob die Angaben stimmen"}`)
+	if acceptedAnnotation.Code != http.StatusCreated {
+		t.Fatalf("assigned editor annotation on accepted submission status=%d: %s", acceptedAnnotation.Code, acceptedAnnotation.Body)
 	}
 	corr := authenticatedRequest(t, app, pool, MiaID, http.MethodPost, "/api/v1/submissions/"+sub.ID+"/corrections", `{"body":"Please fix this"}`)
 	if corr.Code != http.StatusCreated {
@@ -218,7 +266,7 @@ func TestPostgresAuthorizationLifecycleAndBallots(t *testing.T) {
 	if backToPending.Code != http.StatusOK {
 		t.Fatalf("editor re-open status=%d", backToPending.Code)
 	}
-	authorEdit := authenticatedRequest(t, app, pool, MiaID, http.MethodPatch, "/api/v1/submissions/"+sub.ID, fmt.Sprintf(`{"version":4,"category_id":%q,"title":"Author revision","body":"body","context":""}`, cat))
+	authorEdit = authenticatedRequest(t, app, pool, MiaID, http.MethodPatch, "/api/v1/submissions/"+sub.ID, fmt.Sprintf(`{"version":4,"category_id":%q,"title":"Author revision","body":"body","context":""}`, cat))
 	if authorEdit.Code != http.StatusOK {
 		t.Fatalf("pending author revision status=%d: %s", authorEdit.Code, authorEdit.Body)
 	}
@@ -277,6 +325,20 @@ func TestPostgresAuthorizationLifecycleAndBallots(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT sha256 FROM attachments WHERE id=$1", photoSubmission.Attachments[0].ID).Scan(&storedChecksum); err != nil || storedChecksum != digest(jpegData.String()) {
 		t.Fatalf("attachment checksum mismatch: checksum=%q error=%v", storedChecksum, err)
 	}
+	for _, editorID := range []string{ManagerID, AdminID} {
+		added := authenticatedFileUpload(t, app, pool, editorID, "/api/v1/submissions/"+photoID+"/attachments", 2, "editor.jpg", jpegData.Bytes())
+		removed := authenticatedRequest(t, app, pool, editorID, http.MethodDelete, "/api/v1/submissions/"+photoID+"/attachments/"+photoSubmission.Attachments[0].ID, `{"version":2}`)
+		if added.Code != http.StatusForbidden || removed.Code != http.StatusForbidden {
+			t.Errorf("editor %s attachment mutation statuses: add=%d remove=%d", editorID, added.Code, removed.Code)
+		}
+	}
+	var activeAttachments, photoVersion int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM attachments WHERE submission_id=$1 AND NOT deleted", photoID).Scan(&activeAttachments); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, "SELECT version FROM submissions WHERE id=$1", photoID).Scan(&photoVersion); err != nil || activeAttachments != 1 || photoVersion != 2 {
+		t.Fatalf("editor attachment attempts changed contribution: active=%d version=%d err=%v", activeAttachments, photoVersion, err)
+	}
 	accepted := authenticatedRequest(t, app, pool, AdminID, http.MethodPost, "/api/v1/submissions/"+photoID+"/status", `{"version":2,"status":"accepted"}`)
 	if accepted.Code != http.StatusOK {
 		t.Fatalf("accept uploaded contribution status=%d: %s", accepted.Code, accepted.Body)
@@ -302,6 +364,14 @@ func TestPostgresAuthorizationLifecycleAndBallots(t *testing.T) {
 	app.ServeHTTP(lockedRes, lockedReq)
 	if lockedRes.Code != http.StatusForbidden {
 		t.Fatalf("accepted author attachment upload status=%d", lockedRes.Code)
+	}
+	if _, err := pool.Exec(ctx, "UPDATE users SET category_ids='{}' WHERE id=$1", ManagerID); err != nil {
+		t.Fatal(err)
+	}
+	revokedAnnotation := authenticatedRequest(t, app, pool, ManagerID, http.MethodPost, "/api/v1/submissions/"+sub.ID+"/corrections", `{"body":"Unassigned annotation"}`)
+	revokedStatus := authenticatedRequest(t, app, pool, ManagerID, http.MethodPost, "/api/v1/submissions/"+sub.ID+"/status", `{"version":5,"status":"accepted"}`)
+	if revokedAnnotation.Code != http.StatusForbidden || revokedStatus.Code != http.StatusForbidden {
+		t.Fatalf("unassigned manager actions: annotation=%d status=%d", revokedAnnotation.Code, revokedStatus.Code)
 	}
 
 	// A named ballot is visible only to an administrator; self-vote and cross-poll options fail.

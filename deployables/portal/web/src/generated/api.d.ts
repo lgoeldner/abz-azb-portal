@@ -83,7 +83,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Edit with optimistic concurrency */
+        /** Edit own pending contribution with optimistic concurrency; editorial roles cannot change another author’s original */
         patch: operations["patchSubmissionsId"];
         trace?: never;
     };
@@ -130,7 +130,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Upload image */
+        /** Attach image to own pending contribution; original content stays author-owned */
         post: operations["postSubmissionsIdAttachments"];
         delete?: never;
         options?: never;
@@ -148,7 +148,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Soft-delete image */
+        /** Remove attachment from own pending contribution */
         delete: operations["deleteSubmissionsIdAttachmentsAttachmentid"];
         options?: never;
         head?: never;
@@ -199,7 +199,7 @@ export interface paths {
         /** Read correction requests */
         get: operations["getSubmissionsIdCorrections"];
         put?: never;
-        /** Request correction */
+        /** Add editorial annotation with category grant (any status), or author correction request on locked contribution */
         post: operations["postSubmissionsIdCorrections"];
         delete?: never;
         options?: never;
@@ -248,7 +248,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Editorial CSV and original-photo ZIP (repeatable categories only) */
+        /** Export all collected contributions by default, with optional explicit status filter (editors, repeatable only) */
         get: operations["getCategoriesIdExport"];
         put?: never;
         post?: never;
@@ -1204,6 +1204,7 @@ export interface operations {
     getCategoriesIdExport: {
         parameters: {
             query?: {
+                /** @description Defaults to all statuses; explicit status filtering remains available for later moderation. */
                 status?: string;
             };
             header?: never;

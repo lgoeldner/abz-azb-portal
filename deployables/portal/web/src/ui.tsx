@@ -14,7 +14,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   api,
   ApiError,
-  canEdit,
   date,
   editorial,
   statusLabels,
@@ -69,6 +68,8 @@ export function useAction() {
 
 // View mode is a per-browser preference; only editors can leave the student view.
 export type View = 'schueler' | 'redaktion';
+export const WorkspaceView = createContext<[View, (view: View) => void]>(['schueler', () => {}]);
+export const useWorkspaceView = () => useContext(WorkspaceView);
 export function useView(): [View, (v: View) => void] {
   const { user } = useSession();
   const [view, setView] = useState<View>(() => {
@@ -139,7 +140,7 @@ export function Empty({ children }: { children: ReactNode }) {
   );
 }
 const badgeTone: Record<keyof typeof statusLabels, string> = {
-  pending: 'bg-wait-tint text-wait',
+  pending: 'bg-pill text-muted',
   accepted: 'bg-ok-tint text-ok',
   open: 'bg-ok-tint text-ok',
   rejected: 'bg-bad-tint text-bad',
@@ -203,10 +204,12 @@ export function SubmissionList({
   items,
   categories,
   showAuthor = false,
+  editorialView = false,
 }: {
   items: Submission[];
   categories: Category[];
   showAuthor?: boolean;
+  editorialView?: boolean;
 }) {
   const { user } = useSession();
   return (
@@ -214,7 +217,8 @@ export function SubmissionList({
       {items.map((s) => (
         <li className="min-w-0" key={s.id}>
           <Link
-            to={`/beitraege/${s.id}`}
+            to={editorialView ? `/redaktion/beitraege/${s.id}` : `/beitraege/${s.id}`}
+            data-editorial-row={editorialView || undefined}
             className="flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-pop/30"
           >
             <span className="min-w-0 flex-1">
@@ -240,7 +244,7 @@ export function SubmissionList({
                   status: s.status,
                   version: s.version,
                   attachments: s.attachments?.length ?? 0,
-                  editable: (s.status === 'pending' && s.author_id === user.id) || canEdit(user, s.category_id),
+                  editable: !editorialView && s.status === 'pending' && s.author_id === user.id,
                   own: s.author_id === user.id,
                 }}
               />
