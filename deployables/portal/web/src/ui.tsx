@@ -8,7 +8,7 @@ import {
   UserRound,
   type LucideIcon,
 } from 'lucide-react';
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -79,14 +79,14 @@ export function useView(): [View, (v: View) => void] {
       return 'redaktion';
     }
   });
-  const set = (v: View) => {
+  const set = useCallback((v: View) => {
     setView(v);
     try {
       localStorage.setItem('view', v);
     } catch {
       /* private mode */
     }
-  };
+  }, []);
   return [editorial(user) ? view : 'schueler', set];
 }
 

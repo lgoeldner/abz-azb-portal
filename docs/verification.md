@@ -66,3 +66,25 @@ Top three visual issues and outcomes:
 1. Original student upload UI obscured collected submissions (before desktop/phone): replaced with the collection ledger.
 2. Selected navigation and display-scale headings reduced readability (first after screenshots): neutral selection, readable ink, 28/24px titles.
 3. Status tags cramped phone titles (collection mobile): metadata and status now wrap below the full title. A short original can still leave unused desktop space beside a longer notes rail; natural content height is retained.
+
+### Verwaltung workspace and accent follow-up — 25 October 2026
+
+Verwaltung navigation is now visible only for admins in Redaktion. Direct admin bookmarks activate and remember the editorial workspace, including its theme. Explicitly switching to Schüler returns home, removes Verwaltung, and remains selected after the browser navigation settles. A route-entry-only normalization effect and stable view setter prevent delayed navigation from overwriting the user's choice.
+
+The existing reading-desk direction (seed 765100827, Bricolage Grotesque retained) now uses cobalt `#1d5fbf` on primary controls, branding, focus and selected states, with pale blue `#e8f0fc` on active sidebar links. This extends the original achromatic direction at the owner's request; no new draw or imagery was added. Independent review caught a hover selector that removed contrast; the selected-link hover rule now preserves the pale background, with a browser test requiring at least 4.5:1 contrast on all three Verwaltung destinations.
+
+Final visual critique:
+
+Seen in one second: Redaktion and Verwaltung belong to one workspace, identifiable by cobalt selection and branding.
+
+Idea: the same yeargroup reading desk, with color marking actions and current location.
+
+Live thing: switching to Schüler removes the Verwaltung menu; direct admin bookmarks return to Redaktion.
+
+Layout words by section: sidebar=workspace-scoped destinations / Verwaltung=people and controls / collection=originals ledger.
+
+Scores (self-assessment): design 7.8 · usability 8.5 · creativity 7 · content 8 → overall 7.9. Existing app direction retained; no imagery or motion caps apply.
+
+Top three issues corrected: Verwaltung links leaking into Schüler mode; direct admin routes inheriting the student palette; selected-link hover contrast. Final inspector at 1440/768/390: 0 failures for both Personen and collection; the collection has no warnings. Personen retains one desktop empty-area warning because the real people list is short; no artificial data or panels were added. All viewport screenshots and contact sheets were opened. Source lint and `make check` passed, including 57 frontend tests and disposable PostgreSQL integration checks. Independent review found no remaining defects.
+
+Final browser result for the follow-up: 20 journeys passed; one production-only diagnostic test was skipped on the development server. The Verwaltung journey verifies returning to `/`, persisted Schüler mode, hidden admin navigation, correct editorial theme on direct bookmarks, and selected-link hover contrast.
