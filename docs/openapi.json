@@ -1168,7 +1168,7 @@
     },
     "/api/v1/categories/{id}/ballot": {
       "put": {
-        "summary": "Cast or change named ballot (single-answer only)",
+        "summary": "Cast or replace a named ballot with up to max_choices distinct options",
         "operationId": "putCategoriesIdBallot",
         "responses": {
           "200": {
@@ -1180,9 +1180,15 @@
                   "properties": {
                     "option_id": {
                       "type": "string"
+                    },
+                    "option_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
-                  "required": ["option_id"],
+                  "required": ["option_id", "option_ids"],
                   "additionalProperties": false
                 }
               }
@@ -1226,10 +1232,32 @@
                 "properties": {
                   "option_id": {
                     "type": "string"
+                  },
+                  "option_ids": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
-                "required": ["option_id"],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "required": ["option_id"],
+                    "not": {
+                      "required": ["option_ids"]
+                    }
+                  },
+                  {
+                    "required": ["option_ids"],
+                    "not": {
+                      "required": ["option_id"]
+                    }
+                  }
+                ]
               }
             }
           }
@@ -1419,7 +1447,7 @@
           },
           "my_option_id": {
             "type": ["string", "null"],
-            "description": "The viewer's current choice; null for repeatable categories."
+            "description": "First current selection in canonical ID order (legacy compatibility), or null."
           },
           "version": {
             "type": "integer"
@@ -1435,7 +1463,7 @@
           },
           "ballot_count": {
             "type": ["integer", "null"],
-            "description": "Number of current ballots. Editors only; null for students and repeatable categories."
+            "description": "Number of distinct current voters. Editors only; null for students and repeatable categories."
           },
           "participation": {
             "type": ["object", "null"],
@@ -1454,6 +1482,23 @@
             },
             "required": ["voted", "eligible"],
             "additionalProperties": false
+          },
+          "all_people": {
+            "type": "boolean",
+            "description": "Person polls only: all admitted cohort members, refreshed when opening and fixed thereafter. Existing polls retain explicit candidates."
+          },
+          "max_choices": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "description": "Maximum selections per voter; 1 for proposal and repeatable categories."
+          },
+          "my_option_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Viewer’s complete current selection; empty for repeatable categories or before voting."
           }
         },
         "required": [
@@ -1470,6 +1515,9 @@
           "created_at",
           "opened_at",
           "ballot_count",
+          "all_people",
+          "max_choices",
+          "my_option_ids",
           "participation"
         ],
         "additionalProperties": false
@@ -1693,6 +1741,10 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "ballot_id": {
+            "type": ["string", "null"],
+            "description": "Groups the complete selection from one ballot change. Null for legacy single-choice history."
           }
         },
         "required": [
@@ -1700,7 +1752,8 @@
           "user_name",
           "option_id",
           "option_label",
-          "created_at"
+          "created_at",
+          "ballot_id"
         ],
         "additionalProperties": false
       },
@@ -1807,7 +1860,18 @@
               "required": ["label"],
               "additionalProperties": false
             },
-            "description": "Empty for repeatable kinds; 2-500 unique options for person and proposal."
+            "description": "Empty for repeatable kinds and all_people person polls; otherwise 2–500 unique options. Person options must reference admitted cohort members."
+          },
+          "all_people": {
+            "type": "boolean",
+            "description": "Person polls: all admitted cohort members instead of explicit options. Defaults true on creation; omission preserves mode on edit. Other kinds require false."
+          },
+          "max_choices": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 1,
+            "description": "Maximum selections for person polls; other kinds require 1."
           }
         },
         "required": ["name", "description", "kind"],
@@ -1940,10 +2004,21 @@
               "required": ["label"],
               "additionalProperties": false
             },
-            "description": "Empty for repeatable kinds; 2-500 unique options for person and proposal."
+            "description": "Empty for repeatable kinds and all_people person polls; otherwise 2–500 unique options. Person options must reference admitted cohort members."
           },
           "version": {
             "type": "integer"
+          },
+          "all_people": {
+            "type": "boolean",
+            "description": "Person polls: all admitted cohort members instead of explicit options. Defaults true on creation; omission preserves mode on edit. Other kinds require false."
+          },
+          "max_choices": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 1,
+            "description": "Maximum selections for person polls; other kinds require 1."
           }
         },
         "required": ["name", "description", "kind", "version"],

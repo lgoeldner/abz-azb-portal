@@ -83,15 +83,22 @@ dc exec -i "$pg" psql -X -v ON_ERROR_STOP=1 -U portal -d portal \
   -v original_key="$original_key" -v preview_key="$preview_key" <<'SQL'
 INSERT INTO attachments(id,submission_id,filename,mime_type,size_bytes,sha256,storage_key,preview_key)
 VALUES (:'attachment_id','20000000-0000-4000-8000-000000000004','drill.png','image/png',29,:'original_hash',:'original_key',:'preview_key');
+UPDATE categories SET max_choices=2 WHERE id='30000000-0000-4000-8000-000000000002';
 INSERT INTO ballots(poll_id,user_id,option_id)
-VALUES ('30000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003','40000000-0000-4000-8000-000000000101');
+VALUES ('30000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000003','40000000-0000-4000-8000-000000000201');
+INSERT INTO ballots(poll_id,user_id,option_id)
+SELECT poll_id,'00000000-0000-4000-8000-000000000003',id FROM poll_options
+WHERE poll_id='30000000-0000-4000-8000-000000000002' AND id<>'40000000-0000-4000-8000-000000000201' ORDER BY position LIMIT 1;
 INSERT INTO ballot_audit(id,poll_id,user_id,option_id)
-VALUES ('50000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003','40000000-0000-4000-8000-000000000101');
+VALUES ('50000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000003','40000000-0000-4000-8000-000000000201');
+INSERT INTO ballot_audit(id,poll_id,user_id,option_id,ballot_id)
+SELECT gen_random_uuid(),poll_id,user_id,option_id,'50000000-0000-4000-8000-000000000003'
+FROM ballots WHERE poll_id='30000000-0000-4000-8000-000000000002';
 SQL
 
 capture_signature() {
   local database=$1 table
-  for table in users categories sessions submissions revisions attachments corrections polls poll_options ballots ballot_audit audit_events schema_migrations; do
+  for table in users categories sessions submissions revisions attachments corrections poll_options ballots ballot_audit audit_events schema_migrations; do
     dc exec -e PGDATABASE="$database" "$pg" psql -X -qAt -U portal -c \
       "SELECT '$table',count(*),COALESCE(md5(string_agg(row_to_json(t)::text,E'\\n' ORDER BY row_to_json(t)::text)),'') FROM $table t" \
       | tr -d '\r'

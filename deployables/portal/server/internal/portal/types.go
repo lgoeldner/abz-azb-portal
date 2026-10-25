@@ -19,8 +19,11 @@ type Category struct {
 	Repeatable    bool                 `json:"repeatable"`
 	Status        string               `json:"status"`
 	AllowSelfVote bool                 `json:"allow_self_vote"`
+	AllPeople     bool                 `json:"all_people"`
+	MaxChoices    int                  `json:"max_choices"`
 	Options       []PollOption         `json:"options"`
 	MyOptionID    *string              `json:"my_option_id"`
+	MyOptionIDs   []string             `json:"my_option_ids"`
 	Version       int                  `json:"version"`
 	CreatedAt     time.Time            `json:"created_at"`
 	OpenedAt      *time.Time           `json:"opened_at"`
@@ -82,6 +85,7 @@ type PollResult struct {
 	Count    int    `json:"count"`
 }
 type BallotAudit struct {
+	BallotID    *string   `json:"ballot_id"`
 	UserID      string    `json:"user_id"`
 	UserName    string    `json:"user_name"`
 	OptionID    string    `json:"option_id"`

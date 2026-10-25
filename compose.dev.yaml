@@ -9,7 +9,7 @@ services:
       OIDC_CLIENT_ID: portal-dev
       OIDC_CLIENT_SECRET: dev-only
       AUTH_MOCK_USERS: /config/users.yaml
-      AUTH_MOCK_REDIRECT_URIS: http://localhost:5173/auth/callback,http://localhost:8080/auth/callback,http://127.0.0.1:8080/auth/callback,https://localhost/auth/callback
+      AUTH_MOCK_REDIRECT_URIS: http://localhost:5173/auth/callback,http://localhost:8080/auth/callback,http://127.0.0.1:8080/auth/callback,https://caddy.abizeitung-portal.orb.local/auth/callback
     ports:
       - "127.0.0.1:9090:9090"
     volumes:
@@ -37,7 +37,7 @@ services:
     environment:
       APP_ENV: development
       DATABASE_URL: postgres://portal:portal-dev@db:5432/portal?sslmode=disable
-      PUBLIC_URL: https://localhost
+      PUBLIC_URL: https://caddy.abizeitung-portal.orb.local
       AUTH_MODE: mock
       OIDC_ISSUER: http://localhost:9090
       OIDC_BACKCHANNEL_URL: http://auth-mock:9090

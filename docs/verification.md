@@ -90,3 +90,12 @@ Top three issues corrected: Verwaltung links leaking into Schüler mode; direct 
 Final browser result for the follow-up: 20 journeys passed; one production-only diagnostic test was skipped on the development server. The Verwaltung journey verifies returning to `/`, persisted Schüler mode, hidden admin navigation, correct editorial theme on direct bookmarks, and selected-link hover contrast.
 
 The follow-up also rounds collection and submission row hover surfaces and restores distinct hover colors for Sammlung filter chips (including an active-chip hover). A live Chrome smoke check verified changing chip backgrounds and nonzero row corner radii on desktop and phone; hover screenshots were opened. The final `make check` passed with 57 frontend tests, and the production build passed after the active-chip refinement.
+
+## People polls — 25 October 2026
+
+New person polls default to all admitted cohort members, refreshed at opening and fixed thereafter. Editors can switch to explicit candidates and set 1–500 selections per voter. Creation and voting share searchable candidates with removable chips above the search field. Migration 005 preserves existing explicit candidates, votes and named audit history. Changed selections create complete grouped history visible only to admins.
+
+- `make check` passed against disposable PostgreSQL `portal_people_test_20261025`, including race tests, vet, 65 frontend tests, type checking, production build, generated contract, repo-map checks and all linters.
+- Invariant tests cover bounded atomic replacement, concurrent multiple selections, self/foreign/duplicate/closed rejection, distinct voter counts, history snapshots, permissions, roster freezing and migration preservation. Independent review found no remaining defects. Full checks and integration review passed again after merging the concurrent Verwaltung/accent updates.
+- Live Chromium against a separate seeded database exercised default switch, explicit candidate search/chips, opening, saving two choices, reloading, chip removal and empty search results. Desktop 1440px and phone 390px screenshots were inspected; phone and tablet 900px had no horizontal overflow.
+- Full Docker recovery drill passed with current migrations, multiple current selections and both legacy and grouped audit rows. Table signatures and attachment hashes matched after restoring; a non-empty target was correctly refused. The throwaway Restic snapshot was `eb0250d73e343db2e34cd4abbd70dc567002f6c35c20a2dc2b82544c90ea8e94` and was cleaned up by the drill.

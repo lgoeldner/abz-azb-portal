@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const categoryCols = "id::text,name,description,kind,status,allow_self_vote,version,created_at,opened_at"
+const categoryCols = "id::text,name,description,kind,status,allow_self_vote,all_people,max_choices,version,created_at,opened_at"
 
 func validKind(k string) bool {
 	return k == "idea" || k == "quote" || k == "memory" || k == "photo" || k == "person" || k == "proposal"
@@ -19,8 +19,8 @@ func repeatableKind(k string) bool {
 }
 
 func scanCategory(row pgx.Row) (Category, error) {
-	c := Category{Options: []PollOption{}}
-	e := row.Scan(&c.ID, &c.Name, &c.Description, &c.Kind, &c.Status, &c.AllowSelfVote, &c.Version, &c.CreatedAt, &c.OpenedAt)
+	c := Category{Options: []PollOption{}, MyOptionIDs: []string{}}
+	e := row.Scan(&c.ID, &c.Name, &c.Description, &c.Kind, &c.Status, &c.AllowSelfVote, &c.AllPeople, &c.MaxChoices, &c.Version, &c.CreatedAt, &c.OpenedAt)
 	c.Repeatable = repeatableKind(c.Kind)
 	return c, e
 }
@@ -57,7 +57,7 @@ func fillBallots(ctx context.Context, db DB, u User, cs []Category) error {
 	if e != nil {
 		return e
 	}
-	rows, e = db.Query(ctx, "SELECT poll_id::text,option_id::text FROM ballots WHERE user_id=$1 AND poll_id=ANY($2::uuid[])", u.ID, ids)
+	rows, e = db.Query(ctx, "SELECT poll_id::text,option_id::text FROM ballots WHERE user_id=$1 AND poll_id=ANY($2::uuid[]) ORDER BY option_id", u.ID, ids)
 	if e != nil {
 		return e
 	}
@@ -67,7 +67,10 @@ func fillBallots(ctx context.Context, db DB, u User, cs []Category) error {
 			rows.Close()
 			return e
 		}
-		cs[idx[pid]].MyOptionID = &oid
+		if cs[idx[pid]].MyOptionID == nil {
+			cs[idx[pid]].MyOptionID = &oid
+		}
+		cs[idx[pid]].MyOptionIDs = append(cs[idx[pid]].MyOptionIDs, oid)
 	}
 	e = rows.Err()
 	rows.Close()
@@ -76,8 +79,8 @@ func fillBallots(ctx context.Context, db DB, u User, cs []Category) error {
 	}
 	// Count current eligibility and ballots in the same statement snapshot. Stored
 	// ballots remain in ballot_count, while participation only counts eligible voters.
-	rows, e = db.Query(ctx, `SELECT p.id::text,count(b.user_id)::int,
-		count(b.user_id) FILTER (WHERE u.admitted AND u.cohort_member)::int,
+	rows, e = db.Query(ctx, `SELECT p.id::text,count(DISTINCT b.user_id)::int,
+		count(DISTINCT b.user_id) FILTER (WHERE u.admitted AND u.cohort_member)::int,
 		(SELECT count(*)::int FROM users WHERE admitted AND cohort_member)
 		FROM unnest($1::uuid[]) AS p(id)
 		LEFT JOIN ballots b ON b.poll_id=p.id
@@ -168,6 +171,8 @@ type categoryInput struct {
 	Description   string `json:"description"`
 	Kind          string `json:"kind"`
 	AllowSelfVote bool   `json:"allow_self_vote"`
+	AllPeople     *bool  `json:"all_people"`
+	MaxChoices    *int   `json:"max_choices"`
 	Options       []struct {
 		Label  string  `json:"label"`
 		UserID *string `json:"user_id,omitempty"`
@@ -182,10 +187,19 @@ func validateCategory(in categoryInput) error {
 	if !validKind(in.Kind) {
 		return bad("Ungültiger Sammlungstyp.")
 	}
+	if in.MaxChoices != nil && (*in.MaxChoices < 1 || *in.MaxChoices > 500 || in.Kind != "person" && *in.MaxChoices != 1) {
+		return bad("Maximale Auswahl muss 1 bis 500 betragen; mehrere Stimmen sind nur für Personen erlaubt.")
+	}
+	if in.Kind != "person" && in.AllPeople != nil && *in.AllPeople {
+		return bad("Alle Personen ist nur für Personenabstimmungen erlaubt.")
+	}
 	if repeatableKind(in.Kind) {
 		if len(in.Options) != 0 {
 			return bad("Diese Sammlung hat keine Optionen.")
 		}
+		return nil
+	}
+	if in.Kind == "person" && in.AllPeople != nil && *in.AllPeople {
 		return nil
 	}
 	if len(in.Options) < 2 || len(in.Options) > 500 {
@@ -239,6 +253,17 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 		if old.Repeatable && u.Role != "admin" || !canEdit(u, id) {
 			return forbidden()
 		}
+		if in.AllPeople == nil {
+			all := in.Kind == "person" && old.AllPeople
+			in.AllPeople = &all
+		}
+		if in.MaxChoices == nil {
+			max := 1
+			if in.Kind == "person" {
+				max = old.MaxChoices
+			}
+			in.MaxChoices = &max
+		}
 		if e = validateCategory(in); e != nil {
 			return e
 		}
@@ -249,6 +274,10 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 			return conflict()
 		}
 	} else {
+		if in.AllPeople == nil {
+			all := in.Kind == "person"
+			in.AllPeople = &all
+		}
 		if e = validateCategory(in); e != nil {
 			return e
 		}
@@ -258,6 +287,11 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 	}
 	rep := repeatableKind(in.Kind)
 	selfVote := in.AllowSelfVote && !rep
+	allPeople := in.Kind == "person" && in.AllPeople != nil && *in.AllPeople
+	maxChoices := 1
+	if in.MaxChoices != nil {
+		maxChoices = *in.MaxChoices
+	}
 	name := strings.TrimSpace(in.Name)
 	if create {
 		id = ID()
@@ -265,18 +299,24 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 		if rep {
 			status = "open"
 		}
-		_, e = tx.Exec(r.Context(), "INSERT INTO categories(id,name,description,kind,status,allow_self_vote,opened_at) VALUES($1,$2,$3,$4,$5,$6,CASE WHEN $5='open' THEN now() END)", id, name, in.Description, in.Kind, status, selfVote)
+		_, e = tx.Exec(r.Context(), "INSERT INTO categories(id,name,description,kind,status,allow_self_vote,all_people,max_choices,opened_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,CASE WHEN $5='open' THEN now() END)", id, name, in.Description, in.Kind, status, selfVote, allPeople, maxChoices)
 		if e == nil && !rep && u.Role == "manager" {
 			_, e = tx.Exec(r.Context(), "UPDATE users SET category_ids=array_append(category_ids,$2::uuid) WHERE id=$1", u.ID, id)
 		}
 	} else {
-		_, e = tx.Exec(r.Context(), "UPDATE categories SET name=$2,description=$3,kind=$4,allow_self_vote=$5,version=version+1 WHERE id=$1", id, name, in.Description, in.Kind, selfVote)
+		_, e = tx.Exec(r.Context(), "UPDATE categories SET name=$2,description=$3,kind=$4,allow_self_vote=$5,all_people=$6,max_choices=$7,version=version+1 WHERE id=$1", id, name, in.Description, in.Kind, selfVote, allPeople, maxChoices)
 		if e == nil && !rep {
 			_, e = tx.Exec(r.Context(), "DELETE FROM poll_options WHERE poll_id=$1", id)
 		}
 	}
 	if e != nil {
 		return e
+	}
+	if allPeople {
+		if e = refreshPeopleOptions(r.Context(), tx, id); e != nil {
+			return e
+		}
+		in.Options = nil
 	}
 	for i, o := range in.Options {
 		label := strings.TrimSpace(o.Label)
@@ -348,6 +388,15 @@ func (a *App) statusCategory(w http.ResponseWriter, r *http.Request) error {
 	if in.Version != c.Version || !(c.Status == "draft" && in.Status == "open" || c.Status == "open" && in.Status == "closed") {
 		return conflict()
 	}
+	if c.AllPeople && c.Status == "draft" && in.Status == "open" {
+		if e = refreshPeopleOptions(r.Context(), tx, c.ID); e != nil {
+			return e
+		}
+		c, e = loadCategory(r.Context(), tx, c.ID, u, false)
+		if e != nil {
+			return e
+		}
+	}
 	if len(c.Options) < 2 {
 		return bad("Mindestens zwei Optionen erforderlich.")
 	}
@@ -363,5 +412,37 @@ func (a *App) statusCategory(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	jsonOut(w, 200, c)
+	return nil
+}
+
+// All-person polls snapshot the admitted roster when saved and once more when opened.
+// Open polls keep their option IDs and labels even if cohort membership later changes.
+func refreshPeopleOptions(ctx context.Context, tx pgx.Tx, id string) error {
+	if _, err := tx.Exec(ctx, "DELETE FROM poll_options WHERE poll_id=$1", id); err != nil {
+		return err
+	}
+	rows, err := tx.Query(ctx, "SELECT id::text,name FROM users WHERE admitted AND cohort_member ORDER BY name,id")
+	if err != nil {
+		return err
+	}
+	options := []PollOption{}
+	for rows.Next() {
+		var o PollOption
+		if err = rows.Scan(&o.UserID, &o.Label); err != nil {
+			rows.Close()
+			return err
+		}
+		options = append(options, o)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for i, o := range options {
+		if _, err = tx.Exec(ctx, "INSERT INTO poll_options(id,poll_id,label,user_id,position) VALUES($1,$2,$3,$4,$5)", ID(), id, o.Label, o.UserID, i); err != nil {
+			return err
+		}
+	}
 	return nil
 }
