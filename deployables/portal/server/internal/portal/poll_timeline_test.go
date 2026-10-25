@@ -158,6 +158,91 @@ func TestPollBallotCountIsEditorOnlyAndCountsVoters(t *testing.T) {
 	}
 }
 
+func TestPollParticipationUsesCurrentEligibleCohortWithoutChangingBallots(t *testing.T) {
+	app, pool := timelineApp(t)
+	ctx := context.Background()
+	poll := pollID(1)
+	options := []string{"40000000-0000-4000-8000-000000000101", "40000000-0000-4000-8000-000000000102"}
+	assertParticipation := func(userID, id string, voted, eligible, ballots int) {
+		t.Helper()
+		p, raw := listedCategory(t, app, pool, userID, id)
+		if p.Participation == nil || *p.Participation != (VotingParticipation{Voted: voted, Eligible: eligible}) {
+			t.Fatalf("participation for %s = %+v, want %d/%d", id, p.Participation, voted, eligible)
+		}
+		if p.BallotCount == nil || *p.BallotCount != ballots {
+			t.Fatalf("ballot_count for %s = %v, want %d", id, p.BallotCount, ballots)
+		}
+		var aggregate map[string]json.RawMessage
+		if err := json.Unmarshal(raw["participation"], &aggregate); err != nil {
+			t.Fatal(err)
+		}
+		if len(aggregate) != 2 || aggregate["voted"] == nil || aggregate["eligible"] == nil {
+			t.Fatalf("participation must only expose aggregate counts: %s", raw["participation"])
+		}
+	}
+	for _, editorID := range []string{AdminID, ManagerID} {
+		for i := 1; i <= 3; i++ {
+			assertParticipation(editorID, pollID(i), 0, 4, 0)
+		}
+	}
+	for _, userID := range []string{AdminID, ManagerID, MiaID, LeonID, GuestID} {
+		p, raw := listedCategory(t, app, pool, userID, categoryID(1))
+		if p.Participation != nil || string(raw["participation"]) != "null" {
+			t.Fatalf("repeatable category disclosed participation to %s: %s", userID, raw["participation"])
+		}
+	}
+	vote := func(userID, option string) {
+		t.Helper()
+		res := authenticatedRequest(t, app, pool, userID, http.MethodPut, "/api/v1/categories/"+poll+"/ballot", fmt.Sprintf(`{"option_id":%q}`, option))
+		if res.Code != http.StatusOK {
+			t.Fatalf("vote status=%d: %s", res.Code, res.Body)
+		}
+	}
+	// Editorial roles belong to the electorate under the same eligibility rules.
+	for _, userID := range []string{AdminID, ManagerID, MiaID, LeonID} {
+		vote(userID, options[0])
+	}
+	vote(MiaID, options[1])
+	vote(MiaID, options[1])
+	for _, editorID := range []string{AdminID, ManagerID} {
+		assertParticipation(editorID, poll, 4, 4, 4)
+	}
+	for _, studentID := range []string{MiaID, LeonID, GuestID} {
+		p, raw := listedCategory(t, app, pool, studentID, poll)
+		if p.Participation != nil || string(raw["participation"]) != "null" {
+			t.Fatalf("student %s learned participation: %s", studentID, raw["participation"])
+		}
+	}
+	for i, change := range []struct{ query, userID string }{
+		{"UPDATE users SET admitted=false WHERE id=$1", MiaID},
+		{"UPDATE users SET cohort_member=false WHERE id=$1", LeonID},
+		{"UPDATE users SET cohort_member=false WHERE id=$1", ManagerID},
+		{"UPDATE users SET cohort_member=false WHERE id=$1", AdminID},
+	} {
+		if _, err := pool.Exec(ctx, change.query, change.userID); err != nil {
+			t.Fatal(err)
+		}
+		assertParticipation(AdminID, poll, 3-i, 3-i, 4)
+		assertParticipation(AdminID, pollID(2), 0, 3-i, 0)
+	}
+	// Eligibility changes affect turnout, never the stored current votes or named history.
+	var ballots, changes int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM ballots WHERE poll_id=$1", poll).Scan(&ballots); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM ballot_audit WHERE poll_id=$1", poll).Scan(&changes); err != nil {
+		t.Fatal(err)
+	}
+	if ballots != 4 || changes != 5 {
+		t.Fatalf("eligibility change altered ballot storage: %d current, %d history", ballots, changes)
+	}
+	res := authenticatedRequest(t, app, pool, AdminID, http.MethodGet, "/api/v1/categories/"+poll+"/audit", "")
+	var history []BallotAudit
+	if res.Code != http.StatusOK || json.Unmarshal(res.Body.Bytes(), &history) != nil || len(history) != 5 {
+		t.Fatalf("admin lost named history after eligibility changes: status=%d", res.Code)
+	}
+}
+
 func TestSeededPollsHaveStaggeredTimeline(t *testing.T) {
 	app, pool := timelineApp(t)
 	seen := map[time.Time]bool{}

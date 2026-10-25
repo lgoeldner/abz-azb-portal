@@ -23,7 +23,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List collections (students: no drafts; ballot_count editors only) */
+        /** List collections (students: no drafts; ballot_count and participation editors only) */
         get: operations["getCategories"];
         put?: never;
         /** Create collection of any kind (admins and managers; manager creator receives a category grant atomically) */
@@ -442,9 +442,16 @@ export interface components {
             opened_at: string | null;
             /** @description Number of distinct current voters. Editors only; null for students and repeatable categories. */
             ballot_count: number | null;
+            /** @description Current voting participation among admitted cohort members, regardless of role. Both counts use the same population and database snapshot. Editors only; null for students and repeatable categories. Preserved ballots from people no longer eligible are excluded here but remain in ballot_count. */
+            participation: {
+                /** @description Currently eligible people with a current ballot in this collection. */
+                voted: number;
+                /** @description All currently admitted cohort members. */
+                eligible: number;
+            } | null;
             /** @description Person polls only: all admitted cohort members, refreshed when opening and fixed thereafter. Existing polls retain explicit candidates. */
             all_people: boolean;
-            /** @description Maximum selections per voter; 1 for proposal and repeatable categories. */
+            /** @description Maximum selections per voter for person and proposal polls; 1 for repeatable categories. */
             max_choices: number;
             /** @description Viewer’s complete current selection; empty for repeatable categories or before voting. */
             my_option_ids: string[];
@@ -552,7 +559,7 @@ export interface components {
             /** @description Person polls: all admitted cohort members instead of explicit options. Defaults true on creation; omission preserves mode on edit. Other kinds require false. */
             all_people?: boolean;
             /**
-             * @description Maximum selections for person polls; other kinds require 1.
+             * @description Maximum selections for person and proposal polls; repeatable kinds require 1.
              * @default 1
              */
             max_choices: number;
@@ -599,7 +606,7 @@ export interface components {
             /** @description Person polls: all admitted cohort members instead of explicit options. Defaults true on creation; omission preserves mode on edit. Other kinds require false. */
             all_people?: boolean;
             /**
-             * @description Maximum selections for person polls; other kinds require 1.
+             * @description Maximum selections for person and proposal polls; repeatable kinds require 1.
              * @default 1
              */
             max_choices: number;

@@ -99,3 +99,22 @@ New person polls default to all admitted cohort members, refreshed at opening an
 - Invariant tests cover bounded atomic replacement, concurrent multiple selections, self/foreign/duplicate/closed rejection, distinct voter counts, history snapshots, permissions, roster freezing and migration preservation. Independent review found no remaining defects. Full checks and integration review passed again after merging the concurrent Verwaltung/accent updates.
 - Live Chromium against a separate seeded database exercised default switch, explicit candidate search/chips, opening, saving two choices, reloading, chip removal and empty search results. Desktop 1440px and phone 390px screenshots were inspected; phone and tablet 900px had no horizontal overflow.
 - Full Docker recovery drill passed with current migrations, multiple current selections and both legacy and grouped audit rows. Table signatures and attachment hashes matched after restoring; a non-empty target was correctly refused. The throwaway Restic snapshot was `eb0250d73e343db2e34cd4abbd70dc567002f6c35c20a2dc2b82544c90ea8e94` and was cleaned up by the drill.
+
+## Poll selection controls — 25 October 2026
+
+The selection cap uses 56px circular buttons around a 36px editable number. At rest the input has transparent background and border; focus reveals a white field with the workspace focus color. Both person and choice polls support bounded multiple selections and removable chips. Search is hidden for fewer than ten listed options, including candidate setup.
+
+- `make check` passed against disposable PostgreSQL `portal_stepper_test_20261025`, including 75 frontend tests and all race, contract, build and lint checks. Independent review found no defects.
+- Nine responsive journeys passed across the existing 320–1920px widths. The focused stepper journey verifies circular geometry, direct input, 1/500 bounds and focus-only field styling at 320, 390 and 1440px. Desktop and phone screenshots were inspected; no horizontal overflow was found.
+- Migration 006 preserves definitions, options, current votes and history; proposal vote invariants cover atomic selection replacement, limits, turnout, results and audit privacy. Full recovery drill passed with both person and proposal multiple selections. Restored table signatures and immutable upload hashes matched, and the non-empty target guard refused restoration. Throwaway snapshot: `5115b7d9bc8295c588b8b56beea49e6bc4429968adca08e3fd2608085e17bd52`.
+
+The final integration with the concurrent participation dashboard and bundled-font updates passed `make check` again. Independent integration review confirmed that proposal multiselect retains distinct participation counts and privacy.
+
+## Shared collection management — 26 October 2026
+
+Redaktion members create every collection kind and receive its management grant in the creation transaction. Assigned editors can edit repeatable definitions; ballot definitions remain locked after opening. Collection creation, definition editing, and admin-only manager assignment now share the Sammlungen workspace. The former Verwaltung collection link is removed and its admin bookmarks redirect to `/sammlungen`. Admins can also change grants on opened or closed ballots without changing their definitions.
+
+- `make check` passed after integrating the concurrent participation and voting-control changes: disposable PostgreSQL race tests, vet, 83 component tests, TypeScript, production build, generated API contract, repo-map validation and linters. Permission tests cover all six kinds, creator grants, immediate annotation, revocation, unassigned denial and transaction rollback.
+- Independent critical review found no defects, including a second review of the merge resolution and locked-definition permission form.
+- Chromium checks passed for shared creation, admin-only assignment controls, old-bookmark redirects, diagnostics and supported viewport widths: 17 passed, one production-only diagnostic check skipped on the development preview. Desktop 1440px and phone 390px collection creation views were inspected.
+- Full disposable Docker recovery passed with the integrated migrations, preserved ballots/audit history, table signatures and attachment hashes. Non-empty restore targets were rejected. Temporary snapshot `b3fae6c36dbf3c1711fbdb1eddcceb4dc92416dd0626ca9b2ce9190ba50ce287` and the drill resources were cleaned up.

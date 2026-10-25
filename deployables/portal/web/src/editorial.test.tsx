@@ -39,6 +39,7 @@ const category: Category = {
   created_at: '2026-10-01T00:00:00Z',
   opened_at: null,
   ballot_count: null,
+  participation: null,
 };
 const submission: Submission = {
   id: 'submission-1',

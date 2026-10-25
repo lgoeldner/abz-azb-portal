@@ -16,6 +16,7 @@ export function PeoplePicker({
   maxSelected,
   disabledUserIds = [],
   disabled = false,
+  searchLabel = 'Person suchen',
 }: {
   legend: string;
   options: PeoplePickerOption[];
@@ -24,12 +25,14 @@ export function PeoplePicker({
   maxSelected?: number;
   disabledUserIds?: string[];
   disabled?: boolean;
+  searchLabel?: string;
 }) {
   const [search, setSearch] = useState('');
   const inputId = useId();
   const selected = new Set(selectedIds);
-  const matching = options.filter((option) =>
-    option.name.toLocaleLowerCase('de').includes(search.trim().toLocaleLowerCase('de')),
+  const searchable = options.length >= 10;
+  const matching = options.filter(
+    (option) => !searchable || option.name.toLocaleLowerCase('de').includes(search.trim().toLocaleLowerCase('de')),
   );
   const atLimit = maxSelected !== undefined && selectedIds.length >= maxSelected;
 
@@ -74,18 +77,20 @@ export function PeoplePicker({
           })}
         </ul>
       )}
-      <label className={label} htmlFor={inputId}>
-        Person suchen
-        <input
-          id={inputId}
-          className={field}
-          type="search"
-          maxLength={200}
-          placeholder="Name eingeben"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-      </label>
+      {searchable && (
+        <label className={label} htmlFor={inputId}>
+          {searchLabel}
+          <input
+            id={inputId}
+            className={field}
+            type="search"
+            maxLength={200}
+            placeholder={searchLabel === 'Person suchen' ? 'Name eingeben' : 'Option eingeben'}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </label>
+      )}
       <ul
         className="max-h-64 space-y-1 overflow-y-auto rounded-ui bg-white p-2"
         aria-label={`${legend}: Suchergebnisse`}
@@ -124,7 +129,7 @@ export function PeoplePicker({
         })}
         {matching.length === 0 && (
           <li className="px-3 py-2 text-sm text-muted" role="status">
-            Keine Personen gefunden.
+            Keine Auswahlmöglichkeiten gefunden.
           </li>
         )}
       </ul>

@@ -31,6 +31,7 @@ const sammlung = (id: string, name: string, kind: string, extra: Record<string, 
   created_at: '2026-10-01T00:00:00Z',
   opened_at: null,
   ballot_count: null,
+  participation: null,
   ...extra,
 });
 const category = sammlung('memory', 'Erinnerungen', 'memory', { description: 'Was bleibt' });
@@ -704,6 +705,114 @@ describe('navigation by view', () => {
 });
 
 describe('admin home', () => {
+  const dashboardPoll = (
+    id: string,
+    name: string,
+    ballot_count: number,
+    participation: { voted: number; eligible: number } | null,
+    kind = 'proposal',
+  ) =>
+    sammlung(id, name, kind, {
+      ballot_count: kind === 'memory' ? null : ballot_count,
+      participation: kind === 'memory' ? null : participation,
+      opened_at: '2026-10-01T00:00:00Z',
+      options: [{ id: `${id}-a`, label: 'A' }],
+    });
+  function mountDashboard(categories: unknown[], users: unknown[] | 'error' | 'pending' = []) {
+    localStorage.clear();
+    const admin = { ...user, id: 'dashboard-admin', role: 'admin' };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith('/api/v1/me')) return Response.json({ user: admin, csrf_token: 'csrf' });
+        if (url.endsWith('/api/v1/admin/users')) {
+          if (users === 'pending') return new Promise<Response>(() => {});
+          if (users === 'error') return Response.json({ error: { message: 'Nicht verfügbar.' } }, { status: 503 });
+          return Response.json(users);
+        }
+        if (url.endsWith('/api/v1/categories')) return Response.json(categories);
+        return Response.json([]);
+      }),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it('uses the participation aggregate for ballots and leaves repeatable collections without a metric', async () => {
+    mountDashboard(
+      [
+        dashboardPoll('zero', 'Keine Stimmen', 34, { voted: 0, eligible: 3 }),
+        dashboardPoll('partial', 'Ein Drittel', 34, { voted: 1, eligible: 3 }),
+        dashboardPoll('full', 'Alle Stimmen', 0, { voted: 3, eligible: 3 }),
+        dashboardPoll('repeatable', 'Erinnerungen', 0, null, 'memory'),
+      ],
+      [],
+    );
+
+    const latest = await screen.findByRole('region', { name: 'Neueste Sammlungen' });
+    await within(latest).findByRole('link', { name: /Keine Stimmen/ });
+    const zero = within(latest).getByRole('progressbar', { name: 'Wahlbeteiligung: Keine Stimmen' });
+    const partial = within(latest).getByRole('progressbar', { name: 'Wahlbeteiligung: Ein Drittel' });
+    const full = within(latest).getByRole('progressbar', { name: 'Wahlbeteiligung: Alle Stimmen' });
+    expect(zero).toHaveAttribute('aria-valuemin', '0');
+    expect(zero).toHaveAttribute('aria-valuemax', '100');
+    expect(zero).toHaveAttribute('aria-valuenow', '0');
+    expect(zero).toHaveAttribute('aria-valuetext', '0 von 3 Personen abgestimmt (0 %)');
+    expect(within(latest).getByText('0 von 3')).toBeInTheDocument();
+    expect(within(latest).getAllByText('abgestimmt')).toHaveLength(3);
+    expect(zero.firstElementChild).toHaveStyle({ width: '0%', backgroundColor: 'rgb(209, 213, 219)' });
+    expect(partial).toHaveAttribute('aria-valuenow', String((1 / 3) * 100));
+    expect(partial.firstElementChild).toHaveStyle({ width: `${(1 / 3) * 100}%` });
+    expect(within(latest).getByText('33%')).toBeInTheDocument();
+    expect(full).toHaveAttribute('aria-valuenow', '100');
+    expect(full.firstElementChild).toHaveStyle({ width: '100%', backgroundColor: 'rgb(22, 101, 52)' });
+    expect(within(latest).getByRole('link', { name: /Keine Stimmen/ })).toHaveAttribute('href', '/sammlungen/zero');
+    expect(within(latest).getByRole('link', { name: /Keine Stimmen/ })).toHaveTextContent('Offen');
+    const repeatable = within(latest).getByRole('link', { name: /Erinnerungen/ });
+    expect(repeatable).toHaveAttribute('href', '/sammlungen/repeatable');
+    expect(within(repeatable).queryByRole('progressbar')).toBeNull();
+    expect(repeatable).not.toHaveTextContent('abgestimmt');
+  });
+
+  it('reports zero percent when there are no eligible people', async () => {
+    mountDashboard([dashboardPoll('empty', 'Noch niemand', 0, { voted: 0, eligible: 0 })]);
+    const bar = await screen.findByRole('progressbar', { name: 'Wahlbeteiligung: Noch niemand' });
+    expect(bar).toHaveAttribute('aria-valuenow', '0');
+    expect(bar).toHaveAttribute('aria-valuetext', '0 von 0 Personen abgestimmt (0 %)');
+    expect(screen.getByText('0%')).toBeInTheDocument();
+  });
+
+  it('clamps participation to 100 percent when votes exceed eligible people', async () => {
+    mountDashboard([dashboardPoll('over', 'Mehr Stimmen', 5, { voted: 5, eligible: 1 })]);
+    const bar = await screen.findByRole('progressbar', { name: 'Wahlbeteiligung: Mehr Stimmen' });
+    expect(bar).toHaveAttribute('aria-valuenow', '100');
+    expect(screen.getByText('100%')).toBeInTheDocument();
+    expect(bar.firstElementChild).toHaveStyle({ width: '100%', backgroundColor: 'rgb(22, 101, 52)' });
+  });
+
+  it.each(['pending', 'error'] as const)('shows the API participation aggregate while users are %s', async (state) => {
+    mountDashboard([dashboardPoll('waiting', 'Noch ohne Daten', 8, { voted: 1, eligible: 2 })], state);
+    const latest = await screen.findByRole('region', { name: 'Neueste Sammlungen' });
+    const bar = await within(latest).findByRole('progressbar', { name: 'Wahlbeteiligung: Noch ohne Daten' });
+    expect(bar).toHaveAttribute('aria-valuenow', String((1 / 2) * 100));
+    expect(within(latest).getByText('50%')).toBeInTheDocument();
+  });
+
+  it('does not display a zero metric when the API has no participation aggregate', async () => {
+    mountDashboard([dashboardPoll('unknown', 'Noch keine Auswertung', 7, null)]);
+    const latest = await screen.findByRole('region', { name: 'Neueste Sammlungen' });
+    expect(await within(latest).findByRole('link', { name: /Noch keine Auswertung/ })).toBeInTheDocument();
+    expect(within(latest).queryByRole('progressbar')).toBeNull();
+    expect(within(latest).queryByText(/\d+%/)).toBeNull();
+  });
+
   it('shows counts, the three newest people awaiting admission, the latest Sammlungen and one widget per class', async () => {
     localStorage.clear();
     const admin = {
@@ -1029,10 +1138,10 @@ describe('sammlungen', () => {
   it('renders the ballot flow for a single-answer Sammlung and saves the vote', async () => {
     const calls = mount('/sammlungen/motto');
     expect(await screen.findByRole('heading', { level: 1, name: 'Abimotto' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('radio', { name: 'Zwei' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Zwei' }));
     fireEvent.click(screen.getByRole('button', { name: /Stimme speichern/ }));
     await waitFor(() =>
-      expect(calls).toEqual([{ url: '/categories/motto/ballot', method: 'PUT', body: { option_id: 'o2' } }]),
+      expect(calls).toEqual([{ url: '/categories/motto/ballot', method: 'PUT', body: { option_ids: ['o2'] } }]),
     );
     expect(screen.queryByRole('button', { name: /Beiträge prüfen/ })).toBeNull();
   });

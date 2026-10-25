@@ -6,9 +6,49 @@ const people: PeoplePickerOption[] = [
   { id: 'alice', name: 'Alice Beispiel', user_id: 'user-alice' },
   { id: 'bob', name: 'Bob Beispiel', user_id: 'user-bob' },
   { id: 'mia', name: 'Mia Beispiel', user_id: 'user-mia' },
+  ...['Anna Berg', 'Elias Koch', 'Lina Schulz', 'Noah Braun', 'Emma Wolf', 'Paul Lang', 'Clara Maier'].map((name) => ({
+    id: name,
+    name,
+  })),
 ];
 
 describe('PeoplePicker', () => {
+  it('only shows search for at least ten choices and clears its filtering when the list shrinks', () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <PeoplePicker
+        legend="Optionen"
+        searchLabel="Option suchen"
+        options={people.slice(0, 9)}
+        selectedIds={[]}
+        onChange={onChange}
+      />,
+    );
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    rerender(
+      <PeoplePicker
+        legend="Optionen"
+        searchLabel="Option suchen"
+        options={people}
+        selectedIds={[]}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Option suchen' }), { target: { value: 'niemand' } });
+    expect(screen.getByRole('status')).toHaveTextContent('Keine Auswahlmöglichkeiten gefunden.');
+    rerender(
+      <PeoplePicker
+        legend="Optionen"
+        searchLabel="Option suchen"
+        options={people.slice(0, 9)}
+        selectedIds={[]}
+        onChange={onChange}
+      />,
+    );
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Bob Beispiel' })).toBeInTheDocument();
+  });
+
   it('filters by search, shows removable selection chips, and reports no matches', () => {
     const onChange = vi.fn();
     const { rerender } = render(
@@ -32,7 +72,7 @@ describe('PeoplePicker', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Person suchen' }), {
       target: { value: 'niemand' },
     });
-    expect(screen.getByRole('status')).toHaveTextContent('Keine Personen gefunden.');
+    expect(screen.getByRole('status')).toHaveTextContent('Keine Auswahlmöglichkeiten gefunden.');
   });
 
   it('replaces a single selection, enforces a larger limit, and disables a person who cannot self-vote', () => {

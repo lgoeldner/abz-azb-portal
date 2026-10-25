@@ -50,9 +50,12 @@ test('student signs in, submits a contribution, and can reach a ballot', async (
 test('student casts a ballot in the seeded open poll', async ({ page }) => {
   await signInAs(page, 'Jahrgang');
   await page.goto('/sammlungen/30000000-0000-4000-8000-000000000001'); // seeded open proposal Sammlung
-  const option = page.locator('input[name="ballot"]:enabled').first();
+  const option = page
+    .getByRole('list', { name: /Optionen auswählen.*Suchergebnisse/ })
+    .getByRole('button')
+    .first();
   await expect(option, 'the seeded Sammlung has an eligible option').toBeVisible();
-  await option.check();
+  await option.click();
   await page.getByRole('button', { name: /Stimme speichern|Stimme ändern/ }).click();
   await expect(page.getByText('Deine Stimme wurde gespeichert.')).toBeVisible();
 });

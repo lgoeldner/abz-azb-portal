@@ -536,6 +536,11 @@ function NavGroup({ id, label, children }: { id: string; label: string; children
   );
 }
 const quiet = 'px-3.5 text-[13px] text-muted';
+const participationColor = (percent: number) => {
+  const from = [209, 213, 219];
+  const to = [22, 101, 52];
+  return `rgb(${from.map((value, index) => Math.round(value + ((to[index] - value) * percent) / 100)).join(', ')})`;
+};
 
 function StudentNav() {
   const { user } = useSession();
@@ -1112,29 +1117,85 @@ function AdminHome() {
               </div>
             ) : (
               <ul className="mt-3 divide-y divide-line">
-                {latest.map((c) => (
-                  <li key={c.id} className="min-w-0">
-                    <Link
-                      to={`/sammlungen/${c.id}`}
-                      className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30"
-                    >
-                      <KindIcon icon={kindIcon[c.kind]} className="size-4 text-muted" />
-                      <span className="min-w-0 flex-1">
-                        <strong className="block truncate text-[15px] font-semibold">{c.name}</strong>
-                        <span className="block text-[13px] text-muted">
-                          {[kindLabel[c.kind], c.status === 'open' && !c.repeatable ? since(c.opened_at) : '']
-                            .filter(Boolean)
-                            .join(', ')}
+                {latest.map((c) => {
+                  const participation = c.repeatable ? null : c.participation;
+                  const showParticipation = Boolean(participation);
+                  const voted = participation?.voted ?? 0;
+                  const eligible = participation?.eligible ?? 0;
+                  const percent = eligible === 0 ? 0 : Math.max(0, Math.min(100, (voted / eligible) * 100));
+                  return (
+                    <li key={c.id} className="min-w-0">
+                      <Link
+                        to={`/sammlungen/${c.id}`}
+                        className={`-mx-2 flex gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30 ${showParticipation ? 'items-start' : 'items-center'}`}
+                      >
+                        <KindIcon
+                          icon={kindIcon[c.kind]}
+                          className={`size-4 shrink-0 text-muted ${showParticipation ? 'mt-1' : ''}`}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex min-w-0 items-center gap-2">
+                            <strong className="block min-w-0 flex-1 break-words text-[15px] font-semibold leading-snug">
+                              {c.name}
+                            </strong>
+                            {!c.repeatable && <Badge status={c.status} />}
+                          </span>
+                          <span className="block text-[13px] text-muted">
+                            {[kindLabel[c.kind], c.status === 'open' && !c.repeatable ? since(c.opened_at) : '']
+                              .filter(Boolean)
+                              .join(', ')}
+                          </span>
+                          {showParticipation && (
+                            <span className="mt-2 block">
+                              <span className="flex items-center gap-1 text-[12px] leading-4 text-muted">
+                                <span className="tabular-nums">
+                                  {voted} von {eligible}
+                                </span>{' '}
+                                abgestimmt
+                              </span>
+                              <span
+                                role="progressbar"
+                                aria-label={`Wahlbeteiligung: ${c.name}`}
+                                aria-valuemin={0}
+                                aria-valuemax={100}
+                                aria-valuenow={percent}
+                                aria-valuetext={`${voted} von ${eligible} Personen abgestimmt (${Math.round(percent)} %)`}
+                                className="mt-1 block h-1.5 overflow-hidden rounded-full"
+                                style={{ backgroundColor: '#e5e7eb' }}
+                              >
+                                <span
+                                  aria-hidden="true"
+                                  className="block h-full rounded-full"
+                                  style={{ width: `${percent}%`, backgroundColor: participationColor(percent) }}
+                                />
+                              </span>
+                            </span>
+                          )}
                         </span>
-                      </span>
-                      {!c.repeatable && <Badge status={c.status} />}
-                    </Link>
-                    <DevDebug
-                      label="Sammlung"
-                      data={{ id: c.id, status: c.status, kind: c.kind, version: c.version, options: c.options.length }}
-                    />
-                  </li>
-                ))}
+                        {showParticipation && (
+                          <span className="w-24 flex-none whitespace-nowrap pt-0.5 text-right">
+                            <strong className="block text-3xl font-extrabold tabular-nums leading-none tracking-tight">
+                              {Math.round(percent)}%
+                            </strong>
+                            <span className="mt-1 block text-[12px] font-normal leading-4 text-muted">
+                              Teilgenommen
+                            </span>
+                          </span>
+                        )}
+                      </Link>
+                      <DevDebug
+                        label="Sammlung"
+                        data={{
+                          id: c.id,
+                          status: c.status,
+                          kind: c.kind,
+                          version: c.version,
+                          options: c.options.length,
+                        }}
+                      />
+                    </li>
+                  );
+                })}
               </ul>
             ))}
         </section>

@@ -55,8 +55,11 @@ func TestPeoplePollRosterSnapshotsAndExplicitSubset(t *testing.T) {
 	for _, bad := range []string{
 		`{"name":"Bad","description":"","kind":"person","max_choices":0}`,
 		`{"name":"Bad","description":"","kind":"person","max_choices":501}`,
-		`{"name":"Bad","description":"","kind":"proposal","max_choices":2,"options":[{"label":"A"},{"label":"B"}]}`,
+		`{"name":"Bad","description":"","kind":"proposal","all_people":true,"options":[{"label":"A"},{"label":"B"}]}`,
+		`{"name":"Bad","description":"","kind":"proposal","max_choices":0,"options":[{"label":"A"},{"label":"B"}]}`,
+		`{"name":"Bad","description":"","kind":"proposal","max_choices":501,"options":[{"label":"A"},{"label":"B"}]}`,
 		`{"name":"Bad","description":"","kind":"idea","all_people":true}`,
+		`{"name":"Bad","description":"","kind":"idea","max_choices":2}`,
 	} {
 		if res := authenticatedRequest(t, app, pool, AdminID, http.MethodPost, "/api/v1/categories", bad); res.Code != 400 {
 			t.Fatalf("invalid definition accepted: %d", res.Code)
@@ -129,9 +132,13 @@ func TestPeopleMultipleSelectionsReplaceAtomicallyAndAuditSnapshots(t *testing.T
 	if !slices.Equal(mine.MyOptionIDs, second) || mine.MyOptionID == nil || *mine.MyOptionID != second[0] || auditCount() != 4 {
 		t.Fatalf("failed request changed vote: %+v", mine)
 	}
-	count := categoriesFor(t, app, AdminID)[poll.ID].BallotCount
+	listed := categoriesFor(t, app, AdminID)[poll.ID]
+	count := listed.BallotCount
 	if count == nil || *count != 1 {
 		t.Fatalf("count must be distinct voters: %v", count)
+	}
+	if listed.Participation == nil || listed.Participation.Voted != 1 || listed.Participation.Eligible != 4 {
+		t.Fatalf("multiple selections must count as one participating person: %+v", listed.Participation)
 	}
 	var results []PollResult
 	res := authenticatedRequest(t, app, pool, ManagerID, http.MethodGet, path+"/results", "")

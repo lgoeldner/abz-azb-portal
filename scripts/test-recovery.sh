@@ -94,6 +94,13 @@ VALUES ('50000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-00000000
 INSERT INTO ballot_audit(id,poll_id,user_id,option_id,ballot_id)
 SELECT gen_random_uuid(),poll_id,user_id,option_id,'50000000-0000-4000-8000-000000000003'
 FROM ballots WHERE poll_id='30000000-0000-4000-8000-000000000002';
+UPDATE categories SET max_choices=2 WHERE id='30000000-0000-4000-8000-000000000001';
+INSERT INTO ballots(poll_id,user_id,option_id)
+SELECT poll_id,'00000000-0000-4000-8000-000000000004',id FROM poll_options
+WHERE poll_id='30000000-0000-4000-8000-000000000001' ORDER BY position LIMIT 2;
+INSERT INTO ballot_audit(id,poll_id,user_id,option_id,ballot_id)
+SELECT gen_random_uuid(),poll_id,user_id,option_id,'50000000-0000-4000-8000-000000000004'
+FROM ballots WHERE poll_id='30000000-0000-4000-8000-000000000001';
 SQL
 
 capture_signature() {
