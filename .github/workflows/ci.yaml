@@ -67,7 +67,8 @@ jobs:
         with:
           node-version: '24'
       - name: Go vulnerabilities reachable from our code (incl. standard library)
-        run: cd deployables/portal/server && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: |
+          cd deployables/portal/server && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
           cd ../../auth-mock && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
       - name: npm advisories
         run: cd deployables/portal/web && npm audit --audit-level=high
