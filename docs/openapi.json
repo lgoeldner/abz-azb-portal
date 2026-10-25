@@ -70,7 +70,7 @@
         }
       },
       "post": {
-        "summary": "Create collection (admins; managers for single-answer kinds only)",
+        "summary": "Create collection of any kind (admins and managers; manager creator receives a category grant atomically)",
         "operationId": "postCategories",
         "responses": {
           "201": {
@@ -118,7 +118,7 @@
     },
     "/api/v1/categories/{id}": {
       "patch": {
-        "summary": "Update collection (admin for repeatable kinds; editors with grant for single-answer drafts); kind changes stay within their group",
+        "summary": "Update collection (admins or managers with grant; single-answer definitions only in draft); kind changes stay within their group",
         "operationId": "patchCategoriesId",
         "responses": {
           "200": {

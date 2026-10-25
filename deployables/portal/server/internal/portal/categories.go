@@ -250,7 +250,7 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 		if e != nil {
 			return e
 		}
-		if old.Repeatable && u.Role != "admin" || !canEdit(u, id) {
+		if !canEdit(u, id) {
 			return forbidden()
 		}
 		if in.AllPeople == nil {
@@ -281,9 +281,6 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 		if e = validateCategory(in); e != nil {
 			return e
 		}
-		if repeatableKind(in.Kind) && u.Role != "admin" {
-			return forbidden()
-		}
 	}
 	rep := repeatableKind(in.Kind)
 	selfVote := in.AllowSelfVote && !rep
@@ -300,7 +297,7 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 			status = "open"
 		}
 		_, e = tx.Exec(r.Context(), "INSERT INTO categories(id,name,description,kind,status,allow_self_vote,all_people,max_choices,opened_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,CASE WHEN $5='open' THEN now() END)", id, name, in.Description, in.Kind, status, selfVote, allPeople, maxChoices)
-		if e == nil && !rep && u.Role == "manager" {
+		if e == nil && u.Role == "manager" {
 			_, e = tx.Exec(r.Context(), "UPDATE users SET category_ids=array_append(category_ids,$2::uuid) WHERE id=$1", u.ID, id)
 		}
 	} else {

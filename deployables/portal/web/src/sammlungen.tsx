@@ -1,5 +1,5 @@
 import { Minus, Plus } from 'lucide-react';
-import { useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   api,
@@ -7,6 +7,8 @@ import {
   date,
   editorial,
   json,
+  patchUser,
+  type User,
   type BallotAudit,
   type Category,
   type PollResult,
@@ -232,30 +234,18 @@ function Cards({ items }: { items: Category[] }) {
 }
 
 // ---------- create / edit ----------
-// Admins pick any class, managers only single-answer classes; an existing Sammlung may change class within its group.
-export function SammlungForm({
-  sammlung,
-  onSaved,
-  extra,
-  afterSave,
-}: {
-  sammlung?: Category | null;
-  onSaved: () => void;
-  extra?: ReactNode;
-  afterSave?: (saved: Category) => Promise<void>;
-}) {
+// Editors pick any class; an existing Sammlung may change class within its group.
+export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null; onSaved: () => void }) {
   const { user } = useSession();
   const action = useAction();
   const current = useRef<Category | null>(sammlung ?? null);
-  const classes = sammlung
-    ? sammlung.repeatable
-      ? repeatableKinds
-      : singleKinds
-    : user.role === 'admin'
-      ? allKinds
-      : singleKinds;
-  const [kind, setKind] = useState<Kind>(sammlung?.kind ?? (user.role === 'admin' ? 'memory' : 'proposal'));
+  const classes = sammlung ? (sammlung.repeatable ? repeatableKinds : singleKinds) : allKinds;
+  const [kind, setKind] = useState<Kind>(sammlung?.kind ?? 'memory');
   const single = singleKinds.includes(kind);
+  const definitionLocked = !!sammlung && !sammlung.repeatable && sammlung.status !== 'draft';
+  const users = useData<User[]>('/admin/users', user.role === 'admin');
+  const [grants, setGrants] = useState<Record<string, boolean>>({});
+  const managers = (users.data ?? []).filter((u) => u.role === 'manager');
   const roster = useData<{ id: string; name: string }[]>('/roster', kind === 'person');
   const [allPeople, setAllPeople] = useState(sammlung?.kind === 'person' ? sammlung.all_people : true);
   const [maxChoices, setMaxChoices] = useState(sammlung?.max_choices ?? 1);
@@ -284,162 +274,216 @@ export function SammlungForm({
             .filter(Boolean)
             .map((text) => ({ label: text }));
     action.run(async () => {
-      if (single && kind === 'proposal' && choices.length < 2)
+      if (!definitionLocked && single && kind === 'proposal' && choices.length < 2)
         throw new Error('Bitte mindestens zwei Optionen auswählen.');
-      if (single && kind === 'person' && !allPeople && choices.length < 2)
+      if (!definitionLocked && single && kind === 'person' && !allPeople && choices.length < 2)
         throw new Error('Bitte mindestens zwei Kandidat:innen auswählen.');
-      if (single && (!Number.isInteger(maxChoices) || maxChoices < 1 || maxChoices > 500))
+      if (!definitionLocked && single && (!Number.isInteger(maxChoices) || maxChoices < 1 || maxChoices > 500))
         throw new Error('Die Zahl der auswählbaren Optionen muss zwischen 1 und 500 liegen.');
       // A retry after a failed follow-up step must update the Sammlung saved by the first attempt, not create another.
       const target = current.current;
-      const saved = await api<Category>(
-        target ? `/categories/${target.id}` : '/categories',
-        json(target ? 'PATCH' : 'POST', {
-          ...(target ? { version: target.version } : {}),
-          name: data.get('name'),
-          description: data.get('description'),
-          kind,
-          allow_self_vote: single && data.get('allow_self_vote') === 'on',
-          all_people: kind === 'person' && allPeople,
-          max_choices: single ? maxChoices : 1,
-          options: choices,
-        }),
-      );
+      const saved = definitionLocked
+        ? sammlung
+        : await api<Category>(
+            target ? `/categories/${target.id}` : '/categories',
+            json(target ? 'PATCH' : 'POST', {
+              ...(target ? { version: target.version } : {}),
+              name: data.get('name'),
+              description: data.get('description'),
+              kind,
+              allow_self_vote: single && data.get('allow_self_vote') === 'on',
+              all_people: kind === 'person' && allPeople,
+              max_choices: single ? maxChoices : 1,
+              options: choices,
+            }),
+          );
       current.current = saved;
-      await afterSave?.(saved);
+      if (user.role === 'admin' && Object.keys(grants).length) {
+        // Apply only changed checkboxes to fresh records so unrelated grants survive.
+        const currentUsers = await api<User[]>('/admin/users');
+        for (const manager of currentUsers.filter((u) => u.role === 'manager')) {
+          const now = manager.category_ids.includes(saved.id);
+          const want = grants[manager.id] ?? now;
+          if (want !== now)
+            await patchUser(manager, {
+              category_ids: want
+                ? [...manager.category_ids, saved.id]
+                : manager.category_ids.filter((id) => id !== saved.id),
+            });
+        }
+      }
       onSaved();
     }, 'Sammlung gespeichert.');
   }
   return (
     <form className={`${panel} mb-10 space-y-5`} onSubmit={save}>
-      <h2 className={heading}>{sammlung ? 'Sammlung bearbeiten' : 'Neue Sammlung'}</h2>
-      <label className={label}>
-        Name
-        <input className={field} name="name" defaultValue={sammlung?.name} maxLength={200} required />
-      </label>
-      <label className={label}>
-        Beschreibung
-        <textarea className={field} name="description" defaultValue={sammlung?.description} rows={3} />
-      </label>
-      <label className={label}>
-        Klasse
-        <select className={field} value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
-          {classes.map((k) => (
-            <option key={k} value={k}>
-              {kindLabel[k]}
-            </option>
-          ))}
-        </select>
-      </label>
-      {single &&
-        (kind === 'proposal' ? (
-          <label className={label}>
-            Antwortoptionen <small className="font-normal text-muted">eine Option pro Zeile</small>
-            <textarea
-              className={field}
-              rows={5}
-              value={options}
-              onChange={(e) => setOptions(e.target.value)}
-              required
-              placeholder={'Option A\nOption B'}
-            />
-          </label>
-        ) : (
-          <div className="space-y-4">
-            <label className="flex cursor-pointer items-center justify-between gap-4 text-[15px]">
-              <span>Alle freigegebenen Personen zur Abstimmung zulassen</span>
-              <input
-                className="peer sr-only"
-                type="checkbox"
-                role="switch"
-                checked={allPeople}
-                onChange={(event) => setAllPeople(event.target.checked)}
-              />
-              <span className="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full bg-pill transition-colors after:absolute after:left-1 after:size-5 after:rounded-full after:bg-white after:transition-transform peer-checked:bg-ink peer-checked:after:translate-x-5 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink"></span>
-            </label>
-            {allPeople ? (
-              <p className="text-sm text-muted">
-                Bei der Öffnung werden alle freigegebenen Mitglieder aufgenommen. Danach bleibt die Personenliste
-                unverändert.
-              </p>
-            ) : roster.isPending ? (
-              <Loading />
-            ) : roster.error ? (
-              <Failure error={roster.error} />
-            ) : (
-              <PeoplePicker
-                legend="Kandidat:innen (mindestens zwei)"
-                options={roster.data?.map((person) => ({ ...person, user_id: person.id })) ?? []}
-                selectedIds={selected}
-                onChange={setSelected}
-                disabled={action.busy}
-              />
-            )}
-          </div>
-        ))}
-      {single && (
+      <h2 className={heading}>
+        {definitionLocked ? 'Berechtigungen bearbeiten' : sammlung ? 'Sammlung bearbeiten' : 'Neue Sammlung'}
+      </h2>
+      {definitionLocked ? (
+        <p className="text-sm text-muted">
+          Die Definition ist seit dem Öffnen gesperrt. Berechtigungen bleiben änderbar.
+        </p>
+      ) : (
         <>
-          <div className="space-y-2">
-            <label className={label} htmlFor="max_choices">
-              Maximale Zahl der Stimmen pro Person
-            </label>
-            <div className="flex items-center gap-4">
-              <button
-                className="flex size-14 shrink-0 items-center justify-center rounded-full bg-white text-ink transition hover:bg-pill focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:cursor-not-allowed disabled:opacity-40"
-                type="button"
-                aria-label={kind === 'person' ? 'Weniger Personen' : 'Weniger Optionen'}
-                disabled={maxChoices <= 1 || action.busy}
-                onClick={() => setMaxChoices((value) => Math.min(500, Math.max(1, value - 1)))}
-              >
-                <Minus aria-hidden="true" size={24} />
-              </button>
-              <input
-                className="h-16 w-24 appearance-none [-moz-appearance:textfield] rounded-xl border border-transparent bg-transparent text-center text-4xl font-bold tabular-nums text-ink outline-none transition focus:border-ink focus:bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                type="number"
-                name="max_choices"
-                id="max_choices"
-                min={1}
-                max={500}
-                step={1}
-                required
-                value={maxChoices}
-                disabled={action.busy}
-                onChange={(event) => setMaxChoices(Number(event.target.value))}
-                onFocus={(event) => event.currentTarget.select()}
-              />
-              <button
-                className="flex size-14 shrink-0 items-center justify-center rounded-full bg-white text-ink transition hover:bg-pill focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:cursor-not-allowed disabled:opacity-40"
-                type="button"
-                aria-label={kind === 'person' ? 'Mehr Personen' : 'Mehr Optionen'}
-                disabled={maxChoices >= 500 || action.busy}
-                onClick={() => setMaxChoices((value) => Math.max(1, Math.min(500, value + 1)))}
-              >
-                <Plus aria-hidden="true" size={24} />
-              </button>
-            </div>
-          </div>
-          <label className="flex items-center gap-2.5 text-[15px]">
-            <input
-              className="size-4 shrink-0 accent-[var(--color-accent)]"
-              type="checkbox"
-              name="allow_self_vote"
-              defaultChecked={sammlung?.allow_self_vote}
-            />
-            Stimme für die eigene Person erlauben
+          <label className={label}>
+            Name
+            <input className={field} name="name" defaultValue={sammlung?.name} maxLength={200} required />
           </label>
-          <p className="text-sm text-muted">
-            {`Pro Person bis zu ${maxChoices} Stimme(n).`} Nach dem Öffnen ist die Definition gesperrt.
-          </p>
+          <label className={label}>
+            Beschreibung
+            <textarea className={field} name="description" defaultValue={sammlung?.description} rows={3} />
+          </label>
+          <label className={label}>
+            Klasse
+            <select className={field} value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
+              {classes.map((k) => (
+                <option key={k} value={k}>
+                  {kindLabel[k]}
+                </option>
+              ))}
+            </select>
+          </label>
+          {single &&
+            (kind === 'proposal' ? (
+              <label className={label}>
+                Antwortoptionen <small className="font-normal text-muted">eine Option pro Zeile</small>
+                <textarea
+                  className={field}
+                  rows={5}
+                  value={options}
+                  onChange={(e) => setOptions(e.target.value)}
+                  required
+                  placeholder={'Option A\nOption B'}
+                />
+              </label>
+            ) : (
+              <div className="space-y-4">
+                <label className="flex cursor-pointer items-center justify-between gap-4 text-[15px]">
+                  <span>Alle freigegebenen Personen zur Abstimmung zulassen</span>
+                  <input
+                    className="peer sr-only"
+                    type="checkbox"
+                    role="switch"
+                    checked={allPeople}
+                    onChange={(event) => setAllPeople(event.target.checked)}
+                  />
+                  <span className="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full bg-pill transition-colors after:absolute after:left-1 after:size-5 after:rounded-full after:bg-white after:transition-transform peer-checked:bg-ink peer-checked:after:translate-x-5 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink"></span>
+                </label>
+                {allPeople ? (
+                  <p className="text-sm text-muted">
+                    Bei der Öffnung werden alle freigegebenen Mitglieder aufgenommen. Danach bleibt die Personenliste
+                    unverändert.
+                  </p>
+                ) : roster.isPending ? (
+                  <Loading />
+                ) : roster.error ? (
+                  <Failure error={roster.error} />
+                ) : (
+                  <PeoplePicker
+                    legend="Kandidat:innen (mindestens zwei)"
+                    options={roster.data?.map((person) => ({ ...person, user_id: person.id })) ?? []}
+                    selectedIds={selected}
+                    onChange={setSelected}
+                    disabled={action.busy}
+                  />
+                )}
+              </div>
+            ))}
+          {single && (
+            <>
+              <div className="space-y-2">
+                <label className={label} htmlFor="max_choices">
+                  Maximale Zahl der Stimmen pro Person
+                </label>
+                <div className="flex items-center gap-4">
+                  <button
+                    className="flex size-14 shrink-0 items-center justify-center rounded-full bg-white text-ink transition hover:bg-pill focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:cursor-not-allowed disabled:opacity-40"
+                    type="button"
+                    aria-label={kind === 'person' ? 'Weniger Personen' : 'Weniger Optionen'}
+                    disabled={maxChoices <= 1 || action.busy}
+                    onClick={() => setMaxChoices((value) => Math.min(500, Math.max(1, value - 1)))}
+                  >
+                    <Minus aria-hidden="true" size={24} />
+                  </button>
+                  <input
+                    className="h-16 w-24 appearance-none [-moz-appearance:textfield] rounded-xl border border-transparent bg-transparent text-center text-4xl font-bold tabular-nums text-ink outline-none transition focus:border-ink focus:bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    type="number"
+                    name="max_choices"
+                    id="max_choices"
+                    min={1}
+                    max={500}
+                    step={1}
+                    required
+                    value={maxChoices}
+                    disabled={action.busy}
+                    onChange={(event) => setMaxChoices(Number(event.target.value))}
+                    onFocus={(event) => event.currentTarget.select()}
+                  />
+                  <button
+                    className="flex size-14 shrink-0 items-center justify-center rounded-full bg-white text-ink transition hover:bg-pill focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:cursor-not-allowed disabled:opacity-40"
+                    type="button"
+                    aria-label={kind === 'person' ? 'Mehr Personen' : 'Mehr Optionen'}
+                    disabled={maxChoices >= 500 || action.busy}
+                    onClick={() => setMaxChoices((value) => Math.max(1, Math.min(500, value + 1)))}
+                  >
+                    <Plus aria-hidden="true" size={24} />
+                  </button>
+                </div>
+              </div>
+              <label className="flex items-center gap-2.5 text-[15px]">
+                <input
+                  className="size-4 shrink-0 accent-[var(--color-accent)]"
+                  type="checkbox"
+                  name="allow_self_vote"
+                  defaultChecked={sammlung?.allow_self_vote}
+                />
+                Stimme für die eigene Person erlauben
+              </label>
+              <p className="text-sm text-muted">
+                {`Pro Person bis zu ${maxChoices} Stimme(n).`} Nach dem Öffnen ist die Definition gesperrt.
+              </p>
+            </>
+          )}
         </>
       )}
-      {extra}
+      {user.role === 'admin' && (
+        <fieldset className="min-w-0 space-y-3" disabled={action.busy}>
+          <legend className={label}>Wer darf bearbeiten</legend>
+          <p className="text-sm text-muted">
+            Die Administration darf alle Sammlungen bearbeiten. Redaktionsmitglieder bearbeiten eigene und zugewiesene
+            Sammlungen und lesen alle Beiträge.
+          </p>
+          {users.isPending ? (
+            <Loading />
+          ) : users.error ? (
+            <Failure error={users.error} retry={() => users.refetch()} />
+          ) : managers.length ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {managers.map((manager) => (
+                <label key={manager.id} className="flex items-center gap-2.5 text-[15px]">
+                  <input
+                    className="size-4 shrink-0 accent-[var(--color-accent)]"
+                    type="checkbox"
+                    checked={grants[manager.id] ?? (!!sammlung && manager.category_ids.includes(sammlung.id))}
+                    onChange={(e) => setGrants({ ...grants, [manager.id]: e.target.checked })}
+                  />
+                  {manager.name}
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted">Noch niemand in der Redaktion.</p>
+          )}
+        </fieldset>
+      )}
       {action.feedback}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <button type="button" className={btn.secondary} onClick={onSaved}>
           Abbrechen
         </button>
         <button className={btn.primary} disabled={action.busy}>
-          Sammlung speichern
+          {definitionLocked ? 'Berechtigungen speichern' : 'Sammlung speichern'}
         </button>
       </div>
     </form>
@@ -454,7 +498,11 @@ export function SammlungDetail() {
   if (categories.isPending) return <Loading />;
   if (categories.error) return <Failure error={categories.error} retry={() => categories.refetch()} />;
   if (!sammlung) return <NotFound />;
-  return sammlung.repeatable ? <Fortlaufend sammlung={sammlung} /> : <Ballot sammlung={sammlung} />;
+  return sammlung.repeatable ? (
+    <Fortlaufend key={sammlung.id} sammlung={sammlung} />
+  ) : (
+    <Ballot key={sammlung.id} sammlung={sammlung} />
+  );
 }
 
 const BackLink = () => (
@@ -481,6 +529,8 @@ function Fortlaufend({ sammlung }: { sammlung: Category }) {
 }
 
 function CollectionReader({ sammlung }: { sammlung: Category }) {
+  const { user } = useSession();
+  const [editing, setEditing] = useState(false);
   const [search, setSearch] = useState('');
   const submissions = useData<Submission[]>(`/submissions?category_id=${sammlung.id}`);
   const items = (submissions.data ?? []).filter((s) =>
@@ -492,13 +542,24 @@ function CollectionReader({ sammlung }: { sammlung: Category }) {
       <PageHead
         title={sammlung.name}
         action={
-          <a className={btn.secondary} href={`/api/v1/categories/${sammlung.id}/export?status=all`}>
-            Alle Beiträge als ZIP <Arrow />
-          </a>
+          <div className="flex flex-wrap gap-3">
+            {canEdit(user, sammlung.id) && (
+              <button className={btn.secondary} onClick={() => setEditing(!editing)}>
+                {editing ? 'Formular schließen' : 'Sammlung bearbeiten'}
+              </button>
+            )}
+            <a className={btn.secondary} href={`/api/v1/categories/${sammlung.id}/export?status=all`}>
+              Alle Beiträge als ZIP <Arrow />
+            </a>
+          </div>
         }
       >
         <ClassLine sammlung={sammlung} />
       </PageHead>
+      <DevDebug label="Sammlung" data={debugData(sammlung)} />
+      {editing && canEdit(user, sammlung.id) && (
+        <SammlungForm key={sammlung.id} sammlung={sammlung} onSaved={() => setEditing(false)} />
+      )}
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className={heading}>Gesammelte Beiträge</h2>
@@ -623,7 +684,7 @@ function Ballot({ sammlung: poll }: { sammlung: Category }) {
       </PageHead>
       <DevDebug label="Sammlung" data={debugData(poll)} />
       {action.feedback}
-      {editing ? (
+      {editing && writable ? (
         <SammlungForm sammlung={poll} onSaved={() => setEditing(false)} />
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start">
@@ -713,7 +774,7 @@ function Ballot({ sammlung: poll }: { sammlung: Category }) {
             </p>
           </section>
           <aside className="min-w-0 space-y-6">
-            {writable && (
+            {writable && (poll.status !== 'closed' || user.role === 'admin') && (
               <section className={panel}>
                 <h3 className={heading}>Sammlung verwalten</h3>
                 <div className="mt-4 flex flex-col gap-3">
@@ -733,6 +794,11 @@ function Ballot({ sammlung: poll }: { sammlung: Category }) {
                         Die Definition kann nach dem Öffnen nicht mehr geändert werden.
                       </p>
                     </>
+                  )}
+                  {user.role === 'admin' && poll.status !== 'draft' && (
+                    <button className={btn.secondary} onClick={() => setEditing(true)}>
+                      Berechtigungen bearbeiten
+                    </button>
                   )}
                   {poll.status === 'open' && (
                     <button

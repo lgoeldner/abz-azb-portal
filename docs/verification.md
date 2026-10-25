@@ -109,3 +109,12 @@ The selection cap uses 56px circular buttons around a 36px editable number. At r
 - Migration 006 preserves definitions, options, current votes and history; proposal vote invariants cover atomic selection replacement, limits, turnout, results and audit privacy. Full recovery drill passed with both person and proposal multiple selections. Restored table signatures and immutable upload hashes matched, and the non-empty target guard refused restoration. Throwaway snapshot: `5115b7d9bc8295c588b8b56beea49e6bc4429968adca08e3fd2608085e17bd52`.
 
 The final integration with the concurrent participation dashboard and bundled-font updates passed `make check` again. Independent integration review confirmed that proposal multiselect retains distinct participation counts and privacy.
+
+## Shared collection management — 26 October 2026
+
+Redaktion members create every collection kind and receive its management grant in the creation transaction. Assigned editors can edit repeatable definitions; ballot definitions remain locked after opening. Collection creation, definition editing, and admin-only manager assignment now share the Sammlungen workspace. The former Verwaltung collection link is removed and its admin bookmarks redirect to `/sammlungen`. Admins can also change grants on opened or closed ballots without changing their definitions.
+
+- `make check` passed after integrating the concurrent participation and voting-control changes: disposable PostgreSQL race tests, vet, 83 component tests, TypeScript, production build, generated API contract, repo-map validation and linters. Permission tests cover all six kinds, creator grants, immediate annotation, revocation, unassigned denial and transaction rollback.
+- Independent critical review found no defects, including a second review of the merge resolution and locked-definition permission form.
+- Chromium checks passed for shared creation, admin-only assignment controls, old-bookmark redirects, diagnostics and supported viewport widths: 17 passed, one production-only diagnostic check skipped on the development preview. Desktop 1440px and phone 390px collection creation views were inspected.
+- Full disposable Docker recovery passed with the integrated migrations, preserved ballots/audit history, table signatures and attachment hashes. Non-empty restore targets were rejected. Temporary snapshot `b3fae6c36dbf3c1711fbdb1eddcceb4dc92416dd0626ca9b2ce9190ba50ce287` and the drill resources were cleaned up.

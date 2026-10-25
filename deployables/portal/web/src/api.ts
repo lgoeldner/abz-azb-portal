@@ -37,6 +37,18 @@ export const json = (method: string, value?: unknown): RequestInit => ({
   method,
   ...(value === undefined ? {} : { body: JSON.stringify(value) }),
 });
+export const patchUser = (u: User, change: Partial<User>) =>
+  api(
+    `/admin/users/${u.id}`,
+    json('PATCH', {
+      name: u.name,
+      role: u.role,
+      admitted: u.admitted,
+      cohort_member: u.cohort_member,
+      category_ids: u.category_ids,
+      ...change,
+    }),
+  );
 export const canEdit = (user: User, category: string) =>
   user.role === 'admin' || (user.role === 'manager' && user.category_ids.includes(category));
 export const editorial = (user: User) => user.role !== 'student';

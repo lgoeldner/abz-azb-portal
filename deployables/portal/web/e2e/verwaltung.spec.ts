@@ -43,6 +43,58 @@ test('row menu and confirm dialog keep keyboard focus in place', async ({ page }
   await expect(trigger).toBeFocused();
 });
 
+test('collection administration redirects to the shared workspace and adds admin options', async ({ page }) => {
+  await page.goto('/verwaltung/sammlungen');
+  await expect(page).toHaveURL(/\/sammlungen$/);
+  const aside = page.getByRole('complementary');
+  await expect(aside.locator('a[href="/verwaltung/sammlungen"]')).toHaveCount(0);
+  await expect(aside.getByRole('link', { name: 'Alle Sammlungen' })).toBeVisible();
+  await page.getByRole('button', { name: 'Neue Sammlung' }).click();
+  await expect(page.getByRole('group', { name: 'Wer darf bearbeiten' })).toBeVisible();
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: test.info().outputPath(`shared-collection-admin-${width}.png`) });
+  }
+});
+
+test('Redaktion creates every collection kind in the shared form without admin requests', async ({ page }) => {
+  const manager = { ...admin, id: 'manager-1', role: 'manager' };
+  const writes: Record<string, unknown>[] = [];
+  const adminRequests: string[] = [];
+  await page.route('**/api/v1/**', (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname.replace('/api/v1', '');
+    if (path.startsWith('/admin/')) adminRequests.push(path);
+    let data: unknown = [];
+    let status = 200;
+    if (path === '/me') data = { user: manager, csrf_token: 'csrf' };
+    if (path === '/categories' && request.method() === 'POST') {
+      const body = request.postDataJSON();
+      writes.push(body);
+      data = { ...body, id: 'created', version: 1 };
+      status = 201;
+    }
+    return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data) });
+  });
+  await page.goto('/sammlungen?neu');
+  await expect(page.getByLabel('Klasse').locator('option')).toHaveText([
+    'Ideen',
+    'Zitate',
+    'Erinnerungen',
+    'Fotos',
+    'Personenwahl',
+    'Vorschlagswahl',
+  ]);
+  await expect(page.getByRole('group', { name: 'Wer darf bearbeiten' })).toHaveCount(0);
+  await page.getByLabel('Name', { exact: true }).fill('Erinnerungen der Redaktion');
+  await page.getByRole('button', { name: 'Sammlung speichern' }).click();
+  await expect(page.getByText('Sammlung gespeichert.')).toBeVisible();
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toMatchObject({ kind: 'memory', options: [] });
+  expect(adminRequests).toEqual([]);
+});
+
 test('Verwaltung follows the selected workspace and keeps its editorial accent on direct visits', async ({ page }) => {
   await page.goto('/verwaltung/personen');
   const aside = page.getByRole('complementary');

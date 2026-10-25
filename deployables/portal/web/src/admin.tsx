@@ -1,36 +1,20 @@
-import {
-  Check,
-  GraduationCap,
-  MoreHorizontal,
-  Pencil,
-  PenLine,
-  Plus,
-  ShieldCheck,
-  type LucideIcon,
-} from 'lucide-react';
+import { Check, GraduationCap, MoreHorizontal, PenLine, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { api, ApiError, date, json, type AuditEvent, type Category, type SystemStatus, type User } from './api';
+import { api, ApiError, date, json, patchUser, type AuditEvent, type SystemStatus, type User } from './api';
 import {
-  Badge,
   Empty,
   Failure,
-  KindIcon,
   Loading,
   PageHead,
   btn,
   field,
   heading,
-  kindIcon,
-  kindLabel,
-  label,
   panel,
   roleName,
   useAction,
   useData,
   useSession,
 } from './ui';
-import { DevDebug } from './DevDebug';
-import { SammlungForm } from './sammlungen';
 
 type Role = User['role'];
 const roles: Role[] = ['student', 'manager', 'admin'];
@@ -43,18 +27,6 @@ const chip = 'inline-flex items-center gap-1 whitespace-nowrap rounded px-2 py-0
 const chipAction =
   'cursor-pointer ring-1 ring-transparent transition-shadow hover:ring-current focus-visible:ring-current disabled:opacity-60';
 const menuItem = 'flex w-full items-center justify-between gap-3 rounded px-3 py-2 text-left text-sm hover:bg-pill';
-const patchUser = (u: User, change: Partial<User>) =>
-  api(
-    `/admin/users/${u.id}`,
-    json('PATCH', {
-      name: u.name,
-      role: u.role,
-      admitted: u.admitted,
-      cohort_member: u.cohort_member,
-      category_ids: u.category_ids,
-      ...change,
-    }),
-  );
 // PATCH replaces every field, so build it from the current server record instead of the possibly stale list.
 const updateUser = async (u: User, change: Partial<User>) => {
   const now = (await api<User[]>('/admin/users')).find((x) => x.id === u.id);
@@ -412,128 +384,6 @@ function Confirm({
         </button>
       </div>
     </dialog>
-  );
-}
-
-// ---------- Sammlungen ----------
-export function Categories() {
-  const categories = useData<Category[]>('/categories');
-  const [editCategory, setEditCategory] = useState<Category | null>(null);
-  const [categoryForm, setCategoryForm] = useState(false);
-  return (
-    <>
-      <PageHead title="Sammlungen">Sammlungen der Zeitung anlegen und festlegen, wer sie bearbeiten darf.</PageHead>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className={heading}>Alle Sammlungen</h2>
-        <button
-          className={categoryForm ? btn.secondary : btn.primary}
-          onClick={() => {
-            setEditCategory(null);
-            setCategoryForm(true);
-          }}
-        >
-          Neue Sammlung <Plus aria-hidden="true" className="size-4 shrink-0" />
-        </button>
-      </div>
-      {categoryForm && (
-        <CategoryForm key={editCategory?.id ?? 'new'} category={editCategory} onSaved={() => setCategoryForm(false)} />
-      )}
-      {categories.isPending ? (
-        <Loading />
-      ) : categories.error ? (
-        <Failure error={categories.error} />
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {categories.data?.map((c) => {
-            const editable = c.repeatable || c.status === 'draft';
-            return (
-              <article className="flex min-w-0 flex-col gap-2 rounded-ui bg-white p-5" key={c.id}>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted">
-                    <KindIcon icon={kindIcon[c.kind]} />
-                    {kindLabel[c.kind]}
-                    {!c.repeatable && <Badge status={c.status} />}
-                  </span>
-                  {editable && (
-                    <button
-                      type="button"
-                      className="grid size-9 place-items-center rounded-full hover:bg-pill"
-                      aria-label={`Sammlung bearbeiten: ${c.name}`}
-                      title="Sammlung bearbeiten"
-                      onClick={() => {
-                        setEditCategory(c);
-                        setCategoryForm(true);
-                      }}
-                    >
-                      <Pencil aria-hidden="true" className="size-4" />
-                    </button>
-                  )}
-                </div>
-                <h3 className={heading}>{c.name}</h3>
-                <p className="text-sm text-muted">{c.description}</p>
-                <DevDebug label="Sammlung" data={{ id: c.id, kind: c.kind, status: c.status }} />
-              </article>
-            );
-          })}
-        </div>
-      )}
-    </>
-  );
-}
-
-// The shared Sammlung form plus manager assignment (category_ids) for both groups.
-function CategoryForm({ category, onSaved }: { category: Category | null; onSaved: () => void }) {
-  const users = useData<User[]>('/admin/users');
-  const [grants, setGrants] = useState<Record<string, boolean>>({});
-  const managers = (users.data ?? []).filter((u) => u.role === 'manager');
-  const has = (m: User) => !!category && m.category_ids.includes(category.id);
-  return (
-    <SammlungForm
-      sammlung={category}
-      onSaved={onSaved}
-      afterSave={async (saved) => {
-        // PATCH replaces category_ids, so apply only the ticked changes onto freshly loaded grants.
-        const current = await api<User[]>('/admin/users');
-        for (const m of current.filter((u) => u.role === 'manager')) {
-          const now = m.category_ids.includes(saved.id);
-          const want = grants[m.id] ?? now;
-          if (want !== now)
-            await patchUser(m, {
-              category_ids: want ? [...m.category_ids, saved.id] : m.category_ids.filter((c) => c !== saved.id),
-            });
-        }
-      }}
-      extra={
-        <fieldset className="min-w-0 space-y-3">
-          <legend className={label}>Wer darf bearbeiten</legend>
-          <p className="text-sm text-muted">
-            Die Administration darf immer alle Sammlungen bearbeiten. Die Redaktion liest alle Beiträge und bearbeitet
-            nur zugewiesene Sammlungen.
-          </p>
-          {users.isPending ? (
-            <Loading />
-          ) : users.error ? (
-            <Failure error={users.error} retry={() => users.refetch()} />
-          ) : managers.length ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {managers.map((m) => (
-                <label key={m.id} className="flex items-center gap-2.5 text-[15px]">
-                  <input
-                    className="size-4 shrink-0 accent-[var(--color-accent)]"
-                    type="checkbox"
-                    checked={grants[m.id] ?? has(m)}
-                    onChange={(e) => setGrants({ ...grants, [m.id]: e.target.checked })}
-                  />
-                  {m.name}
-                </label>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted">Noch niemand in der Redaktion.</p>
-          )}
-        </fieldset>
-      }
-    />
   );
 }
 
