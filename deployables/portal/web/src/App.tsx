@@ -17,7 +17,19 @@ import {
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { api, ApiError, editorial, json, setCsrf, type Category, type Me, type Submission, type User } from './api';
+import {
+  api,
+  ApiError,
+  canEdit,
+  date,
+  editorial,
+  json,
+  setCsrf,
+  type Category,
+  type Me,
+  type Submission,
+  type User,
+} from './api';
 import {
   Arrow,
   Badge,
@@ -716,15 +728,7 @@ function RoleGuard({ children, admin = false }: { children: ReactNode; admin?: b
 function Overview() {
   const { user } = useSession();
   const [view] = useWorkspaceView();
-  return view === 'redaktion' && editorial(user) ? (
-    user.role === 'admin' ? (
-      <AdminHome />
-    ) : (
-      <EditorHome />
-    )
-  ) : (
-    <StudentHome />
-  );
+  return view === 'redaktion' && editorial(user) ? <EditorialHome /> : <StudentHome />;
 }
 
 function StudentHome() {
@@ -899,61 +903,23 @@ function StudentHome() {
   );
 }
 
-// ponytail: min-h-28 keeps room for a per-row summary line; nothing generates one yet.
-function ThickRow({
-  to,
-  icon,
-  title,
-  badge,
-  meta,
-  count,
-  unit,
-  extra,
-  debug,
-}: {
-  to: string;
-  icon: LucideIcon;
-  title: string;
-  badge?: ReactNode;
-  meta: string;
-  count: number;
-  unit: [string, string];
-  extra?: string;
-  debug?: { label: string; data: Record<string, string | number | boolean | null | undefined> };
-}) {
-  return (
-    <li>
-      <Link to={to} className="flex min-h-28 items-start gap-4 bg-white p-5 transition-colors hover:bg-pop/30">
-        <KindIcon icon={icon} className="mt-1 size-5 text-muted" />
-        <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <strong className="text-lg font-extrabold leading-snug">{title}</strong>
-            {badge}
-          </span>
-          <small className="mt-1 block text-[13px] text-muted">{meta}</small>
-        </span>
-        <span className="ml-2 flex-none text-right">
-          <strong className="block text-3xl font-extrabold tabular-nums leading-none">{count}</strong>
-          <span className="mt-1 block text-[13px] text-muted">{unit[count === 1 ? 0 : 1]}</span>
-          {extra && <span className="block text-[13px] tabular-nums text-muted">{extra}</span>}
-        </span>
-      </Link>
-      {import.meta.env.DEV && debug && (
-        <div className="px-5 pb-2">
-          <DevDebug label={debug.label} data={debug.data} />
-        </div>
-      )}
-    </li>
-  );
-}
-const rows = 'mt-4 divide-y divide-line overflow-hidden rounded-ui bg-white';
-
-function AdminHome() {
-  const users = useData<User[]>('/admin/users');
+function EditorialHome() {
+  const { user } = useSession();
+  const isAdmin = user.role === 'admin';
+  const users = useData<User[]>('/admin/users', isAdmin);
   const categories = useData<Category[]>('/categories');
   const submissions = useData<Submission[]>('/submissions');
   const waiting = (users.data ?? []).filter((u) => !u.admitted).sort((a, b) => time(b.created_at) - time(a.created_at));
-  const latest = [...(categories.data ?? [])].sort(newestOpened).slice(0, 4);
+  const latest = isAdmin
+    ? [...(categories.data ?? [])].sort(newestOpened).slice(0, 4)
+    : (categories.data ?? [])
+        .filter((c) => !c.repeatable && canEdit(user, c.id))
+        .sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || newestOpened(a, b));
+  const writableCategoryIds = new Set((categories.data ?? []).filter((c) => canEdit(user, c.id)).map((c) => c.id));
+  const writableSubmissions = (submissions.data ?? []).filter((s) => writableCategoryIds.has(s.category_id));
+  const recentSubmissions = [...writableSubmissions]
+    .sort((a, b) => time(b.created_at) - time(a.created_at))
+    .slice(0, 3);
   const card = 'flex min-w-0 flex-col rounded-ui bg-white p-5 sm:p-6';
   const figure = 'block text-4xl font-extrabold tabular-nums leading-none tracking-tight';
   const state = (q: { isPending: boolean; error: Error | null; refetch: () => unknown }) =>
@@ -964,6 +930,22 @@ function AdminHome() {
     ) : q.error ? (
       <div className="mt-4">
         <Failure error={q.error} retry={() => q.refetch()} />
+      </div>
+    ) : null;
+  const managerCategoriesState =
+    categories.isPending || submissions.isPending ? (
+      <div className="mt-4">
+        <Loading />
+      </div>
+    ) : categories.error || submissions.error ? (
+      <div className="mt-4">
+        <Failure
+          error={(categories.error ?? submissions.error)!}
+          retry={() => {
+            categories.refetch();
+            submissions.refetch();
+          }}
+        />
       </div>
     ) : null;
   const initials = (name: string) =>
@@ -977,19 +959,23 @@ function AdminHome() {
       .toUpperCase();
   return (
     <>
-      <PageHead title="Redaktion">Zugänge und Sammlungen im Überblick.</PageHead>
+      <PageHead title="Redaktion">
+        {isAdmin
+          ? 'Zugänge und Sammlungen im Überblick.'
+          : 'Überblick über Rubriken und Beiträge aus den Sammlungen, die dir zugewiesen sind.'}
+      </PageHead>
       <section aria-labelledby="home-sammlungen" className="mb-10">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h2 id="home-sammlungen" className={heading}>
             Sammlungen
           </h2>
         </div>
-        {state(categories) ?? (
+        {(isAdmin ? state(categories) : managerCategoriesState) ?? (
           <ul className="mt-4 grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">
             {allKinds.map((kind) => {
-              const mine = (categories.data ?? []).filter((c) => c.kind === kind);
+              const mine = (categories.data ?? []).filter((c) => c.kind === kind && canEdit(user, c.id));
               const ids = new Set(mine.map((c) => c.id));
-              const n = (submissions.data ?? []).filter((s) => ids.has(s.category_id)).length;
+              const n = writableSubmissions.filter((s) => ids.has(s.category_id)).length;
               const repeatable = repeatableKinds.includes(kind);
               return (
                 <li key={kind} className="min-w-0">
@@ -1036,75 +1022,131 @@ function AdminHome() {
         )}
       </section>
       <div className="grid items-start gap-4 lg:grid-cols-[5fr_7fr]">
-        <section aria-labelledby="home-personen" className={card}>
-          <h2 id="home-personen" className={`${heading} flex items-center gap-2`}>
-            <Users aria-hidden="true" className="size-[18px] shrink-0" />
-            Personen
-          </h2>
-          {state(users) ?? (
-            <>
-              <div className="mt-5 flex flex-wrap gap-x-10 gap-y-3">
-                <p>
-                  <strong className={figure}>{users.data?.length}</strong>
-                  <span className="mt-1.5 block text-[13px] text-muted">Angemeldet</span>
-                </p>
-                <p>
-                  <strong className={`${figure} ${waiting.length ? 'text-wait' : ''}`}>{waiting.length}</strong>
-                  <span className="mt-1.5 block text-[13px] text-muted">
-                    {waiting.length === 1 ? 'wartet' : 'warten'} auf Freigabe
-                  </span>
-                </p>
-              </div>
-              <h3 className="mt-7 flex items-center gap-2 text-sm font-bold">
-                <Hourglass aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0 text-muted" />
-                Zuletzt angemeldet, noch nicht freigegeben
-              </h3>
-              {waiting.length === 0 ? (
-                <p className="mt-2 flex items-center gap-2 text-[15px] text-muted">
-                  <UserCheck aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0" />
-                  Alle sind freigegeben.
-                </p>
-              ) : (
-                <ul aria-label="Warten auf Freigabe" className="mt-2 divide-y divide-line">
-                  {waiting.slice(0, 3).map((u) => (
-                    <li key={u.id}>
-                      <Link
-                        to="/verwaltung/personen"
-                        className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30"
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="grid size-8 flex-none place-items-center rounded-full bg-soft text-xs font-bold text-ink"
+        {isAdmin ? (
+          <section aria-labelledby="home-personen" className={card}>
+            <h2 id="home-personen" className={`${heading} flex items-center gap-2`}>
+              <Users aria-hidden="true" className="size-[18px] shrink-0" />
+              Personen
+            </h2>
+            {state(users) ?? (
+              <>
+                <div className="mt-5 flex flex-wrap gap-x-10 gap-y-3">
+                  <p>
+                    <strong className={figure}>{users.data?.length}</strong>
+                    <span className="mt-1.5 block text-[13px] text-muted">Angemeldet</span>
+                  </p>
+                  <p>
+                    <strong className={`${figure} ${waiting.length ? 'text-wait' : ''}`}>{waiting.length}</strong>
+                    <span className="mt-1.5 block text-[13px] text-muted">
+                      {waiting.length === 1 ? 'wartet' : 'warten'} auf Freigabe
+                    </span>
+                  </p>
+                </div>
+                <h3 className="mt-7 flex items-center gap-2 text-sm font-bold">
+                  <Hourglass aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0 text-muted" />
+                  Zuletzt angemeldet, noch nicht freigegeben
+                </h3>
+                {waiting.length === 0 ? (
+                  <p className="mt-2 flex items-center gap-2 text-[15px] text-muted">
+                    <UserCheck aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0" />
+                    Alle sind freigegeben.
+                  </p>
+                ) : (
+                  <ul aria-label="Warten auf Freigabe" className="mt-2 divide-y divide-line">
+                    {waiting.slice(0, 3).map((u) => (
+                      <li key={u.id}>
+                        <Link
+                          to="/verwaltung/personen"
+                          className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30"
                         >
-                          {initials(u.name) || '?'}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{u.name}</span>
-                        <span className="flex-none text-[13px] text-muted">{since(u.created_at)}</span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {waiting.length > 3 && <p className="mt-1 text-[13px] text-muted">und {waiting.length - 3} weitere</p>}
-              <Link to="/verwaltung/personen" className={`${btn.text} mt-5 self-start`}>
-                Zugänge verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-              </Link>
-              <DevDebug
-                label="Personen"
-                data={{
-                  total: users.data?.length ?? 0,
-                  waiting: waiting.length,
-                  admins: (users.data ?? []).filter((u) => u.role === 'admin').length,
-                }}
-              />
-            </>
-          )}
-        </section>
+                          <span
+                            aria-hidden="true"
+                            className="grid size-8 flex-none place-items-center rounded-full bg-soft text-xs font-bold text-ink"
+                          >
+                            {initials(u.name) || '?'}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{u.name}</span>
+                          <span className="flex-none text-[13px] text-muted">{since(u.created_at)}</span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {waiting.length > 3 && <p className="mt-1 text-[13px] text-muted">und {waiting.length - 3} weitere</p>}
+                <Link to="/verwaltung/personen" className={`${btn.text} mt-5 self-start`}>
+                  Zugänge verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
+                </Link>
+                <DevDebug
+                  label="Personen"
+                  data={{
+                    total: users.data?.length ?? 0,
+                    waiting: waiting.length,
+                    admins: (users.data ?? []).filter((u) => u.role === 'admin').length,
+                  }}
+                />
+              </>
+            )}
+          </section>
+        ) : (
+          <section aria-labelledby="home-beitraege" className={card}>
+            <h2 id="home-beitraege" className={`${heading} flex items-center gap-2`}>
+              <FileText aria-hidden="true" className="size-[18px] shrink-0" />
+              Gesammelte Beiträge
+            </h2>
+            <p className="mt-5">
+              <strong className={figure}>
+                {categories.isPending || submissions.isPending || categories.error || submissions.error
+                  ? '–'
+                  : writableSubmissions.length}
+              </strong>
+              <span className="mt-1.5 block text-[13px] text-muted">In deinen zugewiesenen Sammlungen</span>
+            </p>
+            {categories.isPending || submissions.isPending ? (
+              <div className="mt-4">
+                <Loading />
+              </div>
+            ) : categories.error || submissions.error ? (
+              <div className="mt-4">
+                <Failure
+                  error={(categories.error ?? submissions.error)!}
+                  retry={() => {
+                    categories.refetch();
+                    submissions.refetch();
+                  }}
+                />
+              </div>
+            ) : recentSubmissions.length === 0 ? (
+              <div className="mt-4">
+                <Empty>In deinen zugewiesenen Sammlungen gibt es noch keine Beiträge.</Empty>
+              </div>
+            ) : (
+              <ul className="mt-3 divide-y divide-line">
+                {recentSubmissions.map((submission) => (
+                  <li key={submission.id}>
+                    <Link
+                      to={`/redaktion/beitraege/${submission.id}`}
+                      className="-mx-2 flex min-w-0 items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <strong className="block truncate text-[15px] font-semibold">{submission.title}</strong>
+                        <small className="mt-0.5 block text-[13px] text-muted">
+                          {categories.data?.find((c) => c.id === submission.category_id)?.name ?? 'Beitrag'} ·{' '}
+                          {date(submission.created_at)}
+                        </small>
+                      </span>
+                      <Badge status={submission.status} />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
         <section aria-labelledby="home-neueste" className={card}>
           <div className="flex items-baseline justify-between gap-4">
             <h2 id="home-neueste" className={`${heading} flex items-center gap-2`}>
               <Vote aria-hidden="true" className="size-[18px] shrink-0" />
-              Neueste Sammlungen
+              {isAdmin ? 'Neueste Sammlungen' : 'Deine Sammlungen'}
             </h2>
             <Link to="/sammlungen" className={btn.text}>
               Alle <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
@@ -1113,7 +1155,14 @@ function AdminHome() {
           {state(categories) ??
             (latest.length === 0 ? (
               <div className="mt-4">
-                <Empty>Noch keine Sammlung.</Empty>
+                {isAdmin ? (
+                  <Empty>Noch keine Sammlung.</Empty>
+                ) : (
+                  <Empty>
+                    Dir sind noch keine Wahl-Sammlungen zugewiesen.{' '}
+                    <Link to="/sammlungen?neu">Neue Sammlung anlegen →</Link>
+                  </Empty>
+                )}
               </div>
             ) : (
               <ul className="mt-3 divide-y divide-line">
@@ -1200,124 +1249,6 @@ function AdminHome() {
             ))}
         </section>
       </div>
-    </>
-  );
-}
-
-function EditorHome() {
-  const categories = useData<Category[]>('/categories');
-  const submissions = useData<Submission[]>('/submissions');
-  const collected = (submissions.data ?? []).length;
-  const open = (categories.data ?? []).filter((c) => !c.repeatable && c.status === 'open').length;
-  const fact =
-    !categories.data || !submissions.data
-      ? ''
-      : `${plural(collected, 'Beitrag', 'Beiträge')} gesammelt, ${open === 0 ? 'keine Wahl offen' : plural(open, 'Wahl', 'Wahlen') + ' offen'}`;
-  const ballots = (categories.data ?? [])
-    .filter((c) => !c.repeatable)
-    .sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || newestOpened(a, b));
-  const fortlaufend = (categories.data ?? []).filter((c) => c.repeatable);
-  return (
-    <>
-      <PageHead title="Redaktion">{fact || 'Einen Moment …'}</PageHead>
-      <section aria-labelledby="home-sammlungen">
-        <h2 id="home-sammlungen" className={heading}>
-          Sammlungen
-        </h2>
-        {categories.isPending ? (
-          <div className="mt-4">
-            <Loading />
-          </div>
-        ) : categories.error ? (
-          <div className="mt-4">
-            <Failure error={categories.error} retry={() => categories.refetch()} />
-          </div>
-        ) : ballots.length === 0 ? (
-          <div className="mt-4">
-            <Empty>
-              Noch keine Wahl. <Link to="/sammlungen?neu">Neue Sammlung anlegen →</Link>
-            </Empty>
-          </div>
-        ) : (
-          <ul className={rows}>
-            {ballots.map((p) => (
-              <ThickRow
-                key={p.id}
-                to={`/sammlungen/${p.id}`}
-                icon={kindIcon[p.kind]}
-                title={p.name}
-                badge={<Badge status={p.status} />}
-                meta={[
-                  kindLabel[p.kind],
-                  plural(p.options.length, 'Option', 'Optionen'),
-                  p.status === 'open' ? since(p.opened_at) : '',
-                ]
-                  .filter(Boolean)
-                  .join(', ')}
-                count={p.ballot_count ?? 0}
-                unit={['Stimme', 'Stimmen']}
-                debug={{
-                  label: 'Sammlung',
-                  data: {
-                    id: p.id,
-                    status: p.status,
-                    kind: p.kind,
-                    version: p.version,
-                    options: p.options.length,
-                    allowSelfVote: p.allow_self_vote,
-                  },
-                }}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
-      <section aria-labelledby="home-fortlaufend" className="mt-10">
-        <h2 id="home-fortlaufend" className={heading}>
-          Fortlaufend
-        </h2>
-        {categories.isPending || submissions.isPending ? (
-          <div className="mt-4">
-            <Loading />
-          </div>
-        ) : categories.error || submissions.error ? (
-          <div className="mt-4">
-            <Failure
-              error={(categories.error ?? submissions.error)!}
-              retry={() => {
-                categories.refetch();
-                submissions.refetch();
-              }}
-            />
-          </div>
-        ) : (
-          <ul className={rows}>
-            {fortlaufend.map((c) => {
-              const mine = (submissions.data ?? []).filter((s) => s.category_id === c.id);
-              return (
-                <ThickRow
-                  key={c.id}
-                  to={`/sammlungen/${c.id}`}
-                  icon={kindIcon[c.kind]}
-                  title={c.name}
-                  meta={c.description || kindLabel[c.kind]}
-                  count={mine.length}
-                  unit={['Beitrag', 'Beiträge']}
-                  debug={{
-                    label: 'Sammlung',
-                    data: {
-                      id: c.id,
-                      kind: c.kind,
-                      submissions: mine.length,
-                      pending: mine.filter((s) => s.status === 'pending').length,
-                    },
-                  }}
-                />
-              );
-            })}
-          </ul>
-        )}
-      </section>
     </>
   );
 }
