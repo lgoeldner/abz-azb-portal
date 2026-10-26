@@ -689,16 +689,25 @@ describe('navigation by view', () => {
     },
   );
 
-  it('treats multi-selection ballots as submitted even without the legacy single-option field', async () => {
+  it('treats multi-selection and saved-word ballots as submitted without a legacy single-option field', async () => {
     mount(user, {
-      polls: [poll('multi', 'Mehrfachwahl', { my_option_ids: ['multi-a'], my_option_id: null })],
+      polls: [
+        poll('multi', 'Mehrfachwahl', { my_option_ids: ['multi-a'], my_option_id: null }),
+        poll('words', 'Wortwolke', { kind: 'words', options: [], my_option_ids: [], my_words: ['feier'] }),
+      ],
       submissions: [],
     });
     const aside = await screen.findByRole('complementary');
     const voted = await within(aside).findByRole('link', { name: /Mehrfachwahl/ });
     expect(voted.closest('details')).not.toBeNull();
+    expect(
+      within(aside)
+        .getByRole('link', { name: /Wortwolke/ })
+        .closest('details'),
+    ).not.toBeNull();
     const main = screen.getByRole('main');
     expect(within(main).queryByRole('heading', { name: 'Mehrfachwahl' })).toBeNull();
+    expect(within(main).queryByRole('heading', { name: 'Wortwolke' })).toBeNull();
   });
 
   it.each([
@@ -957,7 +966,7 @@ describe('admin home', () => {
     const widgets = screen.getByRole('region', { name: 'Sammlungen' });
     const tile = (name: string) => within(widgets).getByText(name).closest('a')!;
     await waitFor(() => expect(tile('Erinnerungen')).toHaveTextContent('1 Sammlung'));
-    expect(within(widgets).getAllByRole('listitem')).toHaveLength(6);
+    expect(within(widgets).getAllByRole('listitem')).toHaveLength(7);
     expect(tile('Erinnerungen')).toHaveTextContent('3 Beiträge');
     expect(tile('Erinnerungen')).toHaveAttribute('href', '/sammlungen?klasse=memory');
     expect(tile('Zitate')).toHaveTextContent('1 Sammlung');
@@ -971,6 +980,7 @@ describe('admin home', () => {
     expect(tile('Personenwahl')).toHaveTextContent('2 Sammlungen');
     expect(tile('Personenwahl')).toHaveTextContent('2 offen 0 beendet');
     expect(tile('Personenwahl')).toHaveAttribute('href', '/sammlungen?klasse=person');
+    expect(tile('Wortwolke')).toHaveTextContent('0 Sammlungen');
   });
 });
 
@@ -1060,7 +1070,7 @@ describe('editor home', () => {
       '50',
     );
     const tiles = within(screen.getByRole('region', { name: 'Sammlungen' }));
-    expect(tiles.getAllByRole('listitem')).toHaveLength(6);
+    expect(tiles.getAllByRole('listitem')).toHaveLength(7);
     expect(tiles.getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('1 Sammlung');
     expect(tiles.getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('4 Beiträge');
     expect(tiles.getByRole('link', { name: /Vorschlagswahl/ })).toHaveTextContent('3 Sammlungen');
@@ -1359,14 +1369,14 @@ describe('sammlungen', () => {
     );
   });
 
-  it('offers managers all six classes and creates a choice poll', async () => {
+  it('offers all seven classes to managers and creates a choice poll', async () => {
     const calls = mount('/sammlungen?neu', manager);
     const klasse = await screen.findByLabelText('Klasse');
     expect(
       within(klasse)
         .getAllByRole('option')
         .map((o) => o.textContent),
-    ).toEqual(['Ideen', 'Zitate', 'Erinnerungen', 'Fotos', 'Personenwahl', 'Vorschlagswahl']);
+    ).toEqual(['Ideen', 'Zitate', 'Erinnerungen', 'Fotos', 'Personenwahl', 'Vorschlagswahl', 'Wortwolke']);
     fireEvent.change(klasse, { target: { value: 'proposal' } });
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Neues Motto' } });
     fireEvent.change(screen.getByLabelText(/Antwortoptionen/), { target: { value: 'A\nB' } });
@@ -1424,14 +1434,14 @@ describe('sammlungen', () => {
     expect(screen.queryByText('Wer darf bearbeiten')).toBeNull();
   });
 
-  it('offers admins all six classes and hides option fields for repeatable ones', async () => {
+  it('offers all seven classes to admins and hides option fields for repeatable ones', async () => {
     mount('/sammlungen?neu', admin);
     const klasse = await screen.findByLabelText('Klasse');
     expect(
       within(klasse)
         .getAllByRole('option')
         .map((o) => o.textContent),
-    ).toEqual(['Ideen', 'Zitate', 'Erinnerungen', 'Fotos', 'Personenwahl', 'Vorschlagswahl']);
+    ).toEqual(['Ideen', 'Zitate', 'Erinnerungen', 'Fotos', 'Personenwahl', 'Vorschlagswahl', 'Wortwolke']);
     expect(screen.queryByLabelText(/Antwortoptionen/)).toBeNull();
     fireEvent.change(klasse, { target: { value: 'proposal' } });
     expect(screen.getByLabelText(/Antwortoptionen/)).toBeInTheDocument();

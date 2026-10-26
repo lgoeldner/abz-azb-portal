@@ -2,6 +2,7 @@ import {
   ArrowUpRight,
   BookHeart,
   Camera,
+  Hash,
   Lightbulb,
   ListChecks,
   Quote,
@@ -167,6 +168,7 @@ export const kindIcon: Record<Kind, LucideIcon> = {
   photo: Camera,
   person: UserRound,
   proposal: ListChecks,
+  words: Hash,
 };
 export const kindLabel: Record<Kind, string> = {
   idea: 'Ideen',
@@ -175,9 +177,10 @@ export const kindLabel: Record<Kind, string> = {
   photo: 'Fotos',
   person: 'Personenwahl',
   proposal: 'Vorschlagswahl',
+  words: 'Wortwolke',
 };
 export const repeatableKinds: Kind[] = ['idea', 'quote', 'memory', 'photo'];
-export const singleKinds: Kind[] = ['person', 'proposal'];
+export const singleKinds: Kind[] = ['person', 'proposal', 'words'];
 export const allKinds: Kind[] = [...repeatableKinds, ...singleKinds];
 export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const time = (value: string | null | undefined) => (value ? new Date(value).getTime() : 0);

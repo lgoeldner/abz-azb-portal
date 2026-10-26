@@ -22,6 +22,7 @@ type Category struct {
 	AllPeople     bool                 `json:"all_people"`
 	MaxChoices    int                  `json:"max_choices"`
 	Options       []PollOption         `json:"options"`
+	MyWords       []string             `json:"my_words"`
 	MyOptionID    *string              `json:"my_option_id"`
 	MyOptionIDs   []string             `json:"my_option_ids"`
 	Version       int                  `json:"version"`
@@ -83,6 +84,14 @@ type PollResult struct {
 	OptionID string `json:"option_id"`
 	Label    string `json:"label"`
 	Count    int    `json:"count"`
+}
+type WordEntry struct {
+	OptionID string `json:"option_id"`
+	Word     string `json:"word"`
+	Label    string `json:"label"`
+	Excluded bool   `json:"excluded"`
+	Count    int    `json:"count"`
+	Version  int    `json:"version"`
 }
 type BallotAudit struct {
 	BallotID    *string   `json:"ballot_id"`

@@ -2,8 +2,12 @@ package portal
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"slices"
+	"strings"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func (a *App) vote(w http.ResponseWriter, r *http.Request) error {
@@ -11,34 +15,11 @@ func (a *App) vote(w http.ResponseWriter, r *http.Request) error {
 	var in struct {
 		OptionID  json.RawMessage `json:"option_id"`
 		OptionIDs json.RawMessage `json:"option_ids"`
+		Words     json.RawMessage `json:"words"`
 	}
 	if e := decode(w, r, &in); e != nil {
 		return e
 	}
-	if len(in.OptionID) != 0 && len(in.OptionIDs) != 0 {
-		return bad("Nur option_id oder option_ids angeben.")
-	}
-	ids := []string{}
-	if len(in.OptionID) != 0 {
-		var id string
-		if json.Unmarshal(in.OptionID, &id) != nil {
-			return bad("Ungültige Option.")
-		}
-		ids = append(ids, id)
-	} else if len(in.OptionIDs) != 0 && json.Unmarshal(in.OptionIDs, &ids) != nil {
-		return bad("Ungültige Optionen.")
-	}
-	if len(ids) == 0 {
-		return bad("Mindestens eine Option erforderlich.")
-	}
-	seen := map[string]bool{}
-	for _, id := range ids {
-		if !validID(id) || seen[id] {
-			return bad("Ungültige oder doppelte Option.")
-		}
-		seen[id] = true
-	}
-	slices.Sort(ids)
 	tx, e := a.DB.Begin(r.Context())
 	if e != nil {
 		return e
@@ -64,6 +45,100 @@ func (a *App) vote(w http.ResponseWriter, r *http.Request) error {
 	if !eligible {
 		return forbidden()
 	}
+	if p.Kind == "words" {
+		if len(in.Words) == 0 || len(in.OptionID) != 0 || len(in.OptionIDs) != 0 {
+			return bad("Für diese Abstimmung ist ausschließlich words erforderlich.")
+		}
+		var words []string
+		if json.Unmarshal(in.Words, &words) != nil || len(words) == 0 {
+			return bad("Mindestens ein gültiges Wort ist erforderlich.")
+		}
+		if len(words) > p.MaxChoices {
+			return bad("Zu viele Wörter ausgewählt.")
+		}
+		type chosenWord struct{ id, word string }
+		selected := make([]chosenWord, 0, len(words))
+		seen := map[string]bool{}
+		position := 0
+		if e = tx.QueryRow(r.Context(), "SELECT COALESCE(max(position)+1,0) FROM poll_options WHERE poll_id=$1", p.ID).Scan(&position); e != nil {
+			return e
+		}
+		for _, raw := range words {
+			word, normalizeErr := normalizeWord(raw)
+			if normalizeErr != nil {
+				return normalizeErr
+			}
+			if seen[word] {
+				return bad("Wörter dürfen nach der Normalisierung nicht doppelt vorkommen.")
+			}
+			seen[word] = true
+			var optionID string
+			e = tx.QueryRow(r.Context(), "SELECT id::text FROM poll_options WHERE poll_id=$1 AND label=$2", p.ID, word).Scan(&optionID)
+			if e != nil && !errors.Is(e, pgx.ErrNoRows) {
+				return e
+			}
+			if errors.Is(e, pgx.ErrNoRows) {
+				optionID = ID()
+				if _, e = tx.Exec(r.Context(), "INSERT INTO poll_options(id,poll_id,label,position) VALUES($1,$2,$3,$4)", optionID, p.ID, word, position); e != nil {
+					return e
+				}
+				position++
+			}
+			selected = append(selected, chosenWord{id: optionID, word: word})
+		}
+		slices.SortFunc(selected, func(a, b chosenWord) int { return strings.Compare(a.id, b.id) })
+		ids := make([]string, len(selected))
+		orderedWords := make([]string, len(selected))
+		for i, choice := range selected {
+			ids[i], orderedWords[i] = choice.id, choice.word
+		}
+		if !slices.Equal(p.MyOptionIDs, ids) {
+			if _, e = tx.Exec(r.Context(), "DELETE FROM ballots WHERE poll_id=$1 AND user_id=$2", p.ID, u.ID); e != nil {
+				return e
+			}
+			ballotID := ID()
+			for _, id := range ids {
+				if _, e = tx.Exec(r.Context(), "INSERT INTO ballots(poll_id,user_id,option_id) VALUES($1,$2,$3)", p.ID, u.ID, id); e != nil {
+					return e
+				}
+				if _, e = tx.Exec(r.Context(), "INSERT INTO ballot_audit(id,poll_id,user_id,option_id,ballot_id) VALUES($1,$2,$3,$4,$5)", ID(), p.ID, u.ID, id, ballotID); e != nil {
+					return e
+				}
+			}
+		}
+		if e = tx.Commit(r.Context()); e != nil {
+			return e
+		}
+		jsonOut(w, 200, map[string]any{"words": orderedWords, "option_ids": ids, "option_id": ids[0]})
+		return nil
+	}
+	if len(in.Words) != 0 {
+		return bad("Für diese Abstimmung sind nur option_id oder option_ids erlaubt.")
+	}
+	if len(in.OptionID) != 0 && len(in.OptionIDs) != 0 {
+		return bad("Nur option_id oder option_ids angeben.")
+	}
+	ids := []string{}
+	if len(in.OptionID) != 0 {
+		var id string
+		if json.Unmarshal(in.OptionID, &id) != nil {
+			return bad("Ungültige Option.")
+		}
+		ids = append(ids, id)
+	} else if len(in.OptionIDs) != 0 && json.Unmarshal(in.OptionIDs, &ids) != nil {
+		return bad("Ungültige Optionen.")
+	}
+	if len(ids) == 0 {
+		return bad("Mindestens eine Option erforderlich.")
+	}
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if !validID(id) || seen[id] {
+			return bad("Ungültige oder doppelte Option.")
+		}
+		seen[id] = true
+	}
+	slices.Sort(ids)
 	if len(ids) > p.MaxChoices {
 		return bad("Zu viele Optionen ausgewählt.")
 	}
@@ -115,6 +190,14 @@ func (a *App) results(w http.ResponseWriter, r *http.Request) error {
 	}
 	if c.Repeatable {
 		return bad("Diese Sammlung hat keine Abstimmung.")
+	}
+	if c.Kind == "words" {
+		out, err := wordResults(r.Context(), a.DB, id)
+		if err != nil {
+			return err
+		}
+		jsonOut(w, 200, out)
+		return nil
 	}
 	rows, e := a.DB.Query(r.Context(), "SELECT o.id::text,o.label,count(b.user_id)::int FROM poll_options o LEFT JOIN ballots b ON b.option_id=o.id AND b.poll_id=o.poll_id WHERE o.poll_id=$1 GROUP BY o.id ORDER BY o.position", id)
 	if e != nil {

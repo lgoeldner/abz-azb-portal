@@ -101,6 +101,20 @@ WHERE poll_id='30000000-0000-4000-8000-000000000001' ORDER BY position LIMIT 2;
 INSERT INTO ballot_audit(id,poll_id,user_id,option_id,ballot_id)
 SELECT gen_random_uuid(),poll_id,user_id,option_id,'50000000-0000-4000-8000-000000000004'
 FROM ballots WHERE poll_id='30000000-0000-4000-8000-000000000001';
+-- Word portraits preserve originals, moderation (including merged/excluded
+-- labels), current votes and named history as part of the same recovery set.
+INSERT INTO categories(id,name,description,kind,status,max_choices,opened_at)
+VALUES ('60000000-0000-4000-8000-000000000001','Recovery word portrait','','words','open',3,now());
+INSERT INTO poll_options(id,poll_id,label,position,word_label,excluded,moderation_version) VALUES
+('60000000-0000-4000-8000-000000000101','60000000-0000-4000-8000-000000000001','chaotisch',0,'chaos',false,2),
+('60000000-0000-4000-8000-000000000102','60000000-0000-4000-8000-000000000001','chaos',1,NULL,false,1),
+('60000000-0000-4000-8000-000000000103','60000000-0000-4000-8000-000000000001','ausgeblendet',2,NULL,true,2);
+INSERT INTO ballots(poll_id,user_id,option_id)
+SELECT poll_id,'00000000-0000-4000-8000-000000000003',id FROM poll_options
+WHERE poll_id='60000000-0000-4000-8000-000000000001';
+INSERT INTO ballot_audit(id,poll_id,user_id,option_id,ballot_id)
+SELECT gen_random_uuid(),poll_id,user_id,option_id,'60000000-0000-4000-8000-000000000201'
+FROM ballots WHERE poll_id='60000000-0000-4000-8000-000000000001';
 SQL
 
 capture_signature() {
@@ -172,4 +186,4 @@ if ! dc exec "$pg" psql -X -qAt -U portal -d portal_restore -c \
   exit 1
 fi
 
-echo "Recovery drill passed for snapshot $snapshot (migrations, seed data, revisions, ballots, and attachment files verified)."
+echo "Recovery drill passed for snapshot $snapshot (migrations, seed data, revisions, word moderation, ballots, and attachment files verified)."

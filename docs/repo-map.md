@@ -23,7 +23,7 @@ file `Makefile` :: dev, check, lint, audit, backup, restore, migrate targets [ma
 file `.github/workflows/ci.yaml` :: CI: lint, audit, Go/web tests, e2e [ci, github]
 file `.githooks/pre-commit` :: prettier and gofmt on staged files [hook, format]
 file `docs/implementation-contract.md` :: binding API/permission contract, lead-owned [contract, permissions, types]
-file `docs/poll-implementation-plans.md` :: ten concise proposed poll formats with implementation steps and invariant tests [poll, plan, voting]
+file `docs/poll-implementation-plans.md` :: nine proposed poll formats and the implemented configurable word portrait with implementation steps and invariant tests [poll, plan, voting]
 file `docs/openapi.json` :: OpenAPI spec; source of generated TS types [openapi, schema]
 file `docs/verification.md` :: how the system was verified [verification]
 file `docs/school-login.md` :: school OIDC integration notes [login, oidc, production]
@@ -41,7 +41,7 @@ cmd `scripts/doctor.sh` :: checks local prerequisites [setup]
 cmd `scripts/env.sh` :: creates .env.dev [env]
 cmd `scripts/check-contract.mjs` :: routes in http.go vs openapi.json; `--write` regenerates `deployables/portal/web/src/generated/api.d.ts` [contract, codegen]
 cmd `scripts/check-repo-map.sh` :: fails if a path in this map no longer exists [map, stale]
-cmd `scripts/test-recovery.sh` :: backup/restore against throwaway containers [recovery, backup]
+cmd `scripts/test-recovery.sh` :: backup/restore against throwaway containers, including word originals, moderation, ballots and history [recovery, backup, words]
 cmd `scripts/test-compose-startup.sh` :: disposable cold/existing runtime starts before PostgreSQL, then Compose restart and readiness checks [docker, startup, restart, regression]
 
 ## Backend (deployables/portal/server)
@@ -52,10 +52,12 @@ file `deployables/portal/server/migrations/migrations.go` :: embeds numbered SQL
 file `deployables/portal/server/migrations/001_initial.sql` :: base schema: users, categories, submissions, revisions, attachments, corrections, poll_options, ballots, ballot_audit, audit_events [schema, tables]
 file `deployables/portal/server/migrations/004_polls_become_categories.sql` :: polls merged into categories (single-answer kinds), polls table dropped [sammlung, poll, migration]
 file `deployables/portal/server/migrations/005_people_multiselect.sql` :: preserves existing votes and candidates; people mode, choice cap, unique multi-selection and grouped audit snapshots [migration, poll]
+file `deployables/portal/server/migrations/007_word_polls.sql` :: word category kind and reversible option-label moderation without rewriting originals [migration, words, moderation]
 file `deployables/portal/server/migrations/006_proposal_multiselect.sql` :: allows proposal selection caps while preserving existing poll definitions and ballots [migration, proposal, choices]
 file `deployables/portal/server/internal/portal/http.go` :: App, router (all `bind(` routes), errors, canEdit/canRead/canMutate, CSRF/session middleware [routes, permissions, middleware]
 file `deployables/portal/server/internal/portal/types.go` :: JSON types: User, Category, Submission, Revision, Correction, PollOption, PollResult, BallotAudit, AuditEvent [types, json]
 file `deployables/portal/server/internal/portal/categories.go` :: Category = Sammlung: kinds, repeatable vs single-answer, list/create/patch/status, hide with preserved ballots, admin poll deletion and grant cleanup, ballot fill and editor-only eligible voting participation [sammlung, category, poll, lifecycle, draft, participation]
+file `deployables/portal/server/internal/portal/words.go` :: normalized word ballots helpers, editorial anonymous moderation, distinct merged counts and formula-safe CSV export [words, moderation, cloud, export]
 file `deployables/portal/server/internal/portal/polls.go` :: vote (row lock, atomic bounded multi-selection), results, grouped ballot audit, roster [ballot, vote, results, roster]
 file `deployables/portal/server/internal/portal/submissions.go` :: author-owned submission CRUD, author search, status transitions, revisions, editorial annotations/correction requests [beitrag, submission, revision, correction]
 file `deployables/portal/server/internal/portal/files.go` :: uploads, previews, downloads, ZIP export, disk usage [attachment, upload, export, zip]
@@ -72,6 +74,7 @@ test `deployables/portal/server/internal/portal/categories_test.go` :: Sammlung 
 test `deployables/portal/server/internal/portal/poll_lifecycle_test.go` :: granted-editor hide/reopen, locked definitions, vote/history preservation, admin-only deletion and grant cleanup [poll, hidden, lifecycle, delete, permissions]
 test `deployables/portal/server/internal/portal/poll_timeline_test.go` :: opened_at, ballot_count and eligible participation rules, including preserved votes after eligibility changes [poll, timeline, participation]
 test `deployables/portal/server/internal/portal/people_polls_test.go` :: roster snapshots, explicit candidates, bounded atomic selections, distinct participation, audit and migration preservation [poll, invariants, participation]
+test `deployables/portal/server/internal/portal/word_polls_test.go` :: lowercase Unicode word replacement, privacy, grant-controlled versioned moderation, merged counts, lifecycle and CSV [words, invariants, permissions]
 test `deployables/portal/server/internal/portal/proposal_polls_test.go` :: choice-poll caps, atomic votes, results, audit privacy and exact migration preservation [proposal, invariant]
 test `deployables/portal/server/internal/portal/portal_test.go` :: pure invariants, integrationPool/emptySchemaPool helpers, author-only original mutations, annotation grants, lifecycle + ballots [helpers, lifecycle]
 test `deployables/portal/server/internal/portal/auth_test.go` :: OIDC trust/enrollment via authmock [auth]
@@ -94,6 +97,9 @@ route POST /categories/{id}/status :: granted-editor open/close/hide, draft->ope
 route DELETE /categories/{id} :: admin-only versioned poll deletion, including ballots/history/options and manager grants (categories.go) [poll, delete, admin]
 route PUT /categories/{id}/ballot :: cast/change vote (polls.go) [vote]
 route GET /categories/{id}/results :: editors only (polls.go) [results]
+route GET /categories/{id}/words :: editorial anonymous original-word counts and moderation state (words.go) [words, moderation, permissions]
+route PATCH /categories/{id}/words/{optionID} :: assigned-editor/admin versioned exclude/restore/correct/merge preserving originals (words.go) [words, moderation, grants]
+route GET /categories/{id}/words/export :: editorial-only moderated distinct-voter word CSV (words.go) [words, csv, export]
 route GET /categories/{id}/audit :: named ballots, admins only (polls.go) [ballot audit]
 route GET /categories/{id}/export :: ZIP of a repeatable Sammlung (files.go) [export]
 route GET|POST /submissions, GET|PATCH /submissions/{id}, POST /submissions/{id}/status :: Beiträge (submissions.go) [beitrag]
@@ -107,7 +113,7 @@ route GET /auth/login, GET /auth/callback, POST /auth/logout :: outside /api/v1 
 file `deployables/portal/web/vite.config.ts` :: Vite dev server binds localhost at 5173 and falls back to the next free port [frontend, dev, port]
 
 file `deployables/portal/web/src/App.tsx` :: router, Layout, nav (StudentNav, EditorNav, AdminNav), StudentHome unanswered card queue (repeatable collections only before any own submission), shared EditorialHome dashboard with class widgets, admin admissions, manager writable polls and recent assigned contributions, voting participation bars [routes, nav, dashboard, home, participation, grants]
-file `deployables/portal/web/src/sammlungen.tsx` :: Shared Sammlungen workspace (Fortlaufend section, status groups, ?klasse filter), all-kind editor creation, grant-controlled definition edits and poll hiding, admin-confirmed poll deletion, admin manager assignments in SammlungForm, SammlungDetail, all-submission editorial collection reader, read-only ballot options/results and an inline student voting stack [sammlung, poll, vote, form]
+file `deployables/portal/web/src/sammlungen.tsx` :: Shared Sammlungen workspace (Fortlaufend section, status groups, ?klasse filter), all-kind editor creation, grant-controlled definition edits and poll hiding, admin-confirmed poll deletion, admin manager assignments in SammlungForm, SammlungDetail, all-submission editorial collection reader, read-only ballot options/results, private weighted word cloud/CSV with grant-controlled toggle-chip moderation, and an inline student voting stack [sammlung, poll, vote, form]
 file `deployables/portal/web/src/PeoplePicker.tsx` :: shared candidate/choice voting with removable chips, selection limits, and search only for 10+ options [person, picker, chips]
 file `deployables/portal/web/src/pages.tsx` :: Contributions, NewContribution, author detail and read-only editorial reader with annotations, all-submissions list, NotFound [beitrag, redaktion, export]
 file `deployables/portal/web/src/admin.tsx` :: Verwaltung: People, ActivityLog, audit action labels [verwaltung, admin, personen, protokoll]
@@ -117,7 +123,7 @@ file `deployables/portal/web/public/favicon.svg` :: tab icon, the sidebar Mark w
 file `deployables/portal/web/src/api.ts` :: fetch wrapper, CSRF header, shared user PATCH payload [api, fetch, grants]
 file `deployables/portal/web/src/api-types.ts` :: aliases over generated types [types]
 file `deployables/portal/web/src/generated/api.d.ts` :: generated from openapi.json, never edit by hand [codegen]
-file `deployables/portal/web/src/BallotForm.tsx` :: shared voting form and named-vote notice; bounded valid choices, eligibility/self-vote guards, save errors and cache refresh [poll, vote, privacy]
+file `deployables/portal/web/src/BallotForm.tsx` :: shared voting form, configurable lowercase word chips and named-vote notice; bounded valid choices, eligibility/self-vote guards, save errors and cache refresh [poll, vote, privacy]
 test `deployables/portal/web/src/BallotForm.test.tsx` :: successful PUT/refresh, failed-save choices and submit-time eligibility/selection/pending guards [poll, vote, invariants]
 file `deployables/portal/web/src/PollStack.tsx` :: inline student voting queue: choices and submit on each card, drafts retained across arrows, save-then-advance, guarded navigation while saving and live position [poll, stack, navigation, accessibility]
 file `deployables/portal/web/src/PollStack.css` :: responsive layered cards, directional animations and reduced-motion fallback [poll, stack, animation]
@@ -142,7 +148,8 @@ page /abstimmungen[/:id], /verwaltung/sammlungen, /verwaltung/rubriken, /admin :
 
 ## Domain rules
 
-rule Sammlung = categories row; kind is its class: repeatable idea/quote/memory/photo (submissions), person/proposal ballots (both bounded multi-selection; person: all or selected candidates; draft->open->closed; open/closed->draft hides, preserves votes and locks previously opened definitions; delete admin only) [sammlung, class, kind, rubrik, poll]
+test `deployables/portal/web/e2e/words.spec.ts` :: live word creation/cap, lowercase chips, student privacy, distinct merged counts, toggle/restore, read-only manager CSV and responsive cloud [words, e2e, permissions]
+rule Sammlung = categories row; kind is its class: repeatable idea/quote/memory/photo (submissions), person/proposal/words ballots (bounded multi-selection or free word chips; person: all or selected candidates; draft->open->closed; open/closed->draft hides, preserves votes and locks previously opened definitions; delete admin only) [sammlung, class, kind, rubrik, poll]
 rule Managers create all six kinds with atomic creator grants, read all submissions and manage/annotate assigned categories; admins manage all categories and assign grants; only authors mutate pending originals and only admins see named ballots [permissions]
 rule Dev identities: subject = UUIDv5(display_slug); seeded fixtures map via fixtureSlugs in seed.go [login, fixtures]
 rule Integration tests: TEST_DATABASE_URL to a disposable DB only; never the dev `portal` DB [test, database]
@@ -150,3 +157,5 @@ rule Integration tests: TEST_DATABASE_URL to a disposable DB only; never the dev
 rule Redaktion is a read-only collection desk: originals and photos are author-owned, annotations require category grants, all statuses listed/exported by default, moderation after collection [redaktion, permissions, workflow]
 
 rule People polls: new definitions default all_people; roster refreshed on first opening then fixed, including hiding/reopening. max_choices 1–500; votes atomically replace full selection. Existing polls retain explicit candidate sets [poll, candidates, invariant]
+
+rule Word portraits: configurable max_choices default 3 (1–500); original NFC lowercase words remain private to their voter, anonymous moderation and word cloud/CSV editorial-only, changes grant-controlled, merged labels count each voter once, named history admin-only [words, permissions, moderation, cloud, csv]

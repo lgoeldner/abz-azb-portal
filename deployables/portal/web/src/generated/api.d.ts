@@ -353,7 +353,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Cast or replace a named ballot with up to max_choices distinct options */
+        /** Atomically replace own bounded option selections or words (word portraits only) */
         put: operations["putCategoriesIdBallot"];
         post?: never;
         delete?: never;
@@ -396,6 +396,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/categories/{id}/words": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Editorial anonymous original word counts and moderation, word portraits only */
+        get: operations["getCategoriesIdWords"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories/{id}/words/{optionID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Grant-controlled reversible word exclusion/correction/merge; originals and named history stay unchanged */
+        patch: operations["patchCategoriesIdWordsOptionID"];
+        trace?: never;
+    };
+    "/api/v1/categories/{id}/words/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Editorial CSV export of included effective words and distinct voter counts, word portraits only */
+        get: operations["getCategoriesIdWordsExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -420,8 +471,8 @@ export interface components {
             name: string;
             description: string;
             /** @enum {string} */
-            kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal";
-            /** @description True for idea, quote, memory, photo (any number of submissions); false for person, proposal (single-answer ballot). */
+            kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal" | "words";
+            /** @description True for idea, quote, memory, photo; false for person, proposal, words (replaceable ballot). */
             repeatable: boolean;
             /**
              * @description Always open for repeatable categories. Draft means hidden from students, including previously opened polls; opened_at distinguishes editable new drafts from locked hidden polls.
@@ -429,7 +480,7 @@ export interface components {
              */
             status: "draft" | "open" | "closed";
             allow_self_vote: boolean;
-            /** @description Empty for repeatable categories. */
+            /** @description Empty for repeatable kinds, word portraits, and all_people person poll input; otherwise explicit voting options. Word portrait responses never expose other voters’ words. */
             options: components["schemas"]["PollOption"][];
             /** @description First current selection in canonical ID order (legacy compatibility), or null. */
             my_option_id: string | null;
@@ -452,10 +503,12 @@ export interface components {
             } | null;
             /** @description Person polls only: all admitted cohort members, refreshed when opening and fixed thereafter. Existing polls retain explicit candidates. */
             all_people: boolean;
-            /** @description Maximum selections per voter for person and proposal polls; 1 for repeatable categories. */
+            /** @description Maximum selections for person/proposal polls or words per voter for word portraits (1–500). Word portraits default to 3, other polls to 1; repeatable kinds require 1. */
             max_choices: number;
             /** @description Viewer’s complete current selection; empty for repeatable categories or before voting. */
             my_option_ids: string[];
+            /** @description Only the viewer’s current original normalized words, empty for other kinds or before voting. Originals are unchanged by editorial moderation. */
+            my_words?: string[];
         };
         Attachment: {
             id: string;
@@ -550,20 +603,17 @@ export interface components {
             name: string;
             description: string;
             /** @enum {string} */
-            kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal";
+            kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal" | "words";
             allow_self_vote?: boolean;
-            /** @description Empty for repeatable kinds and all_people person polls; otherwise 2–500 unique options. Person options must reference admitted cohort members. */
+            /** @description Empty for repeatable kinds, word portraits, and all_people person poll input; otherwise explicit voting options. Word portrait responses never expose other voters’ words. */
             options?: {
                 label: string;
                 user_id?: string;
             }[];
             /** @description Person polls: all admitted cohort members instead of explicit options. Defaults true on creation; omission preserves mode on edit. Other kinds require false. */
             all_people?: boolean;
-            /**
-             * @description Maximum selections for person and proposal polls; repeatable kinds require 1.
-             * @default 1
-             */
-            max_choices: number;
+            /** @description Maximum selections for person/proposal polls or words per voter for word portraits (1–500). Word portraits default to 3, other polls to 1; repeatable kinds require 1. */
+            max_choices?: number;
         };
         SubmissionInput: {
             idempotency_key: string;
@@ -596,9 +646,9 @@ export interface components {
             name: string;
             description: string;
             /** @enum {string} */
-            kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal";
+            kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal" | "words";
             allow_self_vote?: boolean;
-            /** @description Empty for repeatable kinds and all_people person polls; otherwise 2–500 unique options. Person options must reference admitted cohort members. */
+            /** @description Empty for repeatable kinds, word portraits, and all_people person poll input; otherwise explicit voting options. Word portrait responses never expose other voters’ words. */
             options?: {
                 label: string;
                 user_id?: string;
@@ -606,11 +656,25 @@ export interface components {
             version: number;
             /** @description Person polls: all admitted cohort members instead of explicit options. Defaults true on creation; omission preserves mode on edit. Other kinds require false. */
             all_people?: boolean;
-            /**
-             * @description Maximum selections for person and proposal polls; repeatable kinds require 1.
-             * @default 1
-             */
-            max_choices: number;
+            /** @description Maximum selections for person/proposal polls or words per voter for word portraits (1–500). Word portraits default to 3, other polls to 1; repeatable kinds require 1. */
+            max_choices?: number;
+        };
+        /** @description Editorial anonymous original-word tally and reversible moderation; contains no voter identity. Equal effective labels merge, counting each current voter once in results. */
+        WordEntry: {
+            option_id: string;
+            /** @description One Unicode NFC lowercase word without whitespace or control characters; normalized on input. */
+            word: string;
+            /** @description One Unicode NFC lowercase word without whitespace or control characters; normalized on input. */
+            label: string;
+            excluded: boolean;
+            count: number;
+            version: number;
+        };
+        WordModerationInput: {
+            version: number;
+            /** @description One Unicode NFC lowercase word without whitespace or control characters; normalized on input. */
+            label: string;
+            excluded: boolean;
         };
     };
     responses: never;
@@ -1514,7 +1578,8 @@ export interface operations {
                 "application/json": {
                     option_id?: string;
                     option_ids?: string[];
-                } & (unknown | unknown);
+                    words?: string[];
+                } & (unknown | unknown | unknown);
             };
         };
         responses: {
@@ -1527,6 +1592,7 @@ export interface operations {
                     "application/json": {
                         option_id: string;
                         option_ids: string[];
+                        words?: string[];
                     };
                 };
             };
@@ -1590,6 +1656,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BallotAudit"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCategoriesIdWords: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WordEntry"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    patchCategoriesIdWordsOptionID: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                id: string;
+                optionID: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WordModerationInput"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WordEntry"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCategoriesIdWordsExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description CSV with formula-safe word and count columns */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
                 };
             };
             /** @description Error */

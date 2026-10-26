@@ -97,7 +97,7 @@ func TestMigration006PreservesDefinitionsVotesAndHistory(t *testing.T) {
 	snapshot := func(table string) string {
 		t.Helper()
 		var result string
-		if err := pool.QueryRow(ctx, "SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text),'[]'::jsonb)::text FROM "+table+" r").Scan(&result); err != nil {
+		if err := pool.QueryRow(ctx, "SELECT COALESCE(jsonb_agg((to_jsonb(r)-'word_label'-'excluded'-'moderation_version') ORDER BY to_jsonb(r)::text),'[]'::jsonb)::text FROM "+table+" r").Scan(&result); err != nil {
 			t.Fatal(err)
 		}
 		return result
