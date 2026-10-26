@@ -9,6 +9,7 @@ export type Revision = components['schemas']['Revision'];
 export type Correction = components['schemas']['Correction'];
 export type PollOption = components['schemas']['PollOption'];
 export type PollResult = components['schemas']['PollResult'];
+export type WordEntry = components['schemas']['WordEntry'];
 export type BallotAudit = components['schemas']['BallotAudit'];
 export type AuditEvent = components['schemas']['AuditEvent'];
 export type SystemStatus = components['schemas']['SystemStatus'];

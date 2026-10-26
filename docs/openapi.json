@@ -203,9 +203,7 @@
                     "type": "integer"
                   }
                 },
-                "required": [
-                  "version"
-                ],
+                "required": ["version"],
                 "additionalProperties": false
               }
             }
@@ -1247,6 +1245,12 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "words": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": ["option_id", "option_ids"],
@@ -1307,6 +1311,18 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "words": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "description": "One Unicode NFC lowercase word without whitespace or control characters; normalized on input."
+                    }
                   }
                 },
                 "additionalProperties": false,
@@ -1314,13 +1330,40 @@
                   {
                     "required": ["option_id"],
                     "not": {
-                      "required": ["option_ids"]
+                      "anyOf": [
+                        {
+                          "required": ["option_ids"]
+                        },
+                        {
+                          "required": ["words"]
+                        }
+                      ]
                     }
                   },
                   {
                     "required": ["option_ids"],
                     "not": {
-                      "required": ["option_id"]
+                      "anyOf": [
+                        {
+                          "required": ["option_id"]
+                        },
+                        {
+                          "required": ["words"]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "required": ["words"],
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": ["option_id"]
+                        },
+                        {
+                          "required": ["option_ids"]
+                        }
+                      ]
                     }
                   }
                 ]
@@ -1411,6 +1454,156 @@
           }
         ]
       }
+    },
+    "/api/v1/categories/{id}/words": {
+      "get": {
+        "summary": "Editorial anonymous original word counts and moderation, word portraits only",
+        "operationId": "getCategoriesIdWords",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WordEntry"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/categories/{id}/words/{optionID}": {
+      "patch": {
+        "summary": "Grant-controlled reversible word exclusion/correction/merge; originals and named history stay unchanged",
+        "operationId": "patchCategoriesIdWordsOptionID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "optionID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WordModerationInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordEntry"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/categories/{id}/words/export": {
+      "get": {
+        "summary": "Editorial CSV export of included effective words and distinct voter counts, word portraits only",
+        "operationId": "getCategoriesIdWordsExport",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CSV with formula-safe word and count columns",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1490,7 +1683,15 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["idea", "quote", "memory", "photo", "person", "proposal"]
+            "enum": [
+              "idea",
+              "quote",
+              "memory",
+              "photo",
+              "person",
+              "proposal",
+              "words"
+            ]
           },
           "ongoing": {
             "type": "boolean",
@@ -1518,7 +1719,7 @@
             "items": {
               "$ref": "#/components/schemas/PollOption"
             },
-            "description": "Empty for contribution categories."
+            "description": "Empty for contribution kinds, word portraits, and all_people person poll input; otherwise explicit voting options. Word portrait responses never expose other voters’ words."
           },
           "my_option_id": {
             "type": ["string", "null"],
@@ -1566,7 +1767,7 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 500,
-            "description": "Maximum selections per voter for person and proposal polls; 1 for contribution categories."
+            "description": "Maximum selections for person/proposal polls or words per voter for word portraits (1–500). Word portraits default to 3, other polls to 1; contribution kinds require 1."
           },
           "my_option_ids": {
             "type": "array",
@@ -1574,6 +1775,13 @@
               "type": "string"
             },
             "description": "Viewer’s complete current selection; empty for contribution categories or before voting."
+          },
+          "my_words": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Only the viewer’s current original normalized words, empty for other kinds or before voting. Originals are unchanged by editorial moderation."
           }
         },
         "required": [
@@ -1917,7 +2125,15 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["idea", "quote", "memory", "photo", "person", "proposal"]
+            "enum": [
+              "idea",
+              "quote",
+              "memory",
+              "photo",
+              "person",
+              "proposal",
+              "words"
+            ]
           },
           "ongoing": {
             "type": "boolean",
@@ -1950,7 +2166,7 @@
               "required": ["label"],
               "additionalProperties": false
             },
-            "description": "Empty for contribution kinds and all_people person polls; otherwise 2–500 unique options. Person options must reference admitted cohort members."
+            "description": "Empty for contribution kinds, word portraits, and all_people person poll input; otherwise explicit voting options. Word portrait responses never expose other voters’ words."
           },
           "all_people": {
             "type": "boolean",
@@ -1960,8 +2176,7 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 500,
-            "default": 1,
-            "description": "Maximum selections for person and proposal polls; contribution kinds require 1."
+            "description": "Maximum selections for person/proposal polls or words per voter for word portraits (1–500). Word portraits default to 3, other polls to 1; contribution kinds require 1."
           }
         },
         "required": ["name", "description", "kind"],
@@ -2074,7 +2289,15 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["idea", "quote", "memory", "photo", "person", "proposal"]
+            "enum": [
+              "idea",
+              "quote",
+              "memory",
+              "photo",
+              "person",
+              "proposal",
+              "words"
+            ]
           },
           "ongoing": {
             "type": "boolean",
@@ -2107,7 +2330,7 @@
               "required": ["label"],
               "additionalProperties": false
             },
-            "description": "Empty for contribution kinds and all_people person polls; otherwise 2–500 unique options. Person options must reference admitted cohort members."
+            "description": "Empty for contribution kinds, word portraits, and all_people person poll input; otherwise explicit voting options. Word portrait responses never expose other voters’ words."
           },
           "version": {
             "type": "integer"
@@ -2120,11 +2343,71 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 500,
-            "default": 1,
-            "description": "Maximum selections for person and proposal polls; contribution kinds require 1."
+            "description": "Maximum selections for person/proposal polls or words per voter for word portraits (1–500). Word portraits default to 3, other polls to 1; contribution kinds require 1."
           }
         },
         "required": ["name", "description", "kind", "version"],
+        "additionalProperties": false
+      },
+      "WordEntry": {
+        "type": "object",
+        "properties": {
+          "option_id": {
+            "type": "string"
+          },
+          "word": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "One Unicode NFC lowercase word without whitespace or control characters; normalized on input."
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "One Unicode NFC lowercase word without whitespace or control characters; normalized on input."
+          },
+          "excluded": {
+            "type": "boolean"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "option_id",
+          "word",
+          "label",
+          "excluded",
+          "count",
+          "version"
+        ],
+        "additionalProperties": false,
+        "description": "Editorial anonymous original-word tally and reversible moderation; contains no voter identity. Equal effective labels merge, counting each current voter once in results."
+      },
+      "WordModerationInput": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "One Unicode NFC lowercase word without whitespace or control characters; normalized on input."
+          },
+          "excluded": {
+            "type": "boolean"
+          }
+        },
+        "required": ["version", "label", "excluded"],
         "additionalProperties": false
       }
     }

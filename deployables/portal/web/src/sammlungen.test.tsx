@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import type { Category, Me } from './api';
+import type { Category, Me, WordEntry } from './api';
 import { Sammlungen, SammlungDetail } from './sammlungen';
 import { Session, WorkspaceView, type View } from './ui';
 
@@ -58,8 +58,25 @@ function personPoll(overrides: Partial<Category> = {}): Category {
   };
 }
 
-function installApi(initial: Category[] = [], auditRows: unknown[] = []) {
+function wordsPoll(overrides: Partial<Category> = {}): Category {
+  return personPoll({
+    id: 'words-poll',
+    name: 'Wörter fürs Motto',
+    kind: 'words',
+    options: [],
+    max_choices: 3,
+    my_words: [],
+    ...overrides,
+  });
+}
+
+function installApi(
+  initial: Category[] = [],
+  auditRows: unknown[] = [],
+  options: { wordEntries?: WordEntry[]; ballotError?: boolean; results?: unknown[] } = {},
+) {
   let categories = [...initial];
+  let wordEntries = [...(options.wordEntries ?? [])];
   const writes: { path: string; method: string; body: Record<string, unknown> }[] = [];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), window.location.origin);
@@ -75,7 +92,7 @@ function installApi(initial: Category[] = [], auditRows: unknown[] = []) {
         id: 'created-person-poll',
         name: String(body?.name ?? ''),
         description: String(body?.description ?? ''),
-        kind: body?.kind === 'proposal' ? 'proposal' : 'person',
+        kind: (body?.kind as Category['kind']) ?? 'person',
         repeatable: false,
         ongoing: true,
         closes_at: null,
@@ -84,6 +101,7 @@ function installApi(initial: Category[] = [], auditRows: unknown[] = []) {
         options: (body?.options as Category['options'] | undefined) ?? [],
         my_option_id: null,
         my_option_ids: [],
+        my_words: [],
         all_people: body?.all_people === true,
         max_choices: Number(body?.max_choices ?? 1),
         version: 1,
@@ -115,10 +133,35 @@ function installApi(initial: Category[] = [], auditRows: unknown[] = []) {
       categories = categories.filter((category) => category.id !== categoryId);
       return new Response(null, { status: 204 });
     }
-    if (path.endsWith('/results')) return Response.json([]);
+    if (path.endsWith('/words') && method === 'GET') return Response.json(wordEntries);
+    if (path.includes('/words/') && method === 'PATCH') {
+      writes.push({ path, method, body: body ?? {} });
+      const optionId = path.split('/').at(-1);
+      wordEntries = wordEntries.map((entry) =>
+        entry.option_id === optionId
+          ? {
+              ...entry,
+              label: String(body?.label ?? entry.label),
+              excluded: Boolean(body?.excluded),
+              version: entry.version + 1,
+            }
+          : entry,
+      );
+      return Response.json(wordEntries.find((entry) => entry.option_id === optionId));
+    }
+    if (path.endsWith('/results')) return Response.json(options.results ?? []);
     if (path.endsWith('/audit')) return Response.json(auditRows);
     if (path.endsWith('/ballot') && method === 'PUT') {
       writes.push({ path, method, body: body ?? {} });
+      if (options.ballotError)
+        return Response.json({ error: { code: 'save_failed', message: 'Speichern fehlgeschlagen.' } }, { status: 500 });
+      if (Array.isArray(body?.words)) {
+        const pollId = path.split('/')[2];
+        categories = categories.map((category) =>
+          category.id === pollId ? { ...category, my_words: body.words as string[] } : category,
+        );
+        return Response.json({ words: body.words, option_ids: [] });
+      }
       const optionIds =
         (body?.option_ids as string[] | undefined) ?? (body?.option_id ? [body.option_id as string] : []);
       const pollId = path.split('/')[2];
@@ -172,6 +215,125 @@ function addProposalOption(value: string, byEnter = false) {
   if (byEnter) fireEvent.keyDown(input, { key: 'Enter', code: 'Enter', charCode: 13 });
   else fireEvent.click(screen.getByRole('button', { name: 'Hinzufügen' }));
 }
+describe('words polls', () => {
+  it('creates a word portrait with an empty option set and the three-word default', async () => {
+    const { writes } = installApi();
+    renderPortal('/sammlungen', admin);
+
+    fireEvent.click(screen.getByRole('button', { name: /Neue Sammlung/ }));
+    fireEvent.change(screen.getByLabelText('Klasse'), { target: { value: 'words' } });
+    expect(screen.getByLabelText('Maximale Zahl der Wörter pro Person')).toHaveValue(3);
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Wortwolke' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0].body).toMatchObject({
+      kind: 'words',
+      max_choices: 3,
+      all_people: false,
+      options: [],
+    });
+  });
+
+  it('normalizes words, prevents duplicates, enforces the cap, and keeps choices after a failed save', async () => {
+    const poll = wordsPoll({ max_choices: 2 });
+    const { writes } = installApi([poll], [], { ballotError: true });
+    renderPortal(`/sammlungen/${poll.id}`, student);
+    const input = await screen.findByLabelText(/Wörter eingeben/);
+
+    fireEvent.change(input, { target: { value: 'Feier' } });
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+    fireEvent.change(input, { target: { value: 'FEIER' } });
+    fireEvent.keyDown(input, { key: ',', code: 'Comma' });
+    expect(screen.getAllByText('feier')).toHaveLength(1);
+    fireEvent.change(input, { target: { value: 'Zusammenhalt' } });
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+    expect(screen.getByText('2 von 2 ausgewählt')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Wörter eingeben/)).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Stimme speichern/ }));
+    await screen.findByText('Speichern fehlgeschlagen.');
+    expect(writes).toContainEqual({
+      path: `/categories/${poll.id}/ballot`,
+      method: 'PUT',
+      body: { words: ['feier', 'zusammenhalt'] },
+    });
+    expect(screen.getByText('feier')).toBeInTheDocument();
+    expect(screen.getByText('zusammenhalt')).toBeInTheDocument();
+  });
+
+  it('shows a student only their saved words on a closed poll and never requests editorial data', async () => {
+    const poll = wordsPoll({ status: 'closed', my_words: ['abitur', 'zusammenhalt'] });
+    const { fetchMock } = installApi([poll]);
+    renderPortal(`/sammlungen/${poll.id}`, student);
+
+    expect(await screen.findByText('abitur')).toBeInTheDocument();
+    expect(screen.getByText('zusammenhalt')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /CSV herunterladen/ })).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([input]) => /\/(results|words)(\/export)?$/.test(String(input)))).toBe(false);
+  });
+
+  it('lets all managers read words and results but exposes moderation only to the assigned manager', async () => {
+    const poll = wordsPoll();
+    const rows: WordEntry[] = [
+      { option_id: 'word-1', word: 'freiheit', label: 'freiheit', excluded: false, count: 1, version: 2 },
+    ];
+    const { fetchMock } = installApi([poll], [], {
+      wordEntries: rows,
+      results: [{ option_id: 'merged', label: 'freiheit', count: 2 }],
+    });
+    const manager = { ...unassignedManager, category_ids: [] };
+    renderPortal(`/sammlungen/${poll.id}`, manager);
+
+    expect(await screen.findByRole('list', { name: /Wortwolke mit 1 Begriff und 2 Nennungen/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Wortliste als CSV herunterladen/ })).toHaveAttribute(
+      'href',
+      `/api/v1/categories/${poll.id}/words/export`,
+    );
+    expect(
+      await within(screen.getByRole('list', { name: 'Eingegebene Wörter' })).findByText('freiheit'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Begriff freiheit ausschließen' })).not.toBeInTheDocument();
+    const aside = screen.getByRole('complementary');
+    expect(aside).not.toContainElement(screen.getByRole('heading', { name: 'Gesamtergebnisse' }));
+    expect(aside).not.toContainElement(screen.getByRole('heading', { name: 'Stimmen' }));
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith(`/categories/${poll.id}/words`))).toBe(true);
+  });
+
+  it('allows the assigned manager to rename an original into an existing label and exclude a word', async () => {
+    const poll = wordsPoll();
+    const rows: WordEntry[] = [
+      { option_id: 'word-1', word: 'freiheit', label: 'freiheit', excluded: false, count: 1, version: 2 },
+      { option_id: 'word-2', word: 'liebe', label: 'liebe', excluded: false, count: 1, version: 1 },
+    ];
+    const manager = { ...assignedManager, category_ids: [poll.id] };
+    const { writes } = installApi([poll], [], { wordEntries: rows });
+    renderPortal(`/sammlungen/${poll.id}`, manager);
+    await screen.findByRole('heading', { name: 'Sammlung verwalten' });
+    const aside = screen.getByRole('complementary');
+    expect(aside).toContainElement(screen.getByRole('heading', { name: 'Sammlung verwalten' }));
+    expect(aside).not.toContainElement(screen.getByRole('heading', { name: 'Gesamtergebnisse' }));
+    const labelInput = (await screen.findAllByLabelText('Bezeichnung bearbeiten'))[0];
+
+    fireEvent.change(labelInput, { target: { value: 'LIEBE' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Umbenennen' })[0]);
+    await waitFor(() =>
+      expect(writes).toContainEqual({
+        path: `/categories/${poll.id}/words/word-1`,
+        method: 'PATCH',
+        body: { version: 2, label: 'liebe', excluded: false },
+      }),
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Begriff liebe ausschließen' }));
+    await waitFor(() =>
+      expect(writes).toContainEqual({
+        path: `/categories/${poll.id}/words/word-2`,
+        method: 'PATCH',
+        body: { version: 1, label: 'liebe', excluded: true },
+      }),
+    );
+  });
+});
 
 describe('Sammlungen person polls', () => {
   it.each([
@@ -366,7 +528,7 @@ describe('Sammlungen person polls', () => {
     expect(repeatable).toBeChecked();
     fireEvent.click(repeatable);
     expect(kind).toHaveValue('photo');
-    expect(kind.querySelectorAll('option')).toHaveLength(6);
+    expect(kind.querySelectorAll('option')).toHaveLength(7);
     fireEvent.click(screen.getByRole('switch', { name: 'Fortlaufend' }));
     fireEvent.change(screen.getByLabelText('Enddatum'), { target: { value: '2099-06-01T12:00' } });
     expect(screen.queryByLabelText('Antwortoption hinzufügen')).toBeNull();

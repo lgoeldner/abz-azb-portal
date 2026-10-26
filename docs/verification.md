@@ -118,3 +118,23 @@ Redaktion members create every collection kind and receive its management grant 
 - Independent critical review found no defects, including a second review of the merge resolution and locked-definition permission form.
 - Chromium checks passed for shared creation, admin-only assignment controls, old-bookmark redirects, diagnostics and supported viewport widths: 17 passed, one production-only diagnostic check skipped on the development preview. Desktop 1440px and phone 390px collection creation views were inspected.
 - Full disposable Docker recovery passed with the integrated migrations, preserved ballots/audit history, table signatures and attachment hashes. Non-empty restore targets were rejected. Temporary snapshot `b3fae6c36dbf3c1711fbdb1eddcceb4dc92416dd0626ca9b2ce9190ba50ce287` and the drill resources were cleaned up.
+
+## Abi in drei Worten — 26 October 2026
+
+Word portraits use a configurable word limit (default three), lowercase Unicode-normalized chips, replaceable current ballots and immutable named history. Redaktion and admins can read the weighted word cloud, anonymous original-word list and CSV; only assigned managers and admins can toggle inclusion or correct/merge labels. Merged labels count each current voter once. Students read only their own saved words and cannot fetch aggregate, moderation, CSV or named history endpoints. The cloud uses React text and CSS, with no additional rendering dependency.
+
+- Backend invariants passed against a dedicated disposable PostgreSQL container, including atomic valid/invalid replacements, normalized duplicates, reorder no-op history, privacy and grants, stale moderation, exclusion/restore, distinct merged counts, lifecycle, deletion, CSV safety and preservation across migration 007.
+- The web suite passed 132 tests, with type checking and production build. Independent critical review found no remaining defects and independently passed 112 targeted UI tests and the generated 32-route API contract check.
+- The dedicated Chromium journey exercises creation with a custom cap, lowercase entry chips and saved revisits, denied student result endpoints, edit/merge, toggle/restore, CSV content and read-only manager access. Desktop and phone screenshots were inspected at 1440, 390 and 320px; no horizontal overflow was found.
+- Full Docker recovery with migration 007 passed. Before/after table signatures matched, including original words, corrected/merged/excluded option state, current ballots and named history; immutable attachment hashes also matched. Restoring into a non-empty database was correctly refused. Temporary Restic snapshot `17688dbc97922bb9caddd6b72b4fc214de255f9717973bfa682baeb35e991cb9` and all drill resources were cleaned up.
+
+Final integration with the concurrent navigation and detached-development changes passed `make check` (PostgreSQL race tests, vet, 132 web tests, type check, build, 32-route contract, repo map and all linters). The Chromium word portrait journey passed again after waiting explicitly for the save acknowledgement before reload. The final cloud and chip list occupy the broad main column; management remains in the side column. The second independent integration review found no functional defects; its stale seven-kind documentation count was corrected.
+
+## Independent collection controls — 26 October 2026
+
+Proposal answer options use removable chips. Collection content kind, repeatability and ongoing/scheduled closing are independent; bounded collections require an end date, including one-off photo collections. Repeatable ballots, including word portraits, use entry keys retained across failed-save card navigation so retries do not add another vote. Existing collection data and named history remain preserved.
+
+- `make check` passed with a disposable PostgreSQL database: all Go race/integration tests, 151 frontend tests, typecheck, production build, 32-route contract verification, repo map and all linters.
+- Chrome checks passed for option chips and switches at 320, 390 and 1440 pixels, and for creating a bounded one-off photo collection without changing its content kind.
+- The Docker recovery drill passed with migrations 007 and 008, a bounded one-off photo slot, word moderation, current ballot groups and named history. Restored table signatures and immutable attachment hashes matched. The non-empty-target restore guard also passed; all disposable recovery resources were removed.
+- Independent review found no remaining actionable defects after the word portrait integration.

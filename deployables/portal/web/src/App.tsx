@@ -550,7 +550,7 @@ function NavGroup({ id, label, children }: { id: string; label: string; children
   );
 }
 const quiet = 'px-3.5 text-[13px] text-muted';
-const hasVoted = (c: Category) => Boolean(c.my_option_ids?.length || c.my_option_id);
+const hasVoted = (c: Category) => Boolean(c.my_words?.length || c.my_option_ids?.length || c.my_option_id);
 const ongoing = (c: Category) => c.ongoing ?? c.repeatable;
 const participationColor = (percent: number) => {
   const from = [209, 213, 219];

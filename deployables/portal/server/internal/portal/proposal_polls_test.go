@@ -91,7 +91,7 @@ func TestMigration006PreservesDefinitionsVotesAndHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	app := appForPool(t, pool, issuer)
-	// Seed the pre-007 schema directly. The current API reads the new category
+	// Seed the pre-008 schema directly. The current API reads the new category
 	// and ballot columns, so it cannot be used until the migration is applied.
 	legacyBallotID := "50000000-0000-4000-8000-000000000001"
 	if _, err := pool.Exec(ctx, `INSERT INTO ballots(poll_id,user_id,option_id) VALUES($1,$2,$3)`, pollOpen, MiaID, "40000000-0000-4000-8000-000000000101"); err != nil {
@@ -110,7 +110,7 @@ func TestMigration006PreservesDefinitionsVotesAndHistory(t *testing.T) {
 	}
 	queries := map[string]string{
 		"categories":   `SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text),'[]'::jsonb)::text FROM (SELECT id,name,description,kind,status,allow_self_vote,version,created_at,opened_at,all_people,max_choices FROM categories) r`,
-		"poll_options": `SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text),'[]'::jsonb)::text FROM poll_options r`,
+		"poll_options": `SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text),'[]'::jsonb)::text FROM (SELECT id,poll_id,label,user_id,position FROM poll_options) r`,
 		"ballots":      `SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text),'[]'::jsonb)::text FROM (SELECT poll_id,user_id,option_id,created_at FROM ballots) r`,
 		"ballot_audit": `SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text),'[]'::jsonb)::text FROM ballot_audit r`,
 	}

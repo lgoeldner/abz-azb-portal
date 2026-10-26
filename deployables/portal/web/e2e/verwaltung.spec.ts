@@ -85,6 +85,7 @@ test('Redaktion creates every collection kind in the shared form without admin r
     'Fotos',
     'Personenwahl',
     'Vorschlagswahl',
+    'Wortwolke',
   ]);
   const repeatable = page.getByRole('switch', { name: 'Wiederholbar', exact: true });
   await repeatable.locator('..').click();

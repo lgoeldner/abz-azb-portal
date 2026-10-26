@@ -319,8 +319,8 @@ func TestOneOffContributionCapSerializesConcurrentCreatesAndMoves(t *testing.T) 
 	}
 }
 
-func TestMigration007PreservesExistingCollectionData(t *testing.T) {
-	pool, _ := migrateTo(t, "006_proposal_multiselect.sql")
+func TestMigration008PreservesExistingCollectionData(t *testing.T) {
+	pool, _ := migrateTo(t, "007_word_polls.sql")
 	ctx := context.Background()
 	const (
 		admin   = "50000000-0000-4000-8000-000000000001"
@@ -342,7 +342,7 @@ func TestMigration007PreservesExistingCollectionData(t *testing.T) {
 		"INSERT INTO ballot_audit(id,poll_id,user_id,option_id,ballot_id) VALUES ('70000000-0000-4000-8000-000000000001','" + poll + "','" + author + "','" + optionA + "','" + ballot + "')",
 	} {
 		if _, err := pool.Exec(ctx, query); err != nil {
-			t.Fatalf("prepare pre-007 records: %v", err)
+			t.Fatalf("prepare pre-008 records: %v", err)
 		}
 	}
 

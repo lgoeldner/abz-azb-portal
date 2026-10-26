@@ -1,6 +1,6 @@
 # Poll implementation plans
 
-These are proposed formats, not implemented features. Reuse Sammlungen, authentication, and existing permissions: students read their own submissions, editors see aggregate results and can manage assigned categories, and only admins inspect named ballot history. Do not process real contributions with AI by default. Preserve the existing draft/open/closed lifecycle and ballot protections.
+Items 1–9 are proposed formats. Item 10 is implemented. Reuse Sammlungen, authentication, and existing permissions: students read their own submissions, editors see aggregate results and can manage assigned categories, and only admins inspect named ballot history. Do not process real contributions with AI by default. Preserve the existing draft/open/closed lifecycle and ballot protections.
 
 1. **Abi-Duell tournament.** Add a bracket with matchups, rounds, and ballots; advance winners transactionally and offer a runoff for ties. **Test:** repeated advancement is idempotent.
 2. **Know your year group prediction.** Collect atomic yes/no answers with a 0–100 percent prediction; after close, show editors actual-versus-guess aggregates. Replacements must not count twice. **Test:** replacing a response leaves one current vote and correct aggregates.
@@ -11,7 +11,7 @@ These are proposed formats, not implemented features. Reuse Sammlungen, authenti
 7. **School hotspots image pins.** Use a private map with normalized coordinates, keyboard and text alternatives, and a heatmap. **Test:** resizing preserves locations, alternatives are accessible, and unauthorized image access fails.
 8. **Caption contest.** Reuse author-owned submissions. Editors explicitly shortlist copies with author-hidden options linked to an approved private photo; voting uses the existing proposal ballot. **Test:** voter payloads omit author identities and unshortlisted entries; authors retain access to their own originals.
 9. **Either/or comparisons.** Assign five balanced pairs per voter, with one replaceable choice per pair; show cards and pairwise results. **Test:** reload preserves assignments and does not add votes.
-10. **Abi in three words.** Collect replaceable entries of up to three words; count case-insensitively, let editors exclude words without changing originals, and show a safe word cloud. **Test:** replacement removes old counts and markup is rendered as text.
+10. **Abi in three words (implemented, `words`).** Collect replaceable lowercase word chips with a configurable 1–500 word cap (default three). Redaktion and admins read a safe weighted word cloud and CSV export; granted editors can toggle exclusions and edit/merge labels without changing originals. Merged words count each current voter once. Students see only their own entries; named history stays admin-only. **Tests:** atomic replacement and validation, Unicode normalization, permission boundaries, immutable originals/history, reversible moderation, stale edits, distinct merged counts, safe text rendering, and CSV escaping.
 
 ## Shared implementation checklist
 

@@ -2,6 +2,7 @@ import {
   ArrowUpRight,
   BookHeart,
   Camera,
+  Hash,
   Lightbulb,
   ListChecks,
   Quote,
@@ -167,6 +168,7 @@ export const kindIcon: Record<Kind, LucideIcon> = {
   photo: Camera,
   person: UserRound,
   proposal: ListChecks,
+  words: Hash,
 };
 export const kindLabel: Record<Kind, string> = {
   idea: 'Ideen',
@@ -175,9 +177,10 @@ export const kindLabel: Record<Kind, string> = {
   photo: 'Fotos',
   person: 'Personenwahl',
   proposal: 'Vorschlagswahl',
+  words: 'Wortwolke',
 };
 export const submissionKinds: Kind[] = ['idea', 'quote', 'memory', 'photo'];
-export const ballotKinds: Kind[] = ['person', 'proposal'];
+export const ballotKinds: Kind[] = ['person', 'proposal', 'words'];
 export const isSubmissionCollection = (kind: Kind) => submissionKinds.includes(kind);
 export const isBallot = (kind: Kind) => ballotKinds.includes(kind);
 // Keep these aliases while Sammlungen defaults migrate to the kind-based helpers.

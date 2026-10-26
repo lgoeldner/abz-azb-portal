@@ -93,7 +93,13 @@ export function PollStack({ items: available, initialId }: { items: Category[]; 
                 disabled={saving}
                 choices={
                   drafts[item.id] ??
-                  (item.my_option_ids?.length ? item.my_option_ids : item.my_option_id ? [item.my_option_id] : [])
+                  (item.kind === 'words'
+                    ? (item.my_words ?? [])
+                    : item.my_option_ids?.length
+                      ? item.my_option_ids
+                      : item.my_option_id
+                        ? [item.my_option_id]
+                        : [])
                 }
                 onChoicesChange={(choices) => setDrafts((previous) => ({ ...previous, [item.id]: choices }))}
                 onSaved={() => {

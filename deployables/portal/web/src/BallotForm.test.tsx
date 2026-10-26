@@ -193,6 +193,36 @@ describe('BallotForm', () => {
     expect(requests[1].option_ids).toEqual(['option-1', 'option-2']);
   });
 
+  it('reuses a repeatable word ballot id across remounts and creates a new id after success', async () => {
+    const requests: Record<string, unknown>[] = [];
+    let attempt = 0;
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      attempt += 1;
+      return attempt === 1
+        ? Response.json({ error: { message: 'Bitte erneut versuchen.' } }, { status: 500 })
+        : Response.json({ ballot_id: 'saved', words: ['apple', 'zebra'] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const ballot = poll({ kind: 'words', repeatable: true, options: [], max_choices: 2 });
+    const first = renderForm({ ballot, choices: ['zebra', 'apple'] });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stimme speichern' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Bitte erneut versuchen.');
+    first.unmount();
+
+    renderForm({ ballot, choices: ['apple', 'zebra'] });
+    fireEvent.click(screen.getByRole('button', { name: 'Stimme speichern' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(requests[0]).toEqual({ words: ['apple', 'zebra'], ballot_id: expect.any(String) });
+    expect(requests[1]).toEqual({ ...requests[0] });
+    expect(requests[1]).not.toHaveProperty('option_ids');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Erneut abstimmen' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(requests[2].ballot_id).not.toBe(requests[1].ballot_id);
+  });
+
   it.each([
     { reason: 'an ineligible voter', ballot: poll(), user: { ...student, admitted: false }, choices: ['option-1'] },
     { reason: 'a closed poll', ballot: poll({ status: 'closed' }), user: student, choices: ['option-1'] },

@@ -13,16 +13,16 @@ import (
 const categoryCols = "id::text,name,description,kind,repeatable,ongoing,closes_at,status,allow_self_vote,all_people,max_choices,version,created_at,opened_at"
 
 func validKind(k string) bool {
-	return k == "idea" || k == "quote" || k == "memory" || k == "photo" || k == "person" || k == "proposal"
+	return k == "idea" || k == "quote" || k == "memory" || k == "photo" || k == "person" || k == "proposal" || k == "words"
 }
 func contributionKind(k string) bool {
 	return k == "idea" || k == "quote" || k == "memory" || k == "photo"
 }
 
-func ballotKind(k string) bool { return k == "person" || k == "proposal" }
+func ballotKind(k string) bool { return k == "person" || k == "proposal" || k == "words" }
 
 func scanCategory(row pgx.Row) (Category, error) {
-	c := Category{Options: []PollOption{}, MyOptionIDs: []string{}}
+	c := Category{Options: []PollOption{}, MyWords: []string{}, MyOptionIDs: []string{}}
 	e := row.Scan(&c.ID, &c.Name, &c.Description, &c.Kind, &c.Repeatable, &c.Ongoing, &c.ClosesAt, &c.Status, &c.AllowSelfVote, &c.AllPeople, &c.MaxChoices, &c.Version, &c.CreatedAt, &c.OpenedAt)
 	if e == nil && c.Status == "open" && c.ClosesAt != nil && !c.ClosesAt.After(time.Now()) {
 		c.Status = "closed"
@@ -35,32 +35,40 @@ func scanCategory(row pgx.Row) (Category, error) {
 func fillBallots(ctx context.Context, db DB, u User, cs []Category) error {
 	idx := map[string]int{}
 	ids := []string{}
+	optionIDs := []string{}
 	for i := range cs {
 		if ballotKind(cs[i].Kind) {
 			idx[cs[i].ID] = i
 			ids = append(ids, cs[i].ID)
+			if cs[i].Kind != "words" {
+				optionIDs = append(optionIDs, cs[i].ID)
+			}
 		}
 	}
 	if len(ids) == 0 {
 		return nil
 	}
-	rows, e := db.Query(ctx, "SELECT poll_id::text,id::text,label,user_id::text FROM poll_options WHERE poll_id=ANY($1::uuid[]) ORDER BY poll_id,position", ids)
-	if e != nil {
-		return e
-	}
-	for rows.Next() {
-		var pid string
-		var o PollOption
-		if e = rows.Scan(&pid, &o.ID, &o.Label, &o.UserID); e != nil {
-			rows.Close()
+	var rows pgx.Rows
+	var e error
+	if len(optionIDs) > 0 {
+		rows, e = db.Query(ctx, "SELECT poll_id::text,id::text,label,user_id::text FROM poll_options WHERE poll_id=ANY($1::uuid[]) ORDER BY poll_id,position", optionIDs)
+		if e != nil {
 			return e
 		}
-		cs[idx[pid]].Options = append(cs[idx[pid]].Options, o)
-	}
-	e = rows.Err()
-	rows.Close()
-	if e != nil {
-		return e
+		for rows.Next() {
+			var pid string
+			var o PollOption
+			if e = rows.Scan(&pid, &o.ID, &o.Label, &o.UserID); e != nil {
+				rows.Close()
+				return e
+			}
+			cs[idx[pid]].Options = append(cs[idx[pid]].Options, o)
+		}
+		e = rows.Err()
+		rows.Close()
+		if e != nil {
+			return e
+		}
 	}
 	rows, e = db.Query(ctx, `WITH latest AS (
 		SELECT poll_id,ballot_id FROM (
@@ -69,16 +77,17 @@ func fillBallots(ctx context.Context, db DB, u User, cs []Category) error {
 			GROUP BY poll_id,ballot_id
 		) grouped WHERE rank=1
 	)
-	SELECT b.poll_id::text,b.option_id::text
+	SELECT b.poll_id::text,b.option_id::text,o.label
 	FROM ballots b JOIN latest l USING(poll_id,ballot_id)
+	JOIN poll_options o ON o.poll_id=b.poll_id AND o.id=b.option_id
 	WHERE b.user_id=$1
 	ORDER BY b.poll_id,b.option_id`, u.ID, ids)
 	if e != nil {
 		return e
 	}
 	for rows.Next() {
-		var pid, oid string
-		if e = rows.Scan(&pid, &oid); e != nil {
+		var pid, oid, label string
+		if e = rows.Scan(&pid, &oid, &label); e != nil {
 			rows.Close()
 			return e
 		}
@@ -86,6 +95,9 @@ func fillBallots(ctx context.Context, db DB, u User, cs []Category) error {
 			cs[idx[pid]].MyOptionID = &oid
 		}
 		cs[idx[pid]].MyOptionIDs = append(cs[idx[pid]].MyOptionIDs, oid)
+		if cs[idx[pid]].Kind == "words" {
+			cs[idx[pid]].MyWords = append(cs[idx[pid]].MyWords, label)
+		}
 	}
 	e = rows.Err()
 	rows.Close()
@@ -233,6 +245,12 @@ func validateCategory(in categoryInput) error {
 		}
 		return nil
 	}
+	if in.Kind == "words" {
+		if len(in.Options) != 0 {
+			return bad("Diese Abstimmung erstellt Optionen aus den abgegebenen Wörtern.")
+		}
+		return nil
+	}
 	if in.Kind == "person" && in.AllPeople != nil && *in.AllPeople {
 		return nil
 	}
@@ -351,6 +369,10 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 		if in.AllPeople == nil {
 			all := in.Kind == "person"
 			in.AllPeople = &all
+		}
+		if in.MaxChoices == nil && in.Kind == "words" {
+			max := 3
+			in.MaxChoices = &max
 		}
 		if e = validateCategory(in); e != nil {
 			return e
@@ -472,7 +494,7 @@ func (a *App) statusCategory(w http.ResponseWriter, r *http.Request) error {
 			return e
 		}
 	}
-	if ballotKind(c.Kind) && len(c.Options) < 2 {
+	if ballotKind(c.Kind) && c.Kind != "words" && len(c.Options) < 2 {
 		return bad("Mindestens zwei Optionen erforderlich.")
 	}
 	if e = tx.QueryRow(r.Context(), "UPDATE categories SET status=$2,version=version+1,opened_at=CASE WHEN $2='open' AND opened_at IS NULL THEN now() ELSE opened_at END WHERE id=$1 RETURNING opened_at", c.ID, in.Status).Scan(&c.OpenedAt); e != nil {

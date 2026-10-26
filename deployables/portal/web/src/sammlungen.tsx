@@ -12,6 +12,7 @@ import {
   type BallotAudit,
   type Category,
   type PollResult,
+  type WordEntry,
   type Submission,
 } from './api';
 import {
@@ -223,7 +224,7 @@ function Cards({ items }: { items: Category[] }) {
                 <span>
                   {kindLabel[c.kind]}
                   {singleKinds.includes(c.kind) &&
-                    `, ${c.my_option_ids?.length || c.my_option_id ? 'Deine Stimme ist gespeichert' : plural(c.options.length, 'Option', 'Optionen')}`}
+                    `, ${c.kind === 'words' ? (c.my_words?.length ? 'Deine Wörter sind gespeichert' : 'Wörter einreichen') : c.my_option_ids?.length || c.my_option_id ? 'Deine Stimme ist gespeichert' : plural(c.options.length, 'Option', 'Optionen')}`}
                 </span>
               </span>
               <span className="inline-flex flex-none items-center gap-1 whitespace-nowrap font-semibold text-ink">
@@ -308,7 +309,9 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
                   '',
                 user_id: id,
               }))
-          : proposalOptions.map((text) => ({ label: text }));
+          : kind === 'words'
+            ? []
+            : proposalOptions.map((text) => ({ label: text }));
       if (!definitionLocked && single && kind === 'proposal' && choices.length < 2)
         throw new Error('Bitte mindestens zwei Optionen auswählen.');
       if (!definitionLocked && single && kind === 'person' && !allPeople && choices.length < 2)
@@ -329,7 +332,7 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
               repeatable,
               ongoing,
               closes_at: ongoing ? null : (sammlung?.closes_at ?? new Date(closesAt).toISOString()),
-              allow_self_vote: single && allowSelfVote,
+              allow_self_vote: single && kind !== 'words' && allowSelfVote,
               all_people: kind === 'person' && allPeople,
               max_choices: single ? maxChoices : 1,
               options: choices,
@@ -437,6 +440,7 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
                 const next = e.target.value as Kind;
                 setKind(next);
                 if (!sammlung && !repeatabilityChosen.current) setRepeatable(repeatableKinds.includes(next));
+                if (!sammlung && next === 'words') setMaxChoices(3);
               }}
             >
               {classes.map((k) => (
@@ -447,7 +451,11 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
             </select>
           </label>
           {single &&
-            (kind === 'proposal' ? (
+            (kind === 'words' ? (
+              <p className="text-sm text-muted">
+                Die Abstimmenden geben eigene Wörter ein. Ähnliche Wörter können später zusammengeführt werden.
+              </p>
+            ) : kind === 'proposal' ? (
               <div className="space-y-3">
                 <label className={label}>
                   Antwortoption hinzufügen
@@ -536,13 +544,15 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
             <>
               <div className="space-y-2">
                 <label className={label} htmlFor="max_choices">
-                  Maximale Zahl der Stimmen pro Person
+                  {kind === 'words' ? 'Maximale Zahl der Wörter pro Person' : 'Maximale Zahl der Stimmen pro Person'}
                 </label>
                 <div className="flex items-center gap-4">
                   <button
                     className="flex size-14 shrink-0 items-center justify-center rounded-full bg-white text-ink transition hover:bg-pill focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:cursor-not-allowed disabled:opacity-40"
                     type="button"
-                    aria-label={kind === 'person' ? 'Weniger Personen' : 'Weniger Optionen'}
+                    aria-label={
+                      kind === 'person' ? 'Weniger Personen' : kind === 'words' ? 'Weniger Wörter' : 'Weniger Optionen'
+                    }
                     disabled={maxChoices <= 1 || action.busy}
                     onClick={() => setMaxChoices((value) => Math.min(500, Math.max(1, value - 1)))}
                   >
@@ -565,7 +575,9 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
                   <button
                     className="flex size-14 shrink-0 items-center justify-center rounded-full bg-white text-ink transition hover:bg-pill focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:cursor-not-allowed disabled:opacity-40"
                     type="button"
-                    aria-label={kind === 'person' ? 'Mehr Personen' : 'Mehr Optionen'}
+                    aria-label={
+                      kind === 'person' ? 'Mehr Personen' : kind === 'words' ? 'Mehr Wörter' : 'Mehr Optionen'
+                    }
                     disabled={maxChoices >= 500 || action.busy}
                     onClick={() => setMaxChoices((value) => Math.max(1, Math.min(500, value + 1)))}
                   >
@@ -573,18 +585,20 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
                   </button>
                 </div>
               </div>
-              <label className="flex cursor-pointer items-center justify-between gap-4 text-[15px]">
-                <span>Stimme für die eigene Person erlauben</span>
-                <input
-                  className="peer sr-only"
-                  type="checkbox"
-                  role="switch"
-                  checked={allowSelfVote}
-                  disabled={action.busy}
-                  onChange={(event) => setAllowSelfVote(event.target.checked)}
-                />
-                <span className="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full bg-pill transition-colors after:absolute after:left-1 after:size-5 after:rounded-full after:bg-white after:transition-transform peer-checked:bg-ink peer-checked:after:translate-x-5 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink"></span>
-              </label>
+              {kind !== 'words' && (
+                <label className="flex cursor-pointer items-center justify-between gap-4 text-[15px]">
+                  <span>Stimme für die eigene Person erlauben</span>
+                  <input
+                    className="peer sr-only"
+                    type="checkbox"
+                    role="switch"
+                    checked={allowSelfVote}
+                    disabled={action.busy}
+                    onChange={(event) => setAllowSelfVote(event.target.checked)}
+                  />
+                  <span className="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full bg-pill transition-colors after:absolute after:left-1 after:size-5 after:rounded-full after:bg-white after:transition-transform peer-checked:bg-ink peer-checked:after:translate-x-5 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink"></span>
+                </label>
+              )}
               <p className="text-sm text-muted">
                 {`Pro Person bis zu ${maxChoices} Stimme(n).`} Nach dem Öffnen ist die Definition gesperrt.
               </p>
@@ -833,12 +847,23 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
   const navigate = useNavigate();
   const id = poll.id;
   const action = useAction();
-  const savedChoices = poll.my_option_ids?.length ? poll.my_option_ids : poll.my_option_id ? [poll.my_option_id] : [];
+  const savedChoices =
+    poll.kind === 'words'
+      ? (poll.my_words ?? [])
+      : poll.my_option_ids?.length
+        ? poll.my_option_ids
+        : poll.my_option_id
+          ? [poll.my_option_id]
+          : [];
   const savedChoicesKey = savedChoices.join('\u0000');
   const [choices, setChoices] = useState<string[]>(savedChoices);
   const [syncedChoicesKey, setSyncedChoicesKey] = useState(savedChoicesKey);
   const [editing, setEditing] = useState(false);
   const results = useData<PollResult[]>(`/categories/${id}/results`, redaktion && editorial(user));
+  const wordEntries = useData<WordEntry[]>(
+    `/categories/${id}/words`,
+    redaktion && editorial(user) && poll.kind === 'words',
+  );
   const [auditOpen, setAuditOpen] = useState(false);
   const audit = useData<BallotAudit[]>(`/categories/${id}/audit`, redaktion && auditOpen && user.role === 'admin');
   if (syncedChoicesKey !== savedChoicesKey) {
@@ -854,7 +879,8 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
           category.id !== poll.id &&
           singleKinds.includes(category.kind) &&
           category.status === 'open' &&
-          (category.repeatable || !(category.my_option_ids?.length || category.my_option_id)),
+          (category.repeatable ||
+            !(category.my_words?.length || category.my_option_ids?.length || category.my_option_id)),
       )
       .sort(newestOpened),
   ];
@@ -900,11 +926,61 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
         <div
           className={
             redaktion
-              ? 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start'
+              ? poll.kind === 'words'
+                ? 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2.5fr)_minmax(220px,0.75fr)] lg:items-start'
+                : 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start'
               : undefined
           }
         >
-          {!redaktion && poll.status === 'open' ? (
+          {redaktion && poll.kind === 'words' ? (
+            <section className={`${panel} min-w-0 space-y-6`}>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h2 className={heading}>Gesamtergebnisse</h2>
+                  <p className="mt-1 text-sm text-muted">
+                    Nur für die Redaktion. {poll.ballot_count ?? 0} Teilnehmende, {total} gültige Nennungen.
+                  </p>
+                </div>
+                <a className={btn.text} href={`/api/v1/categories/${id}/words/export`}>
+                  Wortliste als CSV herunterladen <Arrow />
+                </a>
+              </div>
+              {results.isPending ? (
+                <Loading />
+              ) : results.error ? (
+                <Failure error={results.error} retry={() => results.refetch()} />
+              ) : (
+                <div className="space-y-4">
+                  <h3 className={heading}>Wortwolke</h3>
+                  <WordCloud entries={results.data ?? []} total={total} />
+                </div>
+              )}
+              <section className="space-y-4 border-t border-line pt-6">
+                <h3 className={heading}>Stimmen</h3>
+                <p className="text-sm text-muted">
+                  Anonyme Einträge. Bei entsprechender Berechtigung kannst du Begriffe über die Wortchips ausschließen
+                  oder wiederherstellen. Gleiche Bezeichnungen werden in der Wortwolke zusammengezählt.
+                </p>
+                {wordEntries.isPending ? (
+                  <Loading />
+                ) : wordEntries.error ? (
+                  <Failure error={wordEntries.error} retry={() => wordEntries.refetch()} />
+                ) : (
+                  <ul className="grid gap-3 sm:grid-cols-2" aria-label="Eingegebene Wörter">
+                    {wordEntries.data?.map((entry) => (
+                      <WordEntryRow
+                        key={`${entry.option_id}:${entry.version}`}
+                        categoryId={id}
+                        entry={entry}
+                        editable={writable}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </section>
+              <BallotPrivacyNotice />
+            </section>
+          ) : !redaktion && poll.status === 'open' ? (
             <PollStack items={stackItems} initialId={poll.id} />
           ) : (
             <section className={`${redaktion ? panel : 'poll-stack__card'} min-w-0 space-y-5`}>
@@ -991,7 +1067,7 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
                   </div>
                 </section>
               )}
-              {editorial(user) && (
+              {editorial(user) && poll.kind !== 'words' && (
                 <section className={panel}>
                   <h3 className={heading}>Gesamtergebnisse</h3>
                   {results.isPending ? (
@@ -1076,5 +1152,123 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
         </section>
       )}
     </>
+  );
+}
+
+function WordCloud({ entries, total }: { entries: PollResult[]; total: number }) {
+  const largest = Math.max(1, ...entries.map((entry) => entry.count));
+  return (
+    <div className="mt-5 rounded-ui bg-white px-4 py-6 sm:px-6">
+      <p className="mb-4 text-xs text-muted">
+        Häufigere Wörter erscheinen größer. Die Zahl daneben zeigt die Nennungen.
+      </p>
+      {entries.length ? (
+        <ul
+          className="flex flex-wrap items-center justify-center gap-x-5 gap-y-3 text-center"
+          aria-label={`Wortwolke mit ${entries.length} ${entries.length === 1 ? 'Begriff' : 'Begriffen'} und ${total} ${total === 1 ? 'Nennung' : 'Nennungen'}`}
+        >
+          {entries.map((entry) => (
+            <li
+              key={entry.option_id}
+              className="max-w-full break-words font-extrabold leading-tight text-ink"
+              aria-label={`${entry.label}: ${entry.count} ${entry.count === 1 ? 'Nennung' : 'Nennungen'}`}
+              style={{ fontSize: `${1 + (entry.count / largest) * 1.5}rem` }}
+            >
+              {entry.label} <span className="align-baseline text-sm font-semibold text-muted">{entry.count}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-center text-sm text-muted">Noch keine gültigen Wörter.</p>
+      )}
+    </div>
+  );
+}
+
+function WordEntryRow({ categoryId, entry, editable }: { categoryId: string; entry: WordEntry; editable: boolean }) {
+  const action = useAction();
+  const [labelValue, setLabelValue] = useState(entry.label);
+  const normalizedLabel = labelValue.trim().toLowerCase().normalize('NFC');
+  const validLabel =
+    Boolean(normalizedLabel) &&
+    !/\s/u.test(normalizedLabel) &&
+    !/\p{Cc}/u.test(normalizedLabel) &&
+    Array.from(normalizedLabel).length <= 64;
+  const canSave = validLabel && normalizedLabel !== entry.label;
+
+  function updateWord(label: string, excluded: boolean, message: string) {
+    return action.run(
+      () =>
+        api(
+          `/categories/${categoryId}/words/${entry.option_id}`,
+          json('PATCH', { version: entry.version, label, excluded }),
+        ),
+      message,
+    );
+  }
+
+  return (
+    <li className="min-w-0 rounded-ui bg-white p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {editable ? (
+          <button
+            className={`inline-flex max-w-full items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ${entry.excluded ? 'bg-pill text-muted line-through' : 'bg-pop text-ink'}`}
+            type="button"
+            disabled={action.busy}
+            aria-pressed={!entry.excluded}
+            aria-label={
+              entry.excluded ? `Begriff ${entry.word} wiederherstellen` : `Begriff ${entry.word} ausschließen`
+            }
+            onClick={() =>
+              void updateWord(
+                entry.label,
+                !entry.excluded,
+                entry.excluded ? 'Begriff wiederhergestellt.' : 'Begriff ausgeschlossen.',
+              )
+            }
+          >
+            <span className="break-all">{entry.word}</span>
+            <span className="shrink-0 text-xs tabular-nums text-muted">{entry.count}</span>
+          </button>
+        ) : (
+          <span
+            className={`inline-flex max-w-full items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ${entry.excluded ? 'bg-pill text-muted line-through' : 'bg-pop text-ink'}`}
+          >
+            <span className="break-all">{entry.word}</span>
+            <span className="shrink-0 text-xs tabular-nums text-muted">{entry.count}</span>
+          </span>
+        )}
+        {entry.label !== entry.word && <span className="text-sm text-muted">→ {entry.label}</span>}
+      </div>
+      {editable && (
+        <div className="mt-3 flex flex-wrap items-end gap-2">
+          <label className="min-w-0 flex-1 text-xs font-semibold text-muted" htmlFor={`word-label-${entry.option_id}`}>
+            Bezeichnung bearbeiten
+            <input
+              className="mt-1.5 block min-h-10 w-full rounded-ui border-2 border-line bg-white px-3 py-1.5 text-sm font-normal text-ink focus:border-ink"
+              id={`word-label-${entry.option_id}`}
+              maxLength={64}
+              value={labelValue}
+              disabled={action.busy}
+              onChange={(event) => setLabelValue(event.target.value)}
+            />
+          </label>
+          <button
+            className="rounded-full bg-ink px-3.5 py-2 text-xs font-bold text-white hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+            type="button"
+            disabled={action.busy || !canSave}
+            onClick={() => void updateWord(normalizedLabel, entry.excluded, 'Begriff aktualisiert.')}
+          >
+            Umbenennen
+          </button>
+        </div>
+      )}
+      {editable && labelValue && !validLabel && (
+        <p className="mt-2 text-xs text-bad" role="alert">
+          Ein Begriff muss ein einzelnes Wort mit höchstens 64 Zeichen sein.
+        </p>
+      )}
+      {action.feedback}
+    </li>
   );
 }
