@@ -1,12 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import type { Attachment, Category, Me, Revision, Submission } from './api';
-import { ContributionDetail, NewContribution } from './pages';
+import { ContributionDetail, Contributions, NewContribution } from './pages';
 import { Sammlungen, SammlungDetail } from './sammlungen';
-import { Session, WorkspaceView, type View } from './ui';
+import { Session, SubmissionList, WorkspaceView, type View } from './ui';
 
 const student: Me['user'] = {
   id: 'student-photo',
@@ -136,7 +136,13 @@ describe('photo contributions', () => {
   it('creates the first photo atomically and retries remaining uploads without duplicating the entry', async () => {
     const calls: { path: string; method: string; body: BodyInit | null | undefined }[] = [];
     let uploads = 0;
+    const previous = submission({
+      id: 'previous-batch',
+      title: 'Vorheriger Eintrag',
+      attachments: [attachment('previous-photo', 'Ein früherer Moment')],
+    });
     let created = submission({ attachments: [] });
+    let didCreate = false;
     const firstFile = new File(['one'], 'hofpause.jpg', { type: 'image/jpeg' });
     const secondFile = new File(['two'], 'sonnenuntergang.png', { type: 'image/png' });
     vi.stubGlobal(
@@ -146,7 +152,8 @@ describe('photo contributions', () => {
         const path = url.pathname.replace('/api/v1', '');
         const method = init?.method ?? 'GET';
         if (path === '/categories') return Response.json([photoCategory()]);
-        if (path === '/submissions' && method === 'GET') return Response.json([]);
+        if (path === '/submissions' && method === 'GET')
+          return Response.json(didCreate ? [previous, created] : [previous]);
         if (path === '/submissions' && method === 'POST') {
           calls.push({ path, method, body: init?.body });
           const body = init?.body as FormData;
@@ -155,6 +162,7 @@ describe('photo contributions', () => {
             version: 1,
             attachments: [attachment('photo-first', String(body.get('caption') ?? ''))],
           });
+          didCreate = true;
           return Response.json(created, { status: 201 });
         }
         if (path === `/submissions/${created.id}/attachments` && method === 'POST') {
@@ -181,7 +189,7 @@ describe('photo contributions', () => {
       'schueler',
       <Routes>
         <Route path="/beitraege/neu" element={<NewContribution />} />
-        <Route path="/beitraege/:id" element={<p>Fotoeintrag geöffnet</p>} />
+        <Route path="/sammlungen/:id" element={<SammlungDetail />} />
       </Routes>,
     );
     const input = await screen.findByLabelText(/Mindestens ein Foto/);
@@ -206,9 +214,82 @@ describe('photo contributions', () => {
     expect(appendBody.get('caption')).toBe('Licht über dem Schulhof');
 
     fireEvent.click(screen.getByRole('button', { name: /Weitere Fotos hochladen/ }));
-    expect(await screen.findByText('Fotoeintrag geöffnet')).toBeInTheDocument();
+    expect(await screen.findByRole('img', { name: 'Ein früherer Moment' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Im Hof nach der sechsten Stunde' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Licht über dem Schulhof' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Ein früherer Moment in voller Größe öffnen' })).toHaveAttribute(
+      'href',
+      '/api/v1/attachments/previous-photo',
+    );
     expect(calls.filter((call) => call.path === '/submissions' && call.method === 'POST')).toHaveLength(1);
     expect(calls.filter((call) => call.path.endsWith('/attachments') && call.method === 'POST')).toHaveLength(2);
+  });
+
+  it('adds photos to an existing pending entry in a nonrepeatable collection without creating another entry', async () => {
+    const photo = photoCategory({ repeatable: false });
+    const existing = submission({
+      id: 'existing-pending',
+      version: 4,
+      attachments: [attachment('already-there', 'Schon eingereicht')],
+    });
+    let current = existing;
+    const calls: { path: string; method: string; body?: BodyInit | null }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), window.location.origin);
+        const path = url.pathname.replace('/api/v1', '');
+        const method = init?.method ?? 'GET';
+        if (path === '/categories') return Response.json([photo]);
+        if (path === '/submissions' && method === 'GET') return Response.json([current]);
+        if (path === '/submissions' && method === 'POST') {
+          calls.push({ path, method, body: init?.body });
+          return Response.json(current);
+        }
+        if (path === `/submissions/${existing.id}/attachments` && method === 'POST') {
+          calls.push({ path, method, body: init?.body });
+          const body = init?.body as FormData;
+          current = {
+            ...current,
+            version: current.version + 1,
+            attachments: [
+              ...current.attachments,
+              attachment(`added-${current.version}`, String(body.get('caption') ?? '')),
+            ],
+          };
+          return Response.json(current);
+        }
+        return Response.json([]);
+      }),
+    );
+
+    renderRoutes(
+      `/sammlungen/${photo.id}`,
+      student,
+      'schueler',
+      <Routes>
+        <Route path="/beitraege/neu" element={<NewContribution />} />
+        <Route path="/sammlungen/:id" element={<SammlungDetail />} />
+      </Routes>,
+    );
+    fireEvent.click(await screen.findByRole('link', { name: /Fotos hochladen/ }));
+    const input = await screen.findByLabelText(/Mindestens ein Foto/);
+    const firstFile = new File(['one'], 'erstes-neues-foto.jpg', { type: 'image/jpeg' });
+    const secondFile = new File(['two'], 'zweites-neues-foto.png', { type: 'image/png' });
+    fireEvent.change(input, { target: { files: [firstFile, secondFile] } });
+    fireEvent.submit(input.closest('form')!);
+
+    expect(await screen.findByRole('img', { name: 'Schon eingereicht' })).toBeInTheDocument();
+    expect(await screen.findByRole('img', { name: 'added-4.jpg' })).toBeInTheDocument();
+    expect(await screen.findByRole('img', { name: 'added-5.jpg' })).toBeInTheDocument();
+    expect(calls.filter((call) => call.path === '/submissions' && call.method === 'POST')).toHaveLength(0);
+    const uploads = calls.filter((call) => call.path === `/submissions/${existing.id}/attachments`);
+    expect(uploads).toHaveLength(2);
+    expect(uploads.map((call) => (call.body as FormData).get('version'))).toEqual(['4', '5']);
+    expect(uploads.map((call) => ((call.body as FormData).get('file') as File).name)).toEqual([
+      'erstes-neues-foto.jpg',
+      'zweites-neues-foto.png',
+    ]);
   });
 
   it.each([false, true])(
@@ -317,12 +398,135 @@ describe('photo contributions', () => {
     expect(screen.queryByRole('button', { name: 'Foto entfernen' })).toBeNull();
   });
 
-  it('shows only the student’s own photos while editorial collection readers see all', async () => {
+  it('edits a pending photo through its own batch and refreshed version, while protecting accepted and final photos', async () => {
+    const photo = photoCategory();
+    const firstBatch = submission({
+      id: 'batch-one',
+      version: 3,
+      attachments: [attachment('photo-one', 'Einzelnes Foto')],
+    });
+    const secondBatch = submission({
+      id: 'batch-two',
+      version: 7,
+      attachments: [attachment('photo-two', 'Zweites Foto'), attachment('photo-three', 'Drittes Foto')],
+    });
+    const acceptedBatch = submission({
+      id: 'accepted-batch',
+      status: 'accepted',
+      attachments: [attachment('accepted-photo', 'Angenommenes Foto')],
+    });
+    let current = [firstBatch, secondBatch, acceptedBatch];
+    const writes: { path: string; method: string; body: { version: number; caption?: string } }[] = [];
+    let conflictReturned = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), window.location.origin);
+        const path = url.pathname.replace('/api/v1', '');
+        const method = init?.method ?? 'GET';
+        if (path === '/categories') return Response.json([photo]);
+        if (path === '/submissions' && method === 'GET') return Response.json(current);
+        if (path.startsWith('/submissions/batch-two/attachments/')) {
+          const body = JSON.parse(String(init?.body)) as { version: number; caption?: string };
+          writes.push({ path, method, body });
+          if (method === 'PATCH' && !conflictReturned) {
+            conflictReturned = true;
+            current = current.map((entry) =>
+              entry.id === 'batch-two' ? { ...entry, version: entry.version + 1 } : entry,
+            );
+            return Response.json(
+              { error: { code: 'conflict', message: 'Der Beitrag wurde inzwischen geändert.' } },
+              { status: 409 },
+            );
+          }
+          if (method === 'PATCH') {
+            current = current.map((entry) =>
+              entry.id === 'batch-two'
+                ? {
+                    ...entry,
+                    version: entry.version + 1,
+                    attachments: entry.attachments.map((item) =>
+                      item.id === 'photo-two' ? { ...item, caption: body.caption ?? '' } : item,
+                    ),
+                  }
+                : entry,
+            );
+            return Response.json(current.find((entry) => entry.id === 'batch-two'));
+          }
+          if (method === 'DELETE') {
+            current = current.map((entry) =>
+              entry.id === 'batch-two'
+                ? {
+                    ...entry,
+                    version: entry.version + 1,
+                    attachments: entry.attachments.filter((item) => item.id !== 'photo-three'),
+                  }
+                : entry,
+            );
+            return Response.json(current.find((entry) => entry.id === 'batch-two'));
+          }
+        }
+        return Response.json([]);
+      }),
+    );
+
+    renderRoutes(
+      `/sammlungen/${photo.id}`,
+      student,
+      'schueler',
+      <Routes>
+        <Route path="/sammlungen/:id" element={<SammlungDetail />} />
+      </Routes>,
+    );
+
+    await screen.findByRole('img', { name: 'Einzelnes Foto' });
+    const singleFigure = screen.getByRole('img', { name: 'Einzelnes Foto' }).closest('figure')!;
+    const editableFigure = screen.getByRole('img', { name: 'Zweites Foto' }).closest('figure')!;
+    const removableFigure = screen.getByRole('img', { name: 'Drittes Foto' }).closest('figure')!;
+    const acceptedFigure = screen.getByRole('img', { name: 'Angenommenes Foto' }).closest('figure')!;
+    expect(within(singleFigure).queryByRole('button', { name: 'Foto entfernen' })).toBeNull();
+    expect(within(acceptedFigure).queryByRole('button', { name: /Bildtext/ })).toBeNull();
+
+    fireEvent.click(within(editableFigure).getByRole('button', { name: 'Bildtext bearbeiten' }));
+    fireEvent.change(within(editableFigure).getByLabelText('Bildtext'), { target: { value: 'Korrigierter Bildtext' } });
+    fireEvent.click(within(editableFigure).getByRole('button', { name: 'Bildtext speichern' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Der Beitrag wurde inzwischen geändert.');
+    fireEvent.click(within(editableFigure).getByRole('button', { name: 'Bildtext speichern' }));
+    expect(await screen.findByText('Korrigierter Bildtext', { selector: 'p' })).toBeInTheDocument();
+    expect(writes.slice(0, 2)).toEqual([
+      {
+        path: '/submissions/batch-two/attachments/photo-two',
+        method: 'PATCH',
+        body: { version: 7, caption: 'Korrigierter Bildtext' },
+      },
+      {
+        path: '/submissions/batch-two/attachments/photo-two',
+        method: 'PATCH',
+        body: { version: 8, caption: 'Korrigierter Bildtext' },
+      },
+    ]);
+
+    fireEvent.click(within(removableFigure).getByRole('button', { name: 'Foto entfernen' }));
+    await waitFor(() => expect(writes).toHaveLength(3));
+    expect(writes[2]).toEqual({
+      path: '/submissions/batch-two/attachments/photo-three',
+      method: 'DELETE',
+      body: { version: 9 },
+    });
+    await waitFor(() => expect(within(editableFigure).queryByRole('button', { name: 'Foto entfernen' })).toBeNull());
+  });
+
+  it('flattens photos from the student’s own batches, while editorial collection readers see every photo', async () => {
     const photo = photoCategory();
     const own = submission({
       id: 'own-photo',
       title: 'Mias Bild',
-      attachments: [attachment('own-image', 'Mias Moment')],
+      attachments: [attachment('own-image', 'Mias Moment'), attachment('own-image-two', 'Mias zweiter Moment')],
+    });
+    const ownSecondBatch = submission({
+      id: 'own-second-batch',
+      title: 'Mias weiterer Eintrag',
+      attachments: [attachment('own-image-three', 'Mias dritter Moment')],
     });
     const other = submission({
       id: 'other-photo',
@@ -337,7 +541,7 @@ describe('photo contributions', () => {
       attachments: [],
       body: 'Ein älterer Textbeitrag.',
     });
-    const all = [own, other, legacy];
+    const all = [own, ownSecondBatch, other, legacy];
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
@@ -358,8 +562,23 @@ describe('photo contributions', () => {
       </Routes>,
     );
     expect(await screen.findByRole('img', { name: 'Mias Moment' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Mias zweiter Moment' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Mias dritter Moment' })).toBeInTheDocument();
     expect(screen.queryByRole('img', { name: 'Noahs Moment' })).toBeNull();
-    expect(screen.getByRole('link', { name: 'Mias Moment öffnen' })).toHaveAttribute('href', '/beitraege/own-photo');
+    expect(screen.getByRole('link', { name: 'Mias Moment in voller Größe öffnen' })).toHaveAttribute(
+      'href',
+      '/api/v1/attachments/own-image',
+    );
+    expect(
+      within(screen.getByRole('img', { name: 'Mias Moment' }).closest('figure')!).getByRole('link', {
+        name: 'Details & Verlauf',
+      }),
+    ).toHaveAttribute('href', '/beitraege/own-photo');
+    expect(
+      within(screen.getByRole('img', { name: 'Mias dritter Moment' }).closest('figure')!).getByRole('link', {
+        name: 'Details & Verlauf',
+      }),
+    ).toHaveAttribute('href', '/beitraege/own-second-batch');
     expect(screen.getByRole('link', { name: 'Foto ergänzen' })).toHaveAttribute('href', '/beitraege/legacy-photo');
     cleanup();
 
@@ -373,6 +592,7 @@ describe('photo contributions', () => {
       </Routes>,
     );
     expect(await screen.findByRole('img', { name: 'Mias Moment' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Mias dritter Moment' })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Noahs Moment' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Voriger Eintrag/ })).toHaveAttribute(
       'href',
@@ -382,5 +602,88 @@ describe('photo contributions', () => {
       'href',
       '/redaktion/beitraege/other-photo',
     );
+  });
+
+  it('groups photo submissions by collection with a total count and keeps ordinary contributions listed', async () => {
+    const photo = photoCategory();
+    const text = photoCategory({ id: 'stories', name: 'Geschichten', kind: 'memory' });
+    const firstBatch = submission({
+      id: 'photo-batch-one',
+      title: 'Erster Fototermin',
+      attachments: [attachment('one-a', 'Sommerfest'), attachment('one-b', 'Mias Bildtext')],
+    });
+    const secondBatch = submission({
+      id: 'photo-batch-two',
+      title: 'Zweiter Fototermin',
+      attachments: [attachment('two-a', 'ferienabend.jpg')],
+    });
+    const textEntry = submission({ id: 'text-entry', category_id: text.id, title: 'Mein Textbeitrag' });
+    const otherPhoto = submission({
+      id: 'other-student',
+      author_id: 'student-other',
+      attachments: [attachment('other-photo')],
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), window.location.origin);
+        if (url.pathname.endsWith('/categories')) return Response.json([photo, text]);
+        if (url.pathname.endsWith('/submissions'))
+          return Response.json([firstBatch, secondBatch, textEntry, otherPhoto]);
+        return Response.json([]);
+      }),
+    );
+
+    renderRoutes(
+      '/beitraege',
+      student,
+      'schueler',
+      <Routes>
+        <Route path="/beitraege" element={<Contributions />} />
+      </Routes>,
+    );
+
+    const collectionLink = await screen.findByRole('link', { name: /Jahrgangsmomente/ });
+    expect(collectionLink).toHaveAttribute('href', '/sammlungen/photos');
+    expect(collectionLink).toHaveTextContent('3 Fotos');
+    expect(screen.queryByRole('link', { name: /Erster Fototermin|Zweiter Fototermin/ })).toBeNull();
+    expect(screen.getByRole('link', { name: /Mein Textbeitrag/ })).toHaveAttribute('href', '/beitraege/text-entry');
+
+    const search = screen.getByRole('searchbox', { name: 'Suchen' });
+    fireEvent.change(search, { target: { value: 'Mias Bildtext' } });
+    expect(await screen.findByRole('link', { name: /Jahrgangsmomente/ })).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: 'ferienabend.jpg' } });
+    expect(await screen.findByRole('link', { name: /Jahrgangsmomente/ })).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: 'Jahrgangsmomente' } });
+    expect(await screen.findByRole('link', { name: /Jahrgangsmomente/ })).toBeInTheDocument();
+  });
+
+  it('groups all photo batches before applying the five-row dashboard limit', async () => {
+    const photo = photoCategory();
+    const story = photoCategory({ id: 'stories', name: 'Geschichten', kind: 'memory' });
+    const batches = Array.from({ length: 6 }, (_, index) =>
+      submission({
+        id: `photo-batch-${index + 1}`,
+        title: `Fotobeitrag ${index + 1}`,
+        attachments: [attachment(`dashboard-photo-${index + 1}`)],
+      }),
+    );
+    const other = submission({ id: 'story-entry', category_id: story.id, title: 'Noch eine Geschichte' });
+
+    renderRoutes(
+      '/',
+      student,
+      'schueler',
+      <SubmissionList items={[...batches, other]} categories={[photo, story]} limit={5} />,
+    );
+
+    const collectionLink = await screen.findByRole('link', { name: /Jahrgangsmomente/ });
+    expect(collectionLink).toHaveAttribute('href', '/sammlungen/photos');
+    expect(collectionLink).toHaveTextContent('6 Fotos');
+    expect(screen.getByRole('link', { name: /Noch eine Geschichte/ })).toHaveAttribute(
+      'href',
+      '/beitraege/story-entry',
+    );
+    expect(screen.getAllByRole('link')).toHaveLength(2);
   });
 });

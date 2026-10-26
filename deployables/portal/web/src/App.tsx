@@ -853,7 +853,7 @@ function StudentHome() {
           ) : submissions.error ? (
             <Failure error={submissions.error} retry={() => submissions.refetch()} />
           ) : own.length ? (
-            <SubmissionList items={own.slice(0, 5)} categories={categories.data ?? []} />
+            <SubmissionList items={own} categories={categories.data ?? []} limit={5} />
           ) : (
             <Empty>Die erste Geschichte wartet auf dich. Such dir oben eine Sammlung aus.</Empty>
           )}

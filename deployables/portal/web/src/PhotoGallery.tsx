@@ -9,12 +9,12 @@ export type GalleryPhoto = Attachment & {
 
 export function photosFromSubmissions(
   submissions: Submission[],
-  hrefFor: (submission: Submission) => string,
+  hrefFor?: (submission: Submission) => string,
 ): GalleryPhoto[] {
   return submissions.flatMap((submission) =>
     (submission.attachments ?? []).map((attachment) => ({
       ...attachment,
-      href: hrefFor(submission),
+      href: hrefFor?.(submission),
       author_name: submission.author_name,
     })),
   );
@@ -27,13 +27,15 @@ export function PhotoGallery({
   busy = false,
   onSaveCaption,
   onRemove,
+  detailsFor,
 }: {
   photos: GalleryPhoto[];
-  allowCaptionEdit?: boolean;
+  allowCaptionEdit?: boolean | ((photo: GalleryPhoto) => boolean);
   canRemove?: (photo: GalleryPhoto) => boolean;
   busy?: boolean;
   onSaveCaption?: (attachmentId: string, caption: string) => Promise<unknown>;
   onRemove?: (photo: GalleryPhoto) => void;
+  detailsFor?: (photo: GalleryPhoto) => string;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -62,6 +64,7 @@ export function PhotoGallery({
         const target = photo.href ?? photo.url;
         const label = photo.caption || photo.filename;
         const editingThis = editing === photo.id;
+        const editable = typeof allowCaptionEdit === 'function' ? allowCaptionEdit(photo) : allowCaptionEdit;
         return (
           <figure className="photo-gallery__item" key={photo.id}>
             <a
@@ -90,7 +93,7 @@ export function PhotoGallery({
                   {photo.filename} <span>· {(photo.size_bytes / 1024).toFixed(0)} KB</span>
                 </p>
               )}
-              {editingThis && allowCaptionEdit && onSaveCaption ? (
+              {editingThis && editable && onSaveCaption ? (
                 <form
                   className="photo-gallery__caption-form"
                   onSubmit={(event) => {
@@ -119,7 +122,8 @@ export function PhotoGallery({
                 </form>
               ) : (
                 <div className="photo-gallery__actions">
-                  {allowCaptionEdit && onSaveCaption && (
+                  {detailsFor && <a href={detailsFor(photo)}>Details & Verlauf</a>}
+                  {editable && onSaveCaption && (
                     <button
                       type="button"
                       disabled={busy || saving !== null}

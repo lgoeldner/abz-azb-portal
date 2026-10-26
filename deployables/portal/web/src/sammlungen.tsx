@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { Minus, Plus } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -827,12 +828,15 @@ function CollectionReader({ sammlung }: { sammlung: Category }) {
 
 function StudentCollection({ sammlung }: { sammlung: Category }) {
   const { user } = useSession();
+  const queryClient = useQueryClient();
+  const action = useAction();
   const submissions = useData<Submission[]>('/submissions');
   const categories = useData<Category[]>('/categories');
   const mine = (submissions.data ?? []).filter((s) => s.category_id === sammlung.id);
   const own = mine.filter((s) => s.author_id === user.id);
   const photoCollection = sammlung.kind === 'photo';
-  const photos = photosFromSubmissions(own, (submission) => `/beitraege/${submission.id}`);
+  const photos = photosFromSubmissions(own);
+  const ownerByPhoto = new Map(own.flatMap((entry) => entry.attachments.map((photo) => [photo.id, entry] as const)));
   const withoutPhotos = own.filter((submission) => !submission.attachments.length);
   return (
     <>
@@ -842,7 +846,7 @@ function StudentCollection({ sammlung }: { sammlung: Category }) {
       </PageHead>
       <DevDebug label="Sammlung" data={debugData(sammlung)} />
       <div>
-        <section className={`${panel} min-w-0 space-y-5`}>
+        <section className={`${photoCollection ? '' : panel} min-w-0 space-y-5`}>
           <h2 className={heading}>
             {photoCollection
               ? sammlung.repeatable
@@ -862,7 +866,9 @@ function StudentCollection({ sammlung }: { sammlung: Category }) {
           {!submissions.isPending &&
             !submissions.error &&
             sammlung.status === 'open' &&
-            (sammlung.repeatable || !own.length) && (
+            (sammlung.repeatable ||
+              !own.length ||
+              (photoCollection && own.some((entry) => entry.status === 'pending'))) && (
               <Link className={btn.primary} to={`/beitraege/neu?kategorie=${sammlung.id}`}>
                 {photoCollection ? 'Fotos hochladen' : 'Beitrag einreichen'} <Arrow />
               </Link>
@@ -877,7 +883,41 @@ function StudentCollection({ sammlung }: { sammlung: Category }) {
             <Failure error={submissions.error} retry={() => submissions.refetch()} />
           ) : photoCollection ? (
             <>
-              {photos.length > 0 && <PhotoGallery photos={photos} />}
+              {photos.length > 0 && (
+                <PhotoGallery
+                  photos={photos}
+                  busy={action.busy}
+                  detailsFor={(photo) => `/beitraege/${ownerByPhoto.get(photo.id)!.id}`}
+                  allowCaptionEdit={(photo) => ownerByPhoto.get(photo.id)?.status === 'pending'}
+                  onSaveCaption={async (attachmentId, caption) => {
+                    const entry = ownerByPhoto.get(attachmentId)!;
+                    try {
+                      await api(
+                        `/submissions/${entry.id}/attachments/${attachmentId}`,
+                        json('PATCH', { version: entry.version, caption }),
+                      );
+                    } finally {
+                      await queryClient.invalidateQueries();
+                    }
+                  }}
+                  canRemove={(photo) => {
+                    const entry = ownerByPhoto.get(photo.id)!;
+                    return entry.status === 'pending' && entry.attachments.length > 1;
+                  }}
+                  onRemove={(photo) => {
+                    const entry = ownerByPhoto.get(photo.id)!;
+                    void action.run(
+                      () =>
+                        api(
+                          `/submissions/${entry.id}/attachments/${photo.id}`,
+                          json('DELETE', { version: entry.version }),
+                        ),
+                      'Foto entfernt.',
+                    );
+                  }}
+                />
+              )}
+              {action.feedback}
               {withoutPhotos.length > 0 && (
                 <ul
                   className={`overflow-hidden rounded-ui border-2 border-line bg-white${photos.length ? ' mt-8' : ''}`}

@@ -68,7 +68,9 @@ export function Contributions() {
       (s) =>
         s.author_id === user.id &&
         (!status || s.status === status) &&
-        `${s.title} ${s.body}`.toLowerCase().includes(search.toLowerCase()),
+        `${s.title} ${s.body} ${categories.data?.find((c) => c.id === s.category_id)?.name ?? ''} ${s.attachments.map((a) => `${a.filename} ${a.caption}`).join(' ')}`
+          .toLowerCase()
+          .includes(search.toLowerCase()),
     ) ?? [];
   return (
     <>
@@ -97,10 +99,16 @@ export function Contributions() {
           </select>
         </label>
       </div>
-      {submissions.isPending ? (
+      {submissions.isPending || categories.isPending ? (
         <Loading />
-      ) : submissions.error ? (
-        <Failure error={submissions.error} retry={() => submissions.refetch()} />
+      ) : submissions.error || categories.error ? (
+        <Failure
+          error={(submissions.error ?? categories.error)!}
+          retry={() => {
+            submissions.refetch();
+            categories.refetch();
+          }}
+        />
       ) : own.length ? (
         <SubmissionList items={own} categories={categories.data ?? []} />
       ) : (
@@ -124,11 +132,16 @@ export function NewContribution() {
   const [images, setImages] = useState<SelectedImage[]>([]);
   const category = categories.data?.find((c) => c.id === params.get('kategorie') && submittable(c));
   const isPhoto = category?.kind === 'photo';
+  const savedDestination = saved && isPhoto ? `/sammlungen/${saved.category_id}` : `/beitraege/${saved?.id}`;
+  const backDestination = isPhoto ? `/sammlungen/${category.id}` : '/beitraege';
   const own = submissions.data?.filter((s) => s.author_id === user.id) ?? [];
   const existing =
     !saved && category && !category.repeatable ? own.find((s) => s.category_id === category.id) : undefined;
   const choices = (categories.data ?? []).filter(
-    (c) => c.status === 'open' && submittable(c) && (c.repeatable || !own.some((s) => s.category_id === c.id)),
+    (c) =>
+      c.status === 'open' &&
+      submittable(c) &&
+      (c.id === category?.id || c.repeatable || !own.some((s) => s.category_id === c.id)),
   );
 
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -136,11 +149,14 @@ export function NewContribution() {
     const data = new FormData(e.currentTarget);
     await action.run(async () => {
       const files = images.map((image) => image.file);
-      const invalidFiles = photoValidationError(files, saved?.attachments.length ?? 0);
+      const invalidFiles = photoValidationError(
+        files,
+        saved?.attachments.length ?? (isPhoto ? existing?.attachments.length : 0) ?? 0,
+      );
       if (invalidFiles) throw new Error(invalidFiles);
       if (isPhoto && !saved && !images.length) throw new Error('Bitte wähle mindestens ein Foto aus.');
 
-      let current = saved;
+      let current = saved ?? (isPhoto ? (existing ?? null) : null);
       let remaining = [...images];
       if (!current && isPhoto) {
         const first = remaining.shift();
@@ -176,7 +192,7 @@ export function NewContribution() {
         remaining = remaining.slice(1);
         setImages([...remaining]);
       }
-      if (current) navigate(`/beitraege/${current.id}`);
+      if (current) navigate(isPhoto ? `/sammlungen/${current.category_id}` : `/beitraege/${current.id}`);
     });
   }
 
@@ -184,8 +200,8 @@ export function NewContribution() {
 
   return (
     <>
-      <Link className="mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink" to="/beitraege">
-        ← Meine Beiträge
+      <Link className="mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink" to={backDestination}>
+        ← {isPhoto ? 'Zur Fotosammlung' : 'Meine Beiträge'}
       </Link>
       <PageHead
         title={
@@ -212,7 +228,7 @@ export function NewContribution() {
         />
       ) : !categories.data?.length ? (
         <Empty>Das Team richtet die Sammlungen gerade ein.</Empty>
-      ) : existing ? (
+      ) : existing && (!isPhoto || existing.status !== 'pending') ? (
         <Empty>
           Du hast bereits einen Beitrag in dieser Sammlung.{' '}
           <Link to={`/beitraege/${existing.id}`}>Zum gespeicherten Beitrag</Link>
@@ -341,19 +357,19 @@ export function NewContribution() {
                 {isPhoto
                   ? 'Das erste Foto ist gespeichert. Noch ausstehende Fotos kannst du erneut hochladen.'
                   : 'Der Text ist bereits gespeichert. Noch ausstehende Fotos kannst du erneut hochladen.'}{' '}
-                <Link className="font-semibold underline" to={`/beitraege/${saved.id}`}>
-                  Zum gespeicherten Beitrag
+                <Link className="font-semibold underline" to={savedDestination}>
+                  {isPhoto ? 'Zur Fotosammlung' : 'Zum gespeicherten Beitrag'}
                 </Link>
               </p>
             )}
             {action.feedback}
             {saved && action.error && images.length > 0 && (
-              <button type="button" className={btn.secondary} onClick={() => navigate(`/beitraege/${saved.id}`)}>
+              <button type="button" className={btn.secondary} onClick={() => navigate(savedDestination)}>
                 Ohne weitere Fotos fortfahren
               </button>
             )}
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <Link to="/beitraege" className={btn.text}>
+              <Link to={backDestination} className={btn.text}>
                 Abbrechen
               </Link>
               <button className={btn.primary} disabled={action.busy || (isPhoto && !saved && images.length === 0)}>
