@@ -36,7 +36,7 @@ make down     # stop all development containers (keeps data)
 
 `make env` creates missing `.env*` files from their `.dist` templates and never overwrites existing ones. Review the generated defaults.
 
-- Frontend: [localhost:5173](http://localhost:5173)
+- Frontend: starts at [localhost:5173](http://localhost:5173), automatically using the next free port if 5173 is occupied.
 - API: `localhost:8080`
 - Mock login provider: [localhost:9090](http://localhost:9090), development only. Its fake identities are listed in `deployables/auth-mock/users.yaml`.
 - Full container stack behind Caddy: [https://caddy.abizeitung-portal.orb.local](https://caddy.abizeitung-portal.orb.local) (internal CA, so the browser warns).

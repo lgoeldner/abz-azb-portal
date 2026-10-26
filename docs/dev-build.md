@@ -1,7 +1,8 @@
 # Incremental development builds
 
 `make dev` runs `docker compose up -d --build --wait`, then starts a host Go
-API on port 8080 and Vite on port 5173. Compose checks every selected image,
+API on port 8080 and Vite starting at port 5173 (automatically using the next
+free port if it is occupied). Compose checks every selected image,
 reuses cached build steps, and keeps containers whose image and configuration
 are unchanged. There is no need to run `make down` between rebuilds.
 

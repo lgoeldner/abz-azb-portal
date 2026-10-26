@@ -33,10 +33,10 @@ file `ops/README.md` :: operations, backup, restore, tidy caveat [ops, restore, 
 
 ## Scripts
 
-cmd `scripts/dev.sh` :: `make dev`: containers + host Go API :8080 + Vite :5173 [dev, start]
+cmd `scripts/dev.sh` :: `make dev`: containers + host Go API :8080 + Vite starting at :5173 with free-port fallback [dev, start]
 cmd `scripts/dev-common.sh` :: dev env vars (DATABASE_URL, UPLOAD_DIR), start_dev_services, prepare_dev_database (migrate+seed) [env, dev]
 cmd `scripts/dev-backend.sh` :: builds and runs the host Go API; SKIP_DEV_DB_SETUP=1 skips containers/migrate/seed [backend, dev]
-cmd `scripts/dev-frontend.sh` :: Vite dev server [frontend, dev]
+cmd `scripts/dev-frontend.sh` :: Vite dev server starts at 5173 and uses the next free port if occupied [frontend, dev, port]
 cmd `scripts/doctor.sh` :: checks local prerequisites [setup]
 cmd `scripts/env.sh` :: creates .env.dev [env]
 cmd `scripts/check-contract.mjs` :: routes in http.go vs openapi.json; `--write` regenerates `deployables/portal/web/src/generated/api.d.ts` [contract, codegen]
@@ -104,6 +104,7 @@ route GET /admin/users, PATCH|DELETE /admin/users/{id}, GET /admin/audit, GET /a
 route GET /auth/login, GET /auth/callback, POST /auth/logout :: outside /api/v1 (auth.go) [auth]
 
 ## Frontend (deployables/portal/web)
+file `deployables/portal/web/vite.config.ts` :: Vite dev server binds localhost at 5173 and falls back to the next free port [frontend, dev, port]
 
 file `deployables/portal/web/src/App.tsx` :: router, Layout, nav (StudentNav, EditorNav, AdminNav), StudentHome unanswered card queue (repeatable collections only before any own submission), shared EditorialHome dashboard with class widgets, admin admissions, manager writable polls and recent assigned contributions, voting participation bars [routes, nav, dashboard, home, participation, grants]
 file `deployables/portal/web/src/sammlungen.tsx` :: Shared Sammlungen workspace (Fortlaufend section, status groups, ?klasse filter), all-kind editor creation, grant-controlled definition edits and poll hiding, admin-confirmed poll deletion, admin manager assignments in SammlungForm, SammlungDetail, all-submission editorial collection reader, read-only ballot options/results and an inline student voting stack [sammlung, poll, vote, form]
