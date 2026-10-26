@@ -28,6 +28,27 @@ not watch source files; stop and rerun `make dev` after Go edits. Its native Go
 cache is separate from the Linux container build cache. Migration and seed
 commands still run at startup.
 
+## Starting and restarting in OrbStack
+
+The development containers use `restart: unless-stopped`, including the mock
+identity provider. The portal commands (`migrate`, `seed`, `serve`) wait up to
+60 seconds for PostgreSQL, with a two-second timeout per attempt. This covers
+starting existing containers from OrbStack, where Compose dependency health
+gates are not applied. The portal healthcheck probes `/readyz`, so `make dev`
+waits for the API to be ready. Stopping the project explicitly keeps it stopped
+until you start it again.
+
+After changing startup code or Compose settings, run `make dev` once to rebuild
+and recreate affected containers. Restarting an existing container alone does
+not apply new code or settings. Subsequent starts and restarts can use OrbStack.
+The host Go API and Vite still require `make dev`.
+
+Run `bash scripts/test-compose-startup.sh` for a disposable regression drill:
+it starts the portal before PostgreSQL on both fresh and existing containers,
+then restarts the whole stack through Compose and checks API readiness. It uses
+separate images, networks and volumes, publishes no ports, and removes its
+resources afterward.
+
 ## Verified behavior — 26 October 2026
 
 An isolated OrbStack Compose stack used the normal development files with a
@@ -42,3 +63,8 @@ not host API/Vite startup or a cold build.
 
 `make check` also passed with `TEST_DATABASE_URL` targeting a separate disposable
 PostgreSQL container. Independent Dockerfile review found no remaining defects.
+
+The startup regression drill also passed on OrbStack: fresh-container and
+existing-container starts kept the portal running while PostgreSQL was stopped,
+then reached readiness after PostgreSQL started. A full Compose restart reached
+readiness too. `make check` passed again against a separate disposable test DB.

@@ -18,7 +18,7 @@ dir `deployables/backup/` :: restic backup image, backup.sh/restore.sh plus thei
 dir `deployables/caddy/` :: Caddyfile, mounted into the stock caddy image [tls, https, proxy]
 file `go.work` :: joins portal and auth-mock modules for dev/tests only; Docker builds use GOWORK=off [workspace]
 file `compose.yaml` :: production stack: db, portal, caddy, backup [deploy, production]
-file `compose.dev.yaml` :: dev overrides: auth-mock, local ports, dev bind mounts [dev, docker]
+file `compose.dev.yaml` :: dev overrides: auth-mock, local ports, dev bind mounts; runtime services recover with unless-stopped [dev, docker, restart]
 file `Makefile` :: dev, check, lint, audit, backup, restore, migrate targets [make, ci]
 file `.github/workflows/ci.yaml` :: CI: lint, audit, Go/web tests, e2e [ci, github]
 file `.githooks/pre-commit` :: prettier and gofmt on staged files [hook, format]
@@ -42,10 +42,12 @@ cmd `scripts/env.sh` :: creates .env.dev [env]
 cmd `scripts/check-contract.mjs` :: routes in http.go vs openapi.json; `--write` regenerates `deployables/portal/web/src/generated/api.d.ts` [contract, codegen]
 cmd `scripts/check-repo-map.sh` :: fails if a path in this map no longer exists [map, stale]
 cmd `scripts/test-recovery.sh` :: backup/restore against throwaway containers [recovery, backup]
+cmd `scripts/test-compose-startup.sh` :: disposable cold/existing runtime starts before PostgreSQL, then Compose restart and readiness checks [docker, startup, restart, regression]
 
 ## Backend (deployables/portal/server)
 
-file `deployables/portal/server/cmd/portal/main.go` :: CLI: `portal migrate|seed|serve` [entrypoint]
+file `deployables/portal/server/cmd/portal/main.go` :: CLI: `portal migrate|seed|serve`, bounded cancellable database startup wait [entrypoint, startup, retry]
+test `deployables/portal/server/cmd/portal/main_test.go` :: startup readiness recovery, timeout, cancellation and error privacy [startup, database, retry]
 file `deployables/portal/server/migrations/migrations.go` :: embeds numbered SQL files [migration]
 file `deployables/portal/server/migrations/001_initial.sql` :: base schema: users, categories, submissions, revisions, attachments, corrections, poll_options, ballots, ballot_audit, audit_events [schema, tables]
 file `deployables/portal/server/migrations/004_polls_become_categories.sql` :: polls merged into categories (single-answer kinds), polls table dropped [sammlung, poll, migration]

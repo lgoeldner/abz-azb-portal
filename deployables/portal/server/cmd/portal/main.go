@@ -4,13 +4,20 @@ import (
 	"abizeitbetrug/server/internal/portal"
 	"context"
 	"errors"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+const (
+	databaseReadyTimeout = 60 * time.Second
+	databasePingTimeout  = 2 * time.Second
+	databaseRetryDelay   = 500 * time.Millisecond
 )
 
 func main() {
@@ -19,6 +26,32 @@ func main() {
 		os.Exit(1)
 	}
 }
+
+func waitForDatabase(ctx context.Context, ping func(context.Context) error, timeout, pingTimeout, retryDelay time.Duration) error {
+	readyCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(retryDelay)
+	defer ticker.Stop()
+
+	for readyCtx.Err() == nil {
+		pingCtx, pingCancel := context.WithTimeout(readyCtx, pingTimeout)
+		err := ping(pingCtx)
+		pingCancel()
+		if err == nil && readyCtx.Err() == nil {
+			return nil
+		}
+		select {
+		case <-readyCtx.Done():
+		case <-ticker.C:
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return errors.New("database readiness timed out")
+}
+
 func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -28,10 +61,10 @@ func run() error {
 	}
 	pool, e := pgxpool.New(ctx, c.DatabaseURL)
 	if e != nil {
-		return e
+		return errors.New("invalid database configuration")
 	}
 	defer pool.Close()
-	if e = pool.Ping(ctx); e != nil {
+	if e = waitForDatabase(ctx, pool.Ping, databaseReadyTimeout, databasePingTimeout, databaseRetryDelay); e != nil {
 		return e
 	}
 	command := "serve"
