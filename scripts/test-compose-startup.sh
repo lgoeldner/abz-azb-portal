@@ -9,7 +9,7 @@ compose=(docker compose -p "$project" -f "$config")
 cleanup() {
   local code=$?
   "${compose[@]}" down -v --rmi local >/dev/null 2>&1 || true
-  docker image rm "$project-portal:local" "$project-auth-mock:local" >/dev/null 2>&1 || true
+  docker image rm "$project-portal:local" "$project-auth-mock:local" "$project-frontend:local" >/dev/null 2>&1 || true
   rm -f "$config"
   exit "$code"
 }
@@ -36,28 +36,31 @@ docker compose --env-file "$root/.env.dev.dist" -f "$root/compose.yaml" -f "$roo
     process.stdout.write(JSON.stringify(c));
   ' > "$config"
 
-"${compose[@]}" create --build db auth-mock portal caddy
+"${compose[@]}" create --build db auth-mock portal frontend caddy
 portal=$("${compose[@]}" ps -aq portal)
 db=$("${compose[@]}" ps -aq db)
 auth=$("${compose[@]}" ps -aq auth-mock)
+frontend=$("${compose[@]}" ps -aq frontend)
 caddy=$("${compose[@]}" ps -aq caddy)
 
 wait_ready() {
   local attempt
   for ((attempt = 0; attempt < 90; attempt++)); do
-    if [[ "$(docker inspect -f '{{.State.Health.Status}}' "$portal")" == healthy ]]; then
-      echo 'Portal is ready'
+    if [[ "$(docker inspect -f '{{.State.Health.Status}}' "$portal")" == healthy ]] &&
+      [[ "$(docker inspect -f '{{.State.Health.Status}}' "$frontend")" == healthy ]] &&
+      docker exec "$caddy" wget -q -O - --header 'Host: caddy.abizeitung-portal.orb.local' http://frontend:5173/ | grep '/@vite/client' >/dev/null; then
+      echo 'Portal and hot-reload frontend are ready'
       return
     fi
     sleep 1
   done
-  echo 'Portal failed to become ready' >&2
+  echo 'Portal or hot-reload frontend failed to become ready' >&2
   # Do not dump application logs: they could contain connection credentials.
   return 1
 }
 
 start_before_database() {
-  docker start "$auth" "$portal" "$caddy" >/dev/null
+  docker start "$auth" "$portal" "$frontend" "$caddy" >/dev/null
   sleep 3
   [[ "$(docker inspect -f '{{.State.Status}}' "$portal")" == running ]]
   [[ "$(docker inspect -f '{{.RestartCount}}' "$portal")" == 0 ]]

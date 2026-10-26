@@ -17,7 +17,7 @@ export UPLOAD_DIR="$ROOT_DIR/deployables/portal/server/data/uploads"
 export SESSION_SECRET=development-only-secret-change-for-production
 
 start_dev_services() {
-  local services=(db auth-mock portal caddy)
+  local services=(db auth-mock portal frontend caddy)
   local compose=(docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml)
   if [[ "${BACKUP_DEV:-false}" == true ]]; then
     services+=(backup)
@@ -28,6 +28,8 @@ start_dev_services() {
   # native Linux needs matching ownership or a separate volume.
   mkdir -p "$UPLOAD_DIR"
   # Naming caddy and backup enables their production profile.
+  # Refresh only Vite's anonymous dependency volume; keep other services reusable.
+  "${compose[@]}" up -d --build --wait --renew-anon-volumes frontend
   "${compose[@]}" up -d --build --wait "${services[@]}"
 }
 

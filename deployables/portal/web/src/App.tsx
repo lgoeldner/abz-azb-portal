@@ -767,17 +767,58 @@ function StudentHome() {
             <Loading />
           ) : categories.error ? (
             <Failure error={categories.error} retry={() => categories.refetch()} />
-          ) : submissions.isPending ? (
-            <Loading />
-          ) : submissions.error ? (
-            <Failure error={submissions.error} retry={() => submissions.refetch()} />
-          ) : waiting.length === 0 ? (
+          ) : todo.length === 0 ? (
             <Empty>
-              Gerade ist alles erledigt. Unter <Link to="/sammlungen">Alle Sammlungen</Link> kannst du weiter beitragen
-              oder deine Stimme ändern.
+              Gerade gibt es keine neuen Abstimmungen. Unter <Link to="/sammlungen">Alle Sammlungen</Link> kannst du
+              deine gespeicherten Stimmen ändern.
             </Empty>
           ) : (
-            <PollStack items={waiting} />
+            <PollStack items={todo} />
+          )}
+        </div>
+      </section>
+
+      <section aria-labelledby="home-fortlaufend" className="mt-10">
+        <h2 id="home-fortlaufend" className={heading}>
+          Fortlaufend
+        </h2>
+        <div className="mt-4">
+          {categories.isPending || submissions.isPending ? (
+            <Loading />
+          ) : categories.error || submissions.error ? (
+            <Failure
+              error={(categories.error ?? submissions.error)!}
+              retry={() => {
+                categories.refetch();
+                submissions.refetch();
+              }}
+            />
+          ) : firstContributions.length === 0 ? (
+            <Empty>Gerade wartet keine fortlaufende Sammlung auf deinen ersten Beitrag.</Empty>
+          ) : (
+            <ul className="grid gap-4 sm:grid-cols-2">
+              {firstContributions.map((collection) => (
+                <li key={collection.id} className="min-w-0">
+                  <Link
+                    to={`/sammlungen/${collection.id}`}
+                    className="flex h-full flex-col gap-3 rounded-ui bg-white p-5 transition-colors hover:bg-soft"
+                  >
+                    <span className="flex items-center gap-2 text-sm text-muted">
+                      <KindIcon icon={kindIcon[collection.kind]} />
+                      {kindLabel[collection.kind]}
+                    </span>
+                    <h3 className={heading}>{collection.name}</h3>
+                    {collection.description && <p className="text-[15px] text-muted">{collection.description}</p>}
+                    <span className="mt-auto flex items-center justify-between gap-3 pt-2 text-sm">
+                      <span className="text-muted">Noch nichts eingereicht</span>
+                      <span className="inline-flex items-center gap-1 font-bold">
+                        Beitragen <Arrow />
+                      </span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </section>

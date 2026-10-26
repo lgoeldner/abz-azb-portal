@@ -26,20 +26,20 @@ node scripts/check-contract.mjs          # fail on route/type drift
 
 ## Run locally
 
-Requires a Docker engine, Go and Node/npm.
+Requires a Docker engine. Optional host development also requires Go and Node/npm.
 
 ```sh
-make doctor   # check prerequisites
-make dev      # start containers, migrate, seed, run API and Vite
+make doctor   # optional: check Docker and host development tools
+make dev      # build/start containers, wait until ready, then exit
 make down     # stop all development containers (keeps data)
 ```
 
 `make env` creates missing `.env*` files from their `.dist` templates and never overwrites existing ones. Review the generated defaults.
 
-- Frontend: starts at [localhost:5173](http://localhost:5173), automatically using the next free port if 5173 is occupied.
-- API: `localhost:8080`
 - Mock login provider: [localhost:9090](http://localhost:9090), development only. Its fake identities are listed in `deployables/auth-mock/users.yaml`.
-- Full container stack behind Caddy: [https://caddy.abizeitung-portal.orb.local](https://caddy.abizeitung-portal.orb.local) (internal CA, so the browser warns).
+- Portal and API behind Caddy: [https://caddy.abizeitung-portal.orb.local](https://caddy.abizeitung-portal.orb.local) (internal CA, so the browser warns).
+
+For host development, run `make dev:backend` and `make dev:frontend` in separate terminals. These stay in the foreground: the API uses `localhost:8080`, and Vite starts at `localhost:5173` with automatic free-port fallback. The default container stack runs Vite with hot reload on the OrbStack domain after `make dev` exits. Source edits update the page automatically; rerun `make dev` after dependency or Go changes. The production image serves built frontend files from Go.
 
 Never keep real data on a publicly reachable development host, and never run `down -v` on a database you need.
 
