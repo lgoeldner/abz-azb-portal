@@ -25,7 +25,7 @@ import {
 import { DevDebug } from './DevDebug';
 import { toast } from 'sonner';
 
-// Shared class strings. Pages compose these with layout utilities; no component CSS exists.
+// Shared class strings composed with page layout utilities.
 export const btn = {
   primary:
     'inline-flex items-center justify-center gap-3 rounded-full bg-ink px-6 py-3 text-[15px] font-bold text-white transition-transform hover:bg-accent active:scale-95 hover:-translate-y-0.5',

@@ -51,6 +51,7 @@ import { ActivityLog, People } from './admin';
 import { ContributionDetail, Contributions, Editorial, NewContribution, NotFound } from './pages';
 import { SammlungDetail, Sammlungen } from './sammlungen';
 import { DevDebug } from './DevDebug';
+import { PollStack } from './PollStack';
 
 export function App() {
   const me = useData<Me>('/me');
@@ -536,6 +537,7 @@ function NavGroup({ id, label, children }: { id: string; label: string; children
   );
 }
 const quiet = 'px-3.5 text-[13px] text-muted';
+const hasVoted = (c: Category) => Boolean(c.my_option_ids?.length || c.my_option_id);
 const participationColor = (percent: number) => {
   const from = [209, 213, 219];
   const to = [22, 101, 52];
@@ -547,10 +549,8 @@ function StudentNav() {
   const categories = useData<Category[]>('/categories');
   const submissions = useData<Submission[]>('/submissions');
   const ballots = (categories.data ?? []).filter((c) => !c.repeatable);
-  const todo = ballots.filter((c) => c.status === 'open' && c.my_option_id === null).sort(newestOpened);
-  const done = ballots
-    .filter((c) => c.status === 'closed' || (c.status === 'open' && c.my_option_id !== null))
-    .sort(newestOpened);
+  const todo = ballots.filter((c) => c.status === 'open' && !hasVoted(c)).sort(newestOpened);
+  const done = ballots.filter((c) => c.status === 'closed' || (c.status === 'open' && hasVoted(c))).sort(newestOpened);
   const own = (submissions.data ?? []).filter((s) => s.author_id === user.id);
   return (
     <>
@@ -576,23 +576,22 @@ function StudentNav() {
         )}
       </NavGroup>
       <NavGroup id="nav-fortlaufend" label="Fortlaufend">
-        {categories.isPending ? (
+        {categories.isPending || submissions.isPending ? (
           <p className={quiet}>Einen Moment …</p>
-        ) : categories.error ? null : (
+        ) : categories.error ? null : submissions.error ? (
+          <p className={quiet}>Beiträge nicht erreichbar.</p>
+        ) : (
           categories.data
-            ?.filter((c) => c.repeatable)
-            .map((c) => {
-              const n = own.filter((s) => s.category_id === c.id).length;
-              return (
-                <NavRow
-                  key={c.id}
-                  to={`/sammlungen/${c.id}`}
-                  icon={kindIcon[c.kind]}
-                  title={c.name}
-                  sub={n ? `${n} eingereicht` : 'Noch nichts eingereicht'}
-                />
-              );
-            })
+            ?.filter((c) => c.repeatable && !own.some((s) => s.category_id === c.id))
+            .map((c) => (
+              <NavRow
+                key={c.id}
+                to={`/sammlungen/${c.id}`}
+                icon={kindIcon[c.kind]}
+                title={c.name}
+                sub="Noch nichts eingereicht"
+              />
+            ))
         )}
       </NavGroup>
       <div className="flex flex-col gap-1">
@@ -614,7 +613,7 @@ function StudentNav() {
                   key={c.id}
                   to={`/sammlungen/${c.id}`}
                   title={c.name}
-                  sub={c.my_option_id ? 'abgestimmt' : 'beendet'}
+                  sub={hasVoted(c) ? 'abgestimmt' : 'beendet'}
                 />
               ))
             )}
@@ -733,21 +732,25 @@ function StudentHome() {
   const submissions = useData<Submission[]>('/submissions');
   const first = user.name.split(' ')[0];
   const ballots = (categories.data ?? []).filter((c) => !c.repeatable);
-  const todo = ballots.filter((c) => c.status === 'open' && c.my_option_id === null).sort(newestOpened);
-  const done = ballots
-    .filter((c) => c.status === 'closed' || (c.status === 'open' && c.my_option_id !== null))
-    .sort(newestOpened);
+  const todo = ballots.filter((c) => c.status === 'open' && !hasVoted(c)).sort(newestOpened);
+  const done = ballots.filter((c) => c.status === 'closed' || (c.status === 'open' && hasVoted(c))).sort(newestOpened);
   const own = (submissions.data ?? []).filter((s) => s.author_id === user.id);
-  const title = categories.data
-    ? todo.length === 0
-      ? `Hey ${first}. Gerade ist alles erledigt.`
-      : `Hey ${first}. ${todo.length === 1 ? '1 Sammlung wartet' : `${todo.length} Sammlungen warten`} auf deine Stimme.`
-    : `Hey ${first}.`;
+  const firstContributions =
+    submissions.data && !submissions.error
+      ? (categories.data ?? []).filter((c) => c.repeatable && !own.some((s) => s.category_id === c.id))
+      : [];
+  const waiting = [...todo, ...firstContributions];
+  const title =
+    categories.data && submissions.data
+      ? waiting.length === 0
+        ? `Hey ${first}. Gerade ist alles erledigt.`
+        : `Hey ${first}. ${waiting.length === 1 ? '1 Sammlung wartet' : `${waiting.length} Sammlungen warten`}.`
+      : `Hey ${first}.`;
   return (
     <>
       <PageHead title={title}>
-        {todo.length > 0
-          ? 'Deine Stimme entscheidet mit, was in der Abizeitung landet.'
+        {waiting.length > 0
+          ? 'Deine Stimme und deine Geschichten machen unsere Abizeitung.'
           : 'Vielleicht fällt dir noch eine Geschichte ein, die in die Abizeitung gehört.'}
       </PageHead>
 
@@ -760,88 +763,17 @@ function StudentHome() {
             <Loading />
           ) : categories.error ? (
             <Failure error={categories.error} retry={() => categories.refetch()} />
-          ) : todo.length === 0 ? (
-            <Empty>Gerade ist nichts offen. Sobald die Redaktion eine Sammlung öffnet, steht sie hier.</Empty>
-          ) : (
-            <ul className="grid gap-4 md:grid-cols-2">
-              {todo.map((p, i) => (
-                <li key={p.id} className="flex min-w-0 flex-col rounded-ui bg-white p-5">
-                  <h3 className="text-xl font-extrabold leading-snug">{p.name}</h3>
-                  {p.description && <p className="mt-2 text-[15px] text-muted">{p.description}</p>}
-                  <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-5">
-                    <span className="flex items-center gap-1.5 text-[13px] text-muted">
-                      <KindIcon icon={kindIcon[p.kind]} />
-                      {[kindLabel[p.kind], plural(p.options.length, 'Option', 'Optionen'), since(p.opened_at)]
-                        .filter(Boolean)
-                        .join(', ')}
-                    </span>
-                    <Link to={`/sammlungen/${p.id}`} className={i === 0 ? btn.primary : btn.secondary}>
-                      Abstimmen<span className="sr-only"> bei {p.name}</span>
-                    </Link>
-                  </div>
-                  <DevDebug
-                    label="Sammlung"
-                    data={{
-                      id: p.id,
-                      status: p.status,
-                      kind: p.kind,
-                      version: p.version,
-                      options: p.options.length,
-                      allowSelfVote: p.allow_self_vote,
-                      hasVoted: p.my_option_id !== null,
-                    }}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </section>
-
-      <section aria-labelledby="home-fortlaufend" className="mt-10">
-        <h2 id="home-fortlaufend" className={heading}>
-          Fortlaufend
-        </h2>
-        <div className="mt-4">
-          {categories.isPending ? (
+          ) : submissions.isPending ? (
             <Loading />
-          ) : categories.error ? (
-            <Failure error={categories.error} retry={() => categories.refetch()} />
+          ) : submissions.error ? (
+            <Failure error={submissions.error} retry={() => submissions.refetch()} />
+          ) : waiting.length === 0 ? (
+            <Empty>
+              Gerade ist alles erledigt. Unter <Link to="/sammlungen">Alle Sammlungen</Link> kannst du weiter beitragen
+              oder deine Stimme ändern.
+            </Empty>
           ) : (
-            <ul className="grid gap-4 md:grid-cols-2">
-              {categories.data
-                ?.filter((c) => c.repeatable)
-                .map((c) => {
-                  const n = own.filter((s) => s.category_id === c.id).length;
-                  return (
-                    <li key={c.id} className="min-w-0">
-                      <div className="flex h-full flex-col">
-                        <Link
-                          to={`/sammlungen/${c.id}`}
-                          className="flex h-full flex-col rounded-ui bg-white p-5 transition-transform hover:-translate-y-1 hover:bg-pop/40 active:scale-[.99]"
-                        >
-                          <span className="flex items-start justify-between gap-3">
-                            <span className="flex min-w-0 items-center gap-2.5">
-                              <KindIcon icon={kindIcon[c.kind]} className="size-5 text-muted" />
-                              <strong className="text-xl font-extrabold leading-snug">{c.name}</strong>
-                            </span>
-                            <Arrow />
-                          </span>
-                          {c.description && <span className="mt-2 text-[15px] text-muted">{c.description}</span>}
-                          <span className="mt-auto pt-4 text-[13px] text-muted">
-                            {n ? `${n} eingereicht` : 'Noch nichts eingereicht'}
-                          </span>
-                        </Link>
-                        {import.meta.env.DEV && (
-                          <div className="px-5">
-                            <DevDebug label="Sammlung" data={{ id: c.id, kind: c.kind, ownSubmissions: n }} />
-                          </div>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-            </ul>
+            <PollStack items={waiting} />
           )}
         </div>
       </section>
@@ -883,7 +815,7 @@ function StudentHome() {
                   className="flex items-center justify-between gap-4 px-5 py-3 text-[15px] hover:bg-pop/30"
                 >
                   <span className="min-w-0">{p.name}</span>
-                  <span className="flex-none text-[13px] text-muted">{p.my_option_id ? 'abgestimmt' : 'beendet'}</span>
+                  <span className="flex-none text-[13px] text-muted">{hasVoted(p) ? 'abgestimmt' : 'beendet'}</span>
                 </Link>
               </li>
             ))}

@@ -578,7 +578,10 @@ describe('navigation by view', () => {
     updated_at: iso(1),
     attachments: [],
   });
-  function mount(who: Record<string, unknown>, data: { polls: unknown[]; submissions: unknown[] }) {
+  function mount(
+    who: Record<string, unknown>,
+    data: { polls: unknown[]; submissions: unknown[] | 'error' | 'pending' },
+  ) {
     localStorage.clear();
     const urls: string[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -586,7 +589,12 @@ describe('navigation by view', () => {
       urls.push(url);
       if (url.endsWith('/api/v1/me')) return Response.json({ user: who, csrf_token: 'csrf' });
       if (url.endsWith('/api/v1/categories')) return Response.json([...fixed, ...data.polls]);
-      if (url.endsWith('/api/v1/submissions')) return Response.json(data.submissions);
+      if (url.endsWith('/api/v1/submissions')) {
+        if (data.submissions === 'pending') return new Promise<Response>(() => {});
+        if (data.submissions === 'error')
+          return Response.json({ error: { message: 'Beiträge fehlen.' } }, { status: 500 });
+        return Response.json(data.submissions);
+      }
       return Response.json([]);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -601,7 +609,7 @@ describe('navigation by view', () => {
     return urls;
   }
 
-  it('shows students open unvoted ballots first, lists repeatable Sammlungen under "Fortlaufend", files finished ones under "Erledigt" and never offers the view switch', async () => {
+  it('shows unanswered polls first and only never-submitted repeatable collections, while keeping finished polls accessible', async () => {
     const urls = mount(user, {
       polls: [
         poll('p-open', 'Abimotto', { opened_at: iso(3) }),
@@ -626,10 +634,11 @@ describe('navigation by view', () => {
     expect(links[0]).toHaveAttribute('href', '/sammlungen/p-newer');
 
     const fortlaufend = within(aside).getByRole('group', { name: 'Fortlaufend' });
-    const category = within(fortlaufend).getByRole('link', { name: /Erinnerungen/ });
-    expect(category).toHaveAttribute('href', '/sammlungen/memory');
+    expect(within(fortlaufend).queryByRole('link', { name: /Erinnerungen/ })).toBeNull();
+    const category = within(fortlaufend).getByRole('link', { name: /Zitate/ });
+    expect(category).toHaveAttribute('href', '/sammlungen/quotes');
     expect(within(fortlaufend).queryByRole('link', { name: /Abimotto/ })).toBeNull();
-    expect(category).toHaveTextContent('2 eingereicht');
+    expect(category).toHaveTextContent('Noch nichts eingereicht');
     expect(within(aside).getByRole('link', { name: /Zitate/ })).toHaveTextContent('Noch nichts eingereicht');
     expect(open.compareDocumentPosition(category) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
@@ -646,12 +655,50 @@ describe('navigation by view', () => {
     expect(within(aside).queryByText('Geheimer Entwurf')).toBeNull();
     expect(within(aside).getByText(/Erledigt \(2\)/)).toBeInTheDocument();
 
-    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(
-      'Hey Mia. 2 Sammlungen warten auf deine Stimme.',
-    );
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Hey Mia. 3 Sammlungen warten.');
     expect(screen.queryByRole('button', { name: 'Schüler' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Redaktion' })).toBeNull();
     expect(urls.some((url) => url.includes('/results') || url.includes('/audit'))).toBe(false);
+  });
+
+  it.each(['pending', 'accepted', 'rejected', 'withdrawn'])(
+    'hides a repeatable collection after any own submission (%s), but ignores other authors',
+    async (status) => {
+      mount(user, {
+        polls: [],
+        submissions: [submission('own', 'memory', user.id, status), submission('other', 'quotes', 'someone-else')],
+      });
+      await screen.findByRole('heading', { name: 'Zitate' });
+      const main = screen.getByRole('main');
+      expect(within(main).queryByRole('heading', { name: 'Erinnerungen' })).toBeNull();
+      expect(within(main).getByRole('link', { name: /Beitragen/ })).toHaveAttribute('href', '/sammlungen/quotes');
+      expect(within(main).getByText('Beitrag own')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Alle Sammlungen' })).toHaveAttribute('href', '/sammlungen');
+    },
+  );
+
+  it.each(['error', 'pending'] as const)(
+    'does not offer repeatable cards when submission history is %s',
+    async (state) => {
+      mount(user, { polls: [], submissions: state });
+      await screen.findByRole('heading', { name: 'Jetzt dran' });
+      const main = screen.getByRole('main');
+      expect(within(main).queryByRole('link', { name: /Beitragen/ })).toBeNull();
+      if (state === 'error') await within(main).findAllByRole('alert');
+      else expect(within(main).getAllByRole('status').length).toBeGreaterThan(0);
+    },
+  );
+
+  it('treats multi-selection ballots as submitted even without the legacy single-option field', async () => {
+    mount(user, {
+      polls: [poll('multi', 'Mehrfachwahl', { my_option_ids: ['multi-a'], my_option_id: null })],
+      submissions: [],
+    });
+    const aside = await screen.findByRole('complementary');
+    const voted = await within(aside).findByRole('link', { name: /Mehrfachwahl/ });
+    expect(voted.closest('details')).not.toBeNull();
+    const main = screen.getByRole('main');
+    expect(within(main).queryByRole('heading', { name: 'Mehrfachwahl' })).toBeNull();
   });
 
   it.each([
@@ -1076,8 +1123,8 @@ describe('sammlungen', () => {
 
   it('redirects the old detail route /abstimmungen/:id to /sammlungen/:id', async () => {
     mount('/abstimmungen/motto');
-    expect(await screen.findByRole('heading', { level: 1, name: 'Abimotto' })).toBeInTheDocument();
-    expect(screen.getByText('Vorschlagswahl')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Abstimmen' })).toBeInTheDocument();
+    expect(within(screen.getByRole('article')).getByText('Vorschlagswahl')).toBeInTheDocument();
   });
 
   it('renders the submission flow for a repeatable Sammlung', async () => {
@@ -1137,7 +1184,7 @@ describe('sammlungen', () => {
 
   it('renders the ballot flow for a single-answer Sammlung and saves the vote', async () => {
     const calls = mount('/sammlungen/motto');
-    expect(await screen.findByRole('heading', { level: 1, name: 'Abimotto' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Abstimmen' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Zwei' }));
     fireEvent.click(screen.getByRole('button', { name: /Stimme speichern/ }));
     await waitFor(() =>

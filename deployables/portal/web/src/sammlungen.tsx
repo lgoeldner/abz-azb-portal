@@ -43,6 +43,8 @@ import {
   type Kind,
 } from './ui';
 import { PeoplePicker } from './PeoplePicker';
+import { BallotForm, BallotPrivacyNotice } from './BallotForm';
+import { PollStack } from './PollStack';
 import { DevDebug } from './DevDebug';
 import { NotFound } from './pages';
 
@@ -503,7 +505,7 @@ export function SammlungDetail() {
   return sammlung.repeatable ? (
     <Fortlaufend key={sammlung.id} sammlung={sammlung} />
   ) : (
-    <Ballot key={sammlung.id} sammlung={sammlung} />
+    <Ballot key={sammlung.id} sammlung={sammlung} categories={categories.data ?? []} />
   );
 }
 
@@ -647,7 +649,7 @@ function StudentCollection({ sammlung }: { sammlung: Category }) {
   );
 }
 
-function Ballot({ sammlung: poll }: { sammlung: Category }) {
+function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories: Category[] }) {
   const [view] = useWorkspaceView();
   const redaktion = view === 'redaktion';
   const { user } = useSession();
@@ -659,15 +661,26 @@ function Ballot({ sammlung: poll }: { sammlung: Category }) {
   const [choices, setChoices] = useState<string[]>(savedChoices);
   const [syncedChoicesKey, setSyncedChoicesKey] = useState(savedChoicesKey);
   const [editing, setEditing] = useState(false);
-  const results = useData<PollResult[]>(`/categories/${id}/results`, editorial(user));
+  const results = useData<PollResult[]>(`/categories/${id}/results`, redaktion && editorial(user));
   const [auditOpen, setAuditOpen] = useState(false);
-  const audit = useData<BallotAudit[]>(`/categories/${id}/audit`, auditOpen && user.role === 'admin');
+  const audit = useData<BallotAudit[]>(`/categories/${id}/audit`, redaktion && auditOpen && user.role === 'admin');
   if (syncedChoicesKey !== savedChoicesKey) {
     setSyncedChoicesKey(savedChoicesKey);
     setChoices(savedChoices);
   } // reset the selection when the saved ballot changes
   const writable = canEdit(user, poll.id);
-  const eligible = user.admitted && user.cohort_member;
+  const stackItems = [
+    poll,
+    ...categories
+      .filter(
+        (category) =>
+          category.id !== poll.id &&
+          !category.repeatable &&
+          category.status === 'open' &&
+          !(category.my_option_ids?.length || category.my_option_id),
+      )
+      .sort(newestOpened),
+  ];
   const total = results.data?.reduce((n, r) => n + r.count, 0) ?? 0;
   const auditGroups = (() => {
     const groups = new Map<string, BallotAudit[]>();
@@ -694,194 +707,151 @@ function Ballot({ sammlung: poll }: { sammlung: Category }) {
   return (
     <>
       <BackLink />
-      <PageHead title={poll.name} action={<Badge status={poll.status} label={badgeLabel(poll)} />}>
-        <ClassLine sammlung={poll} />
+      <PageHead
+        title={!redaktion && poll.status === 'open' ? 'Abstimmen' : poll.name}
+        action={
+          redaktion || poll.status !== 'open' ? <Badge status={poll.status} label={badgeLabel(poll)} /> : undefined
+        }
+      >
+        {!redaktion && poll.status === 'open' ? 'Deine Stimme entscheidet mit.' : <ClassLine sammlung={poll} />}
       </PageHead>
       <DevDebug label="Sammlung" data={debugData(poll)} />
       {action.feedback}
       {editing && writable ? (
         <SammlungForm sammlung={poll} onSaved={() => setEditing(false)} />
       ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start">
-          <section className={`${panel} min-w-0 space-y-5`}>
-            <h2 className={heading}>
-              {redaktion
-                ? 'Auswahlmöglichkeiten'
-                : poll.status === 'open'
-                  ? poll.kind === 'person'
-                    ? 'Wen wählst du?'
-                    : 'Welche Option wählst du?'
-                  : poll.status === 'closed'
-                    ? 'Diese Sammlung ist beendet.'
-                    : poll.opened_at
-                      ? 'Diese Sammlung ist verborgen.'
-                      : 'Diese Sammlung ist ein Entwurf.'}
-            </h2>
-            {redaktion ? (
-              <ul className="divide-y divide-line" aria-label="Auswahlmöglichkeiten">
-                {poll.options.map((o) => (
-                  <li key={o.id} className="min-w-0 break-words py-3 text-[15px]">
-                    {o.label}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <form
-                className="space-y-4"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  action.run(async () => {
-                    await api(`/categories/${id}/ballot`, json('PUT', { option_ids: choices }));
-                  }, 'Deine Stimme wurde gespeichert.');
-                }}
-              >
-                <PeoplePicker
-                  legend={`${poll.kind === 'person' ? 'Personen' : 'Optionen'} auswählen (bis zu ${poll.max_choices})`}
-                  searchLabel={poll.kind === 'person' ? 'Person suchen' : 'Option suchen'}
-                  options={poll.options.map((option) => ({
-                    id: option.id,
-                    name: option.label,
-                    user_id: option.user_id,
-                  }))}
-                  selectedIds={choices}
-                  onChange={setChoices}
-                  maxSelected={poll.max_choices}
-                  disabledUserIds={poll.allow_self_vote ? [] : [user.id]}
-                  disabled={poll.status !== 'open' || !eligible || action.busy}
-                />
-                {poll.kind === 'person' && poll.all_people && (
-                  <p className="text-sm text-muted">
-                    Die Personenliste wurde beim Öffnen festgelegt und bleibt gleich.
-                  </p>
-                )}
-                {poll.status === 'open' && (
-                  <button
-                    className={btn.primary}
-                    disabled={
-                      action.busy ||
-                      choices.length === 0 ||
-                      choices.length > poll.max_choices ||
-                      !eligible ||
-                      (poll.kind === 'person' &&
-                        choices.some((choice) =>
-                          poll.options.some(
-                            (option) => option.id === choice && option.user_id === user.id && !poll.allow_self_vote,
-                          ),
-                        ))
-                    }
-                  >
-                    {savedChoices.length ? 'Stimme ändern' : 'Stimme speichern'} <Arrow />
-                  </button>
-                )}
-                {!eligible && <p className={notice}>Nur freigegebene Mitglieder des Jahrgangs dürfen abstimmen.</p>}
-                {savedChoices.length > 0 && (
-                  <p className="text-sm font-semibold text-ok">
-                    Gespeicherte {savedChoices.length === 1 ? 'Stimme' : 'Stimmen'}:{' '}
-                    {savedChoices
-                      .map((choice) => poll.options.find((option) => option.id === choice)?.label)
-                      .filter(Boolean)
-                      .join(', ')}
-                  </p>
-                )}
-              </form>
-            )}
-            <p className="text-sm text-muted">
-              Namentliche Abstimmung: Die Administration kann deine Stimme und Änderungen zuordnen. Während der Öffnung
-              kannst du deine Auswahl ändern. Ergebnisse sind für Schüler:innen nicht sichtbar.
-            </p>
-          </section>
-          <aside className="min-w-0 space-y-6">
-            {writable && (
-              <section className={panel}>
-                <h3 className={heading}>Sammlung verwalten</h3>
-                <div className="mt-4 flex flex-col gap-3">
-                  {poll.status === 'draft' && (
-                    <>
-                      {!poll.opened_at && (
-                        <button className={btn.secondary} onClick={() => setEditing(true)}>
-                          Definition bearbeiten
+        <div
+          className={
+            redaktion
+              ? 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start'
+              : undefined
+          }
+        >
+          {!redaktion && poll.status === 'open' ? (
+            <PollStack items={stackItems} initialId={poll.id} />
+          ) : (
+            <section className={`${redaktion ? panel : 'poll-stack__card'} min-w-0 space-y-5`}>
+              <h2 className={heading}>
+                {redaktion
+                  ? 'Auswahlmöglichkeiten'
+                  : poll.status === 'open'
+                    ? poll.kind === 'person'
+                      ? 'Wen wählst du?'
+                      : 'Welche Option wählst du?'
+                    : poll.status === 'closed'
+                      ? 'Diese Sammlung ist beendet.'
+                      : poll.opened_at
+                        ? 'Diese Sammlung ist verborgen.'
+                        : 'Diese Sammlung ist ein Entwurf.'}
+              </h2>
+              {redaktion ? (
+                <ul className="divide-y divide-line" aria-label="Auswahlmöglichkeiten">
+                  {poll.options.map((o) => (
+                    <li key={o.id} className="min-w-0 break-words py-3 text-[15px]">
+                      {o.label}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <BallotForm poll={poll} choices={choices} onChoicesChange={setChoices} />
+              )}
+              {redaktion && <BallotPrivacyNotice />}
+            </section>
+          )}
+          {redaktion && (
+            <aside className="min-w-0 space-y-6">
+              {writable && (
+                <section className={panel}>
+                  <h3 className={heading}>Sammlung verwalten</h3>
+                  <div className="mt-4 flex flex-col gap-3">
+                    {poll.status === 'draft' && (
+                      <>
+                        {!poll.opened_at && (
+                          <button className={btn.secondary} onClick={() => setEditing(true)}>
+                            Definition bearbeiten
+                          </button>
+                        )}
+                        <button
+                          className={btn.primary}
+                          disabled={action.busy}
+                          onClick={() => setStatus('open', 'Sammlung geöffnet.')}
+                        >
+                          Sammlung öffnen
                         </button>
-                      )}
-                      <button
-                        className={btn.primary}
-                        disabled={action.busy}
-                        onClick={() => setStatus('open', 'Sammlung geöffnet.')}
-                      >
-                        Sammlung öffnen
+                        <p className="text-sm text-muted">
+                          Die Definition kann nach dem Öffnen nicht mehr geändert werden.
+                        </p>
+                      </>
+                    )}
+                    {user.role === 'admin' && (poll.status !== 'draft' || poll.opened_at) && (
+                      <button className={btn.secondary} onClick={() => setEditing(true)}>
+                        Berechtigungen bearbeiten
                       </button>
-                      <p className="text-sm text-muted">
-                        Die Definition kann nach dem Öffnen nicht mehr geändert werden.
-                      </p>
+                    )}
+                    {poll.status === 'open' && (
+                      <button
+                        className={btn.secondary}
+                        disabled={action.busy}
+                        onClick={() => setStatus('closed', 'Sammlung beendet.')}
+                      >
+                        Sammlung beenden
+                      </button>
+                    )}
+                    {poll.status !== 'draft' && (
+                      <button
+                        className={btn.secondary}
+                        disabled={action.busy}
+                        onClick={() => setStatus('draft', 'Sammlung verborgen.')}
+                      >
+                        Sammlung verbergen
+                      </button>
+                    )}
+                    {user.role === 'admin' && (
+                      <button className={btn.danger} disabled={action.busy} onClick={deletePoll}>
+                        Sammlung endgültig löschen
+                      </button>
+                    )}
+                  </div>
+                </section>
+              )}
+              {editorial(user) && (
+                <section className={panel}>
+                  <h3 className={heading}>Gesamtergebnisse</h3>
+                  {results.isPending ? (
+                    <Loading />
+                  ) : results.error ? (
+                    <Failure error={results.error} retry={() => results.refetch()} />
+                  ) : (
+                    <>
+                      <p className="mt-1 text-sm text-muted">Nur für die Redaktion. {total} abgegebene Stimme(n).</p>
+                      <div className="mt-4 space-y-4">
+                        {results.data?.map((r) => (
+                          <div className="min-w-0" key={r.option_id}>
+                            <div className="flex items-baseline justify-between gap-3">
+                              <strong className="min-w-0 break-words">{r.label}</strong>
+                              <span className="tabular-nums">{r.count}</span>
+                            </div>
+                            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-pill">
+                              <span
+                                className="block h-full rounded-full bg-ink"
+                                data-ballot-result
+                                style={{
+                                  width: `${total ? (r.count / total) * 100 : 0}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </>
                   )}
-                  {user.role === 'admin' && (poll.status !== 'draft' || poll.opened_at) && (
-                    <button className={btn.secondary} onClick={() => setEditing(true)}>
-                      Berechtigungen bearbeiten
-                    </button>
-                  )}
-                  {poll.status === 'open' && (
-                    <button
-                      className={btn.secondary}
-                      disabled={action.busy}
-                      onClick={() => setStatus('closed', 'Sammlung beendet.')}
-                    >
-                      Sammlung beenden
-                    </button>
-                  )}
-                  {poll.status !== 'draft' && (
-                    <button
-                      className={btn.secondary}
-                      disabled={action.busy}
-                      onClick={() => setStatus('draft', 'Sammlung verborgen.')}
-                    >
-                      Sammlung verbergen
-                    </button>
-                  )}
-                  {user.role === 'admin' && (
-                    <button className={btn.danger} disabled={action.busy} onClick={deletePoll}>
-                      Sammlung endgültig löschen
-                    </button>
-                  )}
-                </div>
-              </section>
-            )}
-            {editorial(user) && (
-              <section className={panel}>
-                <h3 className={heading}>Gesamtergebnisse</h3>
-                {results.isPending ? (
-                  <Loading />
-                ) : results.error ? (
-                  <Failure error={results.error} retry={() => results.refetch()} />
-                ) : (
-                  <>
-                    <p className="mt-1 text-sm text-muted">Nur für die Redaktion. {total} abgegebene Stimme(n).</p>
-                    <div className="mt-4 space-y-4">
-                      {results.data?.map((r) => (
-                        <div className="min-w-0" key={r.option_id}>
-                          <div className="flex items-baseline justify-between gap-3">
-                            <strong className="min-w-0 break-words">{r.label}</strong>
-                            <span className="tabular-nums">{r.count}</span>
-                          </div>
-                          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-pill">
-                            <span
-                              className="block h-full rounded-full bg-ink"
-                              data-ballot-result
-                              style={{
-                                width: `${total ? (r.count / total) * 100 : 0}%`,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </section>
-            )}
-          </aside>
+                </section>
+              )}
+            </aside>
+          )}
         </div>
       )}
-      {user.role === 'admin' && (
+      {redaktion && user.role === 'admin' && (
         <section className={`${panel} mt-6 space-y-4`}>
           <button className={btn.secondary} aria-expanded={auditOpen} onClick={() => setAuditOpen(!auditOpen)}>
             {auditOpen ? 'Stimmprotokoll schließen' : 'Namentliches Stimmprotokoll öffnen'}

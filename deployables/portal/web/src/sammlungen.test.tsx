@@ -126,7 +126,12 @@ function installApi(initial: Category[] = [], auditRows: unknown[] = []) {
   return { fetchMock, writes };
 }
 
-function renderPortal(path: string, user: Me['user'], _categories: Category[] = [], view: View = 'schueler') {
+function renderPortal(
+  path: string,
+  user: Me['user'],
+  _categories: Category[] = [],
+  view: View = user.role === 'student' ? 'schueler' : 'redaktion',
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const me: Me = { user, csrf_token: 'csrf' };
   const workspaceView: [View, (next: View) => void] = [view, vi.fn()];
@@ -363,7 +368,7 @@ describe('Sammlungen person polls', () => {
     });
   });
 
-  it('saves a replaceable multi-person ballot within its limit and restores the saved chips', async () => {
+  it('advances after saving a multi-person ballot and restores saved choices when revisited', async () => {
     const poll = personPoll();
     const { writes } = installApi([poll]);
     renderPortal(`/sammlungen/${poll.id}`, student, [poll]);
@@ -385,11 +390,14 @@ describe('Sammlungen person polls', () => {
         body: { option_ids: ['bob', 'cara'] },
       }),
     );
+    await screen.findByText('Alles erledigt. Danke fürs Mitmachen!');
+    fireEvent.click(screen.getByRole('link', { name: /Alle Sammlungen ansehen/ }));
+    fireEvent.click(await screen.findByRole('link', { name: /Abimotto-Team/ }));
     expect(await screen.findByText('Gespeicherte Stimmen: Bob Beispiel, Cara Beispiel')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Gesamtergebnisse' })).not.toBeInTheDocument();
   });
 
-  it('saves and restores multiple proposal choices as removable chips without search for a short list', async () => {
+  it('saves multiple proposal choices on a card and restores chips when revisited', async () => {
     const poll = personPoll({
       kind: 'proposal',
       options: [
@@ -408,9 +416,27 @@ describe('Sammlungen person polls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Waldgrün' }));
     fireEvent.click(screen.getByRole('button', { name: /Stimme speichern/ }));
     await waitFor(() => expect(writes[0].body).toEqual({ option_ids: ['gold', 'green'] }));
+    await screen.findByText('Alles erledigt. Danke fürs Mitmachen!');
+    fireEvent.click(screen.getByRole('link', { name: /Alle Sammlungen ansehen/ }));
+    fireEvent.click(await screen.findByRole('link', { name: /Abimotto-Team/ }));
     expect(await screen.findByText('Gespeicherte Stimmen: Sonnengelb, Waldgrün')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sonnengelb entfernen' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Waldgrün entfernen' })).toBeInTheDocument();
+  });
+
+  it('keeps editorial controls out of the student voting queue as its active poll changes', async () => {
+    const first = personPoll({ description: 'Erste Beschreibung' });
+    const second = personPoll({ id: 'second-poll', name: 'Zweite Frage', description: 'Zweite Beschreibung' });
+    const { fetchMock } = installApi([first, second]);
+    renderPortal(`/sammlungen/${first.id}`, admin, [], 'schueler');
+    await screen.findByRole('heading', { name: first.name });
+    fireEvent.click(screen.getByRole('button', { name: 'Nächste Sammlung' }));
+    expect(screen.getByRole('heading', { name: second.name })).toBeInTheDocument();
+    expect(screen.queryByText(first.description)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sammlung beenden' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Gesamtergebnisse' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Namentliches Stimmprotokoll öffnen' })).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([input]) => /\/(results|audit)$/.test(String(input)))).toBe(false);
   });
 
   it('groups each admin audit ballot into one complete selection row', async () => {
