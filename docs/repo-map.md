@@ -151,7 +151,7 @@ page /abstimmungen[/:id], /verwaltung/sammlungen, /verwaltung/rubriken, /admin :
 
 test `deployables/portal/web/e2e/words.spec.ts` :: live word creation/cap, lowercase chips, student privacy, distinct merged counts, toggle/restore, read-only manager CSV and responsive cloud [words, e2e, permissions]
 rule Sammlung = categories row; kind is its class: repeatable idea/quote/memory/photo (submissions), person/proposal/words ballots (bounded multi-selection or free word chips; person: all or selected candidates; draft->open->closed; open/closed->draft hides, preserves votes and locks previously opened definitions; delete admin only) [sammlung, class, kind, rubrik, poll]
-rule Managers create all six kinds with atomic creator grants, read all submissions and manage/annotate assigned categories; admins manage all categories and assign grants; only authors mutate pending originals and only admins see named ballots [permissions]
+rule Managers create all seven kinds with atomic creator grants, read all submissions and manage/annotate assigned categories; admins manage all categories and assign grants; only authors mutate pending originals and only admins see named ballots [permissions]
 rule Dev identities: subject = UUIDv5(display_slug); seeded fixtures map via fixtureSlugs in seed.go [login, fixtures]
 rule Integration tests: TEST_DATABASE_URL to a disposable DB only; never the dev `portal` DB [test, database]
 

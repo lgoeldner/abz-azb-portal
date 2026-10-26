@@ -49,7 +49,11 @@ test('word portrait chips, private cloud, reversible moderation and CSV at deskt
   }
   await expect(student.getByRole('list', { name: 'Ausgewählte Wörter' })).toContainText('chaotisch');
   await expect(student.getByRole('textbox', { name: /Wörter eingeben/ })).toBeDisabled();
+  const saved = student.waitForResponse(
+    (response) => response.url().endsWith(`/api/v1${path}/ballot`) && response.request().method() === 'PUT',
+  );
   await student.getByRole('button', { name: 'Stimme speichern', exact: true }).click();
+  expect((await saved).status()).toBe(200);
   await student.reload();
   await expect(student.getByRole('list', { name: 'Ausgewählte Wörter' })).toContainText('chaos');
   await expect(student.getByRole('list', { name: /^Wortwolke mit/ })).toHaveCount(0);
