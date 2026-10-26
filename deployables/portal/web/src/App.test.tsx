@@ -1507,7 +1507,7 @@ describe('sammlungen', () => {
       fireEvent.change(screen.getByLabelText('Antwortoption hinzufügen'), { target: { value: option } });
       fireEvent.click(screen.getByRole('button', { name: 'Hinzufügen' }));
     }
-    fireEvent.click(screen.getByLabelText(/eigene Person/));
+    expect(screen.queryByLabelText(/eigene Person/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
     await waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0]).toEqual({
@@ -1522,7 +1522,7 @@ describe('sammlungen', () => {
         closes_at: null,
         all_people: false,
         max_choices: 1,
-        allow_self_vote: true,
+        allow_self_vote: false,
         options: [{ label: 'A' }, { label: 'B' }],
       },
     });
