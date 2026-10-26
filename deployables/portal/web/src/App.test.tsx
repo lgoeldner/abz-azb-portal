@@ -290,7 +290,10 @@ describe('verwaltung', () => {
     mount('/');
     const toggle = await screen.findByRole('button', { name: 'Verwaltung' });
     expect(document.querySelector('aside a[href="/verwaltung/sammlungen"]')).toBeNull();
-    expect(screen.getByRole('link', { name: 'Alle Sammlungen' })).toHaveAttribute('href', '/sammlungen');
+    expect(within(screen.getByRole('complementary')).getByRole('link', { name: 'Alle Sammlungen' })).toHaveAttribute(
+      'href',
+      '/sammlungen',
+    );
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     const aside = screen.getByRole('complementary');
     expect(within(aside).getByRole('link', { name: 'Aktivitätsprotokoll' })).toHaveAttribute(
@@ -656,6 +659,17 @@ describe('navigation by view', () => {
     expect(within(aside).getByText(/Erledigt \(2\)/)).toBeInTheDocument();
 
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Hey Mia. 3 Sammlungen warten.');
+    const main = screen.getByRole('main');
+    const voting = within(main).getByRole('region', { name: 'Jetzt dran' });
+    const recurring = within(main).getByRole('region', { name: 'Fortlaufend' });
+    expect(voting.compareDocumentPosition(recurring) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(recurring).getByRole('link', { name: /Zitate/ })).toHaveAttribute('href', '/sammlungen/quotes');
+    expect(within(recurring).queryByRole('heading', { name: 'Erinnerungen' })).toBeNull();
+    expect(within(voting).queryByRole('link', { name: /Beitragen/ })).toBeNull();
+    fireEvent.click(within(voting).getByRole('button', { name: 'Nächste Sammlung' }));
+    expect(within(voting).getByRole('heading', { name: 'Abimotto' })).toBeInTheDocument();
+    expect(within(voting).getByRole('button', { name: 'Nächste Sammlung' })).toBeDisabled();
+
     expect(screen.queryByRole('button', { name: 'Schüler' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Redaktion' })).toBeNull();
     expect(urls.some((url) => url.includes('/results') || url.includes('/audit'))).toBe(false);
@@ -673,7 +687,10 @@ describe('navigation by view', () => {
       expect(within(main).queryByRole('heading', { name: 'Erinnerungen' })).toBeNull();
       expect(within(main).getByRole('link', { name: /Beitragen/ })).toHaveAttribute('href', '/sammlungen/quotes');
       expect(within(main).getByText('Beitrag own')).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Alle Sammlungen' })).toHaveAttribute('href', '/sammlungen');
+      expect(within(screen.getByRole('complementary')).getByRole('link', { name: 'Alle Sammlungen' })).toHaveAttribute(
+        'href',
+        '/sammlungen',
+      );
     },
   );
 

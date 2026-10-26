@@ -35,6 +35,31 @@ export function PollStack({ items: available, initialId }: { items: Category[]; 
 
   return (
     <section className="poll-stack" aria-label="Sammlungen, die auf dich warten">
+      <div className="poll-stack__controls">
+        <span className="poll-stack__count" aria-hidden="true">
+          {items.length ? `${index + 1} / ${items.length}` : '0 / 0'}
+        </span>
+        <nav className="poll-stack__arrows" aria-label="Sammlungen durchblättern">
+          <button
+            type="button"
+            className="poll-stack__arrow"
+            aria-label="Vorherige Sammlung"
+            disabled={saving || !item || index === 0}
+            onClick={() => move('previous')}
+          >
+            <ChevronLeft aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="poll-stack__arrow"
+            aria-label="Nächste Sammlung"
+            disabled={saving || !item || index === items.length - 1}
+            onClick={() => move('next')}
+          >
+            <ChevronRight aria-hidden="true" />
+          </button>
+        </nav>
+      </div>
       <div className="poll-stack__deck" data-direction={selection.direction}>
         {items.length > 2 && <span className="poll-stack__rear poll-stack__rear--back" aria-hidden="true" />}
         {hasMultiple && <span className="poll-stack__rear poll-stack__rear--front" aria-hidden="true" />}
@@ -79,31 +104,6 @@ export function PollStack({ items: available, initialId }: { items: Category[]; 
             </Link>
           </div>
         )}
-      </div>
-      <div className="poll-stack__controls">
-        <span className="poll-stack__count" aria-hidden="true">
-          {items.length ? `${index + 1} / ${items.length}` : '0 / 0'}
-        </span>
-        <nav className="poll-stack__arrows" aria-label="Sammlungen durchblättern">
-          <button
-            type="button"
-            className="poll-stack__arrow"
-            aria-label="Vorherige Sammlung"
-            disabled={saving || !item || index === 0}
-            onClick={() => move('previous')}
-          >
-            <ChevronLeft aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="poll-stack__arrow"
-            aria-label="Nächste Sammlung"
-            disabled={saving || !item || index === items.length - 1}
-            onClick={() => move('next')}
-          >
-            <ChevronRight aria-hidden="true" />
-          </button>
-        </nav>
       </div>
       <p className="sr-only" aria-live="polite" aria-atomic="true">
         {item ? `Sammlung ${index + 1} von ${items.length}: ${item.name}` : 'Keine Sammlungen verfügbar'}

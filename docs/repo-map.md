@@ -107,7 +107,7 @@ route GET /auth/login, GET /auth/callback, POST /auth/logout :: outside /api/v1 
 ## Frontend (deployables/portal/web)
 file `deployables/portal/web/vite.config.ts` :: Vite dev server allows OrbStack proxy host; localhost at 5173 with free-port fallback [frontend, dev, port]
 
-file `deployables/portal/web/src/App.tsx` :: router, Layout, nav (StudentNav, EditorNav, AdminNav), StudentHome unanswered card queue (repeatable collections only before any own submission), shared EditorialHome dashboard with class widgets, admin admissions, manager writable polls and recent assigned contributions, voting participation bars [routes, nav, dashboard, home, participation, grants]
+file `deployables/portal/web/src/App.tsx` :: router, Layout, nav (StudentNav, EditorNav, AdminNav), StudentHome unanswered voting stack and separate repeatable card section (only before any own submission), shared EditorialHome dashboard with class widgets, admin admissions, manager writable polls and recent assigned contributions, voting participation bars [routes, nav, dashboard, home, participation, grants]
 file `deployables/portal/web/src/sammlungen.tsx` :: Shared Sammlungen workspace (Fortlaufend section, status groups, ?klasse filter), all-kind editor creation, grant-controlled definition edits and poll hiding, admin-confirmed poll deletion, admin manager assignments in SammlungForm, SammlungDetail, all-submission editorial collection reader, read-only ballot options/results and an inline student voting stack [sammlung, poll, vote, form]
 file `deployables/portal/web/src/PeoplePicker.tsx` :: shared candidate/choice voting with removable chips, selection limits, and search only for 10+ options [person, picker, chips]
 file `deployables/portal/web/src/pages.tsx` :: Contributions, NewContribution, author detail and read-only editorial reader with annotations, all-submissions list, NotFound [beitrag, redaktion, export]
@@ -120,7 +120,7 @@ file `deployables/portal/web/src/api-types.ts` :: aliases over generated types [
 file `deployables/portal/web/src/generated/api.d.ts` :: generated from openapi.json, never edit by hand [codegen]
 file `deployables/portal/web/src/BallotForm.tsx` :: shared voting form and named-vote notice; bounded valid choices, eligibility/self-vote guards, save errors and cache refresh [poll, vote, privacy]
 test `deployables/portal/web/src/BallotForm.test.tsx` :: successful PUT/refresh, failed-save choices and submit-time eligibility/selection/pending guards [poll, vote, invariants]
-file `deployables/portal/web/src/PollStack.tsx` :: inline student voting queue: choices and submit on each card, drafts retained across arrows, save-then-advance, guarded navigation while saving and live position [poll, stack, navigation, accessibility]
+file `deployables/portal/web/src/PollStack.tsx` :: inline student voting queue: top arrow controls, choices and submit on each card, drafts retained across arrows, save-then-advance, guarded navigation while saving and live position [poll, stack, navigation, accessibility]
 file `deployables/portal/web/src/PollStack.css` :: responsive layered cards, directional animations and reduced-motion fallback [poll, stack, animation]
 test `deployables/portal/web/src/PollStack.test.tsx` :: inline save/advance, failed-save preservation, draft retention, bounded navigation and active-card removal/reorder [poll, stack, ui]
 file `deployables/portal/web/src/DevDebug.tsx` :: dev-only debug overlay [debug]
