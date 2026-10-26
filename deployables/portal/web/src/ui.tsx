@@ -176,9 +176,14 @@ export const kindLabel: Record<Kind, string> = {
   person: 'Personenwahl',
   proposal: 'Vorschlagswahl',
 };
-export const repeatableKinds: Kind[] = ['idea', 'quote', 'memory', 'photo'];
-export const singleKinds: Kind[] = ['person', 'proposal'];
-export const allKinds: Kind[] = [...repeatableKinds, ...singleKinds];
+export const submissionKinds: Kind[] = ['idea', 'quote', 'memory', 'photo'];
+export const ballotKinds: Kind[] = ['person', 'proposal'];
+export const isSubmissionCollection = (kind: Kind) => submissionKinds.includes(kind);
+export const isBallot = (kind: Kind) => ballotKinds.includes(kind);
+// Keep these aliases while Sammlungen defaults migrate to the kind-based helpers.
+export const repeatableKinds = submissionKinds;
+export const singleKinds = ballotKinds;
+export const allKinds: Kind[] = [...submissionKinds, ...ballotKinds];
 export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const time = (value: string | null | undefined) => (value ? new Date(value).getTime() : 0);
 export const newestOpened = (a: Category, b: Category) =>

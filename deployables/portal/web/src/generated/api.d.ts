@@ -48,7 +48,7 @@ export interface paths {
         delete: operations["deleteCategoriesId"];
         options?: never;
         head?: never;
-        /** Update collection (admins or managers with grant; single-answer definitions only before first opening); kind changes stay within their group */
+        /** Update collection (admins or managers with grant; ballot definitions only before first opening); kind changes stay within content family, repeatable and schedule fixed after creation */
         patch: operations["patchCategoriesId"];
         trace?: never;
     };
@@ -337,7 +337,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Open, close or hide a single-answer category (admin or manager with grant; draft->open, open->closed, open/closed->draft; 400 for repeatable). Hiding preserves votes/history and first opened_at; reopening keeps candidates fixed. */
+        /** Open, close or hide a collection (admin or manager with grant; draft->open, open->closed, open/closed->draft). Expired collections cannot reopen. Hiding preserves votes/history and first opened_at; reopening keeps candidates fixed. */
         post: operations["postCategoriesIdStatus"];
         delete?: never;
         options?: never;
@@ -353,7 +353,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Cast or replace a named ballot with up to max_choices distinct options */
+        /** Cast a named ballot: replace current selection when one-off; append an idempotent entry when repeatable (ballot_id required) */
         put: operations["putCategoriesIdBallot"];
         post?: never;
         delete?: never;
@@ -421,15 +421,22 @@ export interface components {
             description: string;
             /** @enum {string} */
             kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal";
-            /** @description True for idea, quote, memory, photo (any number of submissions); false for person, proposal (single-answer ballot). */
+            /** @description No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability. */
+            ongoing: boolean;
+            /**
+             * Format: date-time
+             * @description Automatic closing instant for bounded collections; null when ongoing. Open collections are effectively closed at this instant.
+             */
+            closes_at: string | null;
+            /** @description Allow multiple contributions or independent ballot entries per person, independently of kind. False ballots retain one changeable current selection. */
             repeatable: boolean;
             /**
-             * @description Always open for repeatable categories. Draft means hidden from students, including previously opened polls; opened_at distinguishes editable new drafts from locked hidden polls.
+             * @description All kinds support draft, open and closed; the closing deadline also makes open collections effectively closed. Draft means hidden from students, including previously opened polls; opened_at distinguishes editable new drafts from locked hidden polls.
              * @enum {string}
              */
             status: "draft" | "open" | "closed";
             allow_self_vote: boolean;
-            /** @description Empty for repeatable categories. */
+            /** @description Empty for contribution categories. */
             options: components["schemas"]["PollOption"][];
             /** @description First current selection in canonical ID order (legacy compatibility), or null. */
             my_option_id: string | null;
@@ -441,9 +448,9 @@ export interface components {
              * @description Set once when a single-answer category moves from draft to open; creation time for repeatable ones.
              */
             opened_at: string | null;
-            /** @description Number of distinct current voters. Editors only; null for students and repeatable categories. */
+            /** @description Number of distinct current voters. Editors only; null for students and contribution categories. */
             ballot_count: number | null;
-            /** @description Current voting participation among admitted cohort members, regardless of role. Both counts use the same population and database snapshot. Editors only; null for students and repeatable categories. Preserved ballots from people no longer eligible are excluded here but remain in ballot_count. */
+            /** @description Current voting participation among admitted cohort members, regardless of role. Both counts use the same population and database snapshot. Editors only; null for students and contribution categories. Preserved ballots from people no longer eligible are excluded here but remain in ballot_count. */
             participation: {
                 /** @description Currently eligible people with a current ballot in this collection. */
                 voted: number;
@@ -452,9 +459,9 @@ export interface components {
             } | null;
             /** @description Person polls only: all admitted cohort members, refreshed when opening and fixed thereafter. Existing polls retain explicit candidates. */
             all_people: boolean;
-            /** @description Maximum selections per voter for person and proposal polls; 1 for repeatable categories. */
+            /** @description Maximum selections per voter for person and proposal polls; 1 for contribution categories. */
             max_choices: number;
-            /** @description Viewer’s complete current selection; empty for repeatable categories or before voting. */
+            /** @description Viewer’s complete current selection; empty for contribution categories or before voting. */
             my_option_ids: string[];
         };
         Attachment: {
@@ -551,8 +558,17 @@ export interface components {
             description: string;
             /** @enum {string} */
             kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal";
+            /** @description No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability. */
+            ongoing?: boolean;
+            /**
+             * Format: date-time
+             * @description Automatic closing instant for bounded collections; null when ongoing. Open collections are effectively closed at this instant.
+             */
+            closes_at?: string | null;
+            /** @description Allow multiple contributions per person independently of kind. Omission defaults from kind on create and preserves the stored flag on edit. */
+            repeatable?: boolean;
             allow_self_vote?: boolean;
-            /** @description Empty for repeatable kinds and all_people person polls; otherwise 2–500 unique options. Person options must reference admitted cohort members. */
+            /** @description Empty for contribution kinds and all_people person polls; otherwise 2–500 unique options. Person options must reference admitted cohort members. */
             options?: {
                 label: string;
                 user_id?: string;
@@ -560,7 +576,7 @@ export interface components {
             /** @description Person polls: all admitted cohort members instead of explicit options. Defaults true on creation; omission preserves mode on edit. Other kinds require false. */
             all_people?: boolean;
             /**
-             * @description Maximum selections for person and proposal polls; repeatable kinds require 1.
+             * @description Maximum selections for person and proposal polls; contribution kinds require 1.
              * @default 1
              */
             max_choices: number;
@@ -597,8 +613,17 @@ export interface components {
             description: string;
             /** @enum {string} */
             kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal";
+            /** @description No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability. */
+            ongoing?: boolean;
+            /**
+             * Format: date-time
+             * @description Automatic closing instant for bounded collections; null when ongoing. Open collections are effectively closed at this instant.
+             */
+            closes_at?: string | null;
+            /** @description Allow multiple contributions per person independently of kind. Omission defaults from kind on create and preserves the stored flag on edit. */
+            repeatable?: boolean;
             allow_self_vote?: boolean;
-            /** @description Empty for repeatable kinds and all_people person polls; otherwise 2–500 unique options. Person options must reference admitted cohort members. */
+            /** @description Empty for contribution kinds and all_people person polls; otherwise 2–500 unique options. Person options must reference admitted cohort members. */
             options?: {
                 label: string;
                 user_id?: string;
@@ -607,7 +632,7 @@ export interface components {
             /** @description Person polls: all admitted cohort members instead of explicit options. Defaults true on creation; omission preserves mode on edit. Other kinds require false. */
             all_people?: boolean;
             /**
-             * @description Maximum selections for person and proposal polls; repeatable kinds require 1.
+             * @description Maximum selections for person and proposal polls; contribution kinds require 1.
              * @default 1
              */
             max_choices: number;
@@ -1512,6 +1537,11 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /**
+                     * Format: uuid
+                     * @description Client-generated key required for repeatable ballots; replay with the same selection returns success without an extra entry, changed selection conflicts.
+                     */
+                    ballot_id?: string;
                     option_id?: string;
                     option_ids?: string[];
                 } & (unknown | unknown);
@@ -1525,6 +1555,11 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /**
+                         * Format: uuid
+                         * @description Client-generated key required for repeatable ballots; replay with the same selection returns success without an extra entry, changed selection conflicts.
+                         */
+                        ballot_id?: string;
                         option_id: string;
                         option_ids: string[];
                     };

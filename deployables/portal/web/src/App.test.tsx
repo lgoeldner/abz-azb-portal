@@ -13,13 +13,15 @@ const user = {
   category_ids: [],
 };
 const repeatable = ['idea', 'quote', 'memory', 'photo'];
-// A complete Sammlung as the API returns it; repeatable classes are always open with no options.
+// A complete Sammlung as the API returns it; extra properties can override defaults independently by kind.
 const sammlung = (id: string, name: string, kind: string, extra: Record<string, unknown> = {}) => ({
   id,
   name,
   description: '',
   kind,
   repeatable: repeatable.includes(kind),
+  ongoing: true,
+  closes_at: null,
   status: 'open',
   allow_self_vote: false,
   options: [],
@@ -56,11 +58,11 @@ it('starts provider login without fetching identities from the portal', async ()
 
 describe('contribution submission', () => {
   it('keeps entered fields visible when the server rejects a stale submission', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith('/api/v1/me')) return Response.json({ user, csrf_token: 'csrf' });
       if (url.endsWith('/api/v1/categories')) return Response.json([category]);
-      if (url === '/api/v1/submissions')
+      if (url === '/api/v1/submissions' && init?.method === 'POST')
         return Response.json({ error: { code: 'stale_version', message: 'Bitte erneut prüfen.' } }, { status: 409 });
       return Response.json([]);
     });
@@ -74,9 +76,9 @@ describe('contribution submission', () => {
       </QueryClientProvider>,
     );
 
-    const title = await screen.findByPlaceholderText('Gib deiner Erinnerung einen Namen');
+    const title = await screen.findByPlaceholderText('Gib deinem Beitrag einen Namen');
     fireEvent.change(title, { target: { value: 'Die letzte Freistunde' } });
-    fireEvent.change(screen.getByPlaceholderText('Was ist passiert? Welcher Spruch darf nicht fehlen?'), {
+    fireEvent.change(screen.getByPlaceholderText('Was soll die Redaktion dazu wissen?'), {
       target: { value: 'Wir waren alle dabei.' },
     });
     fireEvent.click(screen.getByRole('button', { name: /Beitrag einreichen/i }));
@@ -84,6 +86,32 @@ describe('contribution submission', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Eine neuere Version liegt vor.'));
     expect(title).toHaveValue('Die letzte Freistunde');
     expect(screen.getByDisplayValue('Wir waren alle dabei.')).toBeInTheDocument();
+  });
+
+  it('blocks new contributions for a closed collection', async () => {
+    const closed = sammlung('closed-photo', 'Fotos', 'photo', { repeatable: false, status: 'closed' });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/api/v1/me')) return Response.json({ user, csrf_token: 'csrf' });
+      if (url.endsWith('/api/v1/categories')) return Response.json([closed]);
+      if (url === '/api/v1/submissions' && init?.method === 'POST') return Response.json({});
+      return Response.json([]);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/beitraege/neu?kategorie=closed-photo']}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(
+      await screen.findByText('Neue Beiträge können nur in offenen Sammlungen eingereicht werden.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Gib deinem Beitrag einen Namen')).toBeNull();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
   });
 
   it('rejects an unsupported file before creating a contribution and preserves the form', async () => {
@@ -103,7 +131,7 @@ describe('contribution submission', () => {
       </QueryClientProvider>,
     );
 
-    const title = await screen.findByPlaceholderText('Gib deiner Erinnerung einen Namen');
+    const title = await screen.findByPlaceholderText('Gib deinem Beitrag einen Namen');
     fireEvent.change(title, { target: { value: 'Die letzte Freistunde' } });
     fireEvent.change(screen.getByLabelText(/höchstens 10 Bilder/), {
       target: { files: [new File(['PDF test'], 'notizen.pdf', { type: 'application/pdf' })] },
@@ -122,7 +150,7 @@ describe('contribution submission', () => {
   it('lets a student replace a rejected photo and retry without creating another contribution', async () => {
     const submission = {
       id: 'new-submission',
-      category_id: 'memory',
+      category_id: 'photo',
       author_id: user.id,
       author_name: user.name,
       title: 'Das letzte Schulfest',
@@ -134,12 +162,22 @@ describe('contribution submission', () => {
       updated_at: '2026-10-23T12:00:00Z',
       attachments: [],
     };
+    const photoCategory = sammlung('photo', 'Fotos', 'photo', {
+      repeatable: false,
+      ongoing: false,
+      closes_at: '2027-01-01T00:00:00Z',
+    });
+    let created = false;
     let uploadCount = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith('/api/v1/me')) return Response.json({ user, csrf_token: 'csrf' });
-      if (url.endsWith('/api/v1/categories')) return Response.json([category]);
-      if (url === '/api/v1/submissions' && init?.method === 'POST') return Response.json(submission, { status: 201 });
+      if (url.endsWith('/api/v1/categories')) return Response.json([photoCategory]);
+      if (url === '/api/v1/submissions' && init?.method === 'POST') {
+        created = true;
+        return Response.json(submission, { status: 201 });
+      }
+      if (url === '/api/v1/submissions') return Response.json(created ? [submission] : []);
       if (url === '/api/v1/submissions/new-submission/attachments' && init?.method === 'POST') {
         uploadCount += 1;
         if (uploadCount === 1)
@@ -157,15 +195,15 @@ describe('contribution submission', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/beitraege/neu?kategorie=memory']}>
+        <MemoryRouter initialEntries={['/beitraege/neu?kategorie=photo']}>
           <App />
         </MemoryRouter>
       </QueryClientProvider>,
     );
 
-    const title = await screen.findByPlaceholderText('Gib deiner Erinnerung einen Namen');
+    const title = await screen.findByPlaceholderText('Gib deinem Beitrag einen Namen');
     fireEvent.change(title, { target: { value: submission.title } });
-    fireEvent.change(screen.getByPlaceholderText('Was ist passiert? Welcher Spruch darf nicht fehlen?'), {
+    fireEvent.change(screen.getByPlaceholderText('Was soll die Redaktion dazu wissen?'), {
       target: { value: submission.body },
     });
     const photoPicker = screen.getByLabelText(/höchstens 10 Bilder/);
@@ -453,11 +491,20 @@ describe('verwaltung', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Neue Sammlung/ }));
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Motto' } });
     fireEvent.change(screen.getByLabelText('Klasse'), { target: { value: 'proposal' } });
-    fireEvent.change(screen.getByLabelText(/Antwortoptionen/), { target: { value: 'A\nB' } });
+    for (const option of ['A', 'B']) {
+      fireEvent.change(screen.getByLabelText('Antwortoption hinzufügen'), { target: { value: option } });
+      fireEvent.click(screen.getByRole('button', { name: 'Hinzufügen' }));
+    }
     fireEvent.click(await screen.findByLabelText('Sam Redaktion'));
     fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
     await waitFor(() => expect(calls).toHaveLength(2));
-    expect(calls[0].body).toMatchObject({ kind: 'proposal', options: [{ label: 'A' }, { label: 'B' }] });
+    expect(calls[0].body).toMatchObject({
+      kind: 'proposal',
+      repeatable: false,
+      ongoing: true,
+      closes_at: null,
+      options: [{ label: 'A' }, { label: 'B' }],
+    });
     expect(calls[1].body).toMatchObject({ role: 'manager', category_ids: ['memory', 'new-cat'] });
   });
 
@@ -612,7 +659,7 @@ describe('navigation by view', () => {
     return urls;
   }
 
-  it('shows unanswered polls first and only never-submitted repeatable collections, while keeping finished polls accessible', async () => {
+  it('shows ballots first and only never-submitted submission collections, while keeping finished ballots accessible', async () => {
     const urls = mount(user, {
       polls: [
         poll('p-open', 'Abimotto', { opened_at: iso(3) }),
@@ -636,11 +683,11 @@ describe('navigation by view', () => {
     ]);
     expect(links[0]).toHaveAttribute('href', '/sammlungen/p-newer');
 
-    const fortlaufend = within(aside).getByRole('group', { name: 'Fortlaufend' });
-    expect(within(fortlaufend).queryByRole('link', { name: /Erinnerungen/ })).toBeNull();
-    const category = within(fortlaufend).getByRole('link', { name: /Zitate/ });
+    const submissions = within(aside).getByRole('group', { name: 'Beiträge' });
+    expect(within(submissions).queryByRole('link', { name: /Erinnerungen/ })).toBeNull();
+    const category = within(submissions).getByRole('link', { name: /Zitate/ });
     expect(category).toHaveAttribute('href', '/sammlungen/quotes');
-    expect(within(fortlaufend).queryByRole('link', { name: /Abimotto/ })).toBeNull();
+    expect(within(submissions).queryByRole('link', { name: /Abimotto/ })).toBeNull();
     expect(category).toHaveTextContent('Noch nichts eingereicht');
     expect(within(aside).getByRole('link', { name: /Zitate/ })).toHaveTextContent('Noch nichts eingereicht');
     expect(open.compareDocumentPosition(category) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -661,10 +708,13 @@ describe('navigation by view', () => {
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Hey Mia. 3 Sammlungen warten.');
     const main = screen.getByRole('main');
     const voting = within(main).getByRole('region', { name: 'Jetzt dran' });
-    const recurring = within(main).getByRole('region', { name: 'Fortlaufend' });
-    expect(voting.compareDocumentPosition(recurring) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(recurring).getByRole('link', { name: /Zitate/ })).toHaveAttribute('href', '/sammlungen/quotes');
-    expect(within(recurring).queryByRole('heading', { name: 'Erinnerungen' })).toBeNull();
+    const submissionQueue = within(main).getByRole('region', { name: 'Fortlaufend' });
+    expect(voting.compareDocumentPosition(submissionQueue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(submissionQueue).getByRole('link', { name: /Zitate/ })).toHaveAttribute(
+      'href',
+      '/beitraege/neu?kategorie=quotes',
+    );
+    expect(within(submissionQueue).queryByRole('heading', { name: 'Erinnerungen' })).toBeNull();
     expect(within(voting).queryByRole('link', { name: /Beitragen/ })).toBeNull();
     fireEvent.click(within(voting).getByRole('button', { name: 'Nächste Sammlung' }));
     expect(within(voting).getByRole('heading', { name: 'Abimotto' })).toBeInTheDocument();
@@ -685,7 +735,10 @@ describe('navigation by view', () => {
       await screen.findByRole('heading', { name: 'Zitate' });
       const main = screen.getByRole('main');
       expect(within(main).queryByRole('heading', { name: 'Erinnerungen' })).toBeNull();
-      expect(within(main).getByRole('link', { name: /Beitragen/ })).toHaveAttribute('href', '/sammlungen/quotes');
+      expect(within(main).getByRole('link', { name: /Beitragen/ })).toHaveAttribute(
+        'href',
+        '/beitraege/neu?kategorie=quotes',
+      );
       expect(within(main).getByText('Beitrag own')).toBeInTheDocument();
       expect(within(screen.getByRole('complementary')).getByRole('link', { name: 'Alle Sammlungen' })).toHaveAttribute(
         'href',
@@ -706,6 +759,37 @@ describe('navigation by view', () => {
     },
   );
 
+  it('queues ballots and a one-off photo in their kind-based workflows', async () => {
+    mount(user, {
+      polls: [
+        sammlung('proposal-repeatable', 'Motto', 'proposal', {
+          repeatable: true,
+          options: [{ id: 'motto-choice', label: 'Gemeinsam' }],
+        }),
+        sammlung('person-repeatable', 'Personenwahl', 'person', {
+          repeatable: true,
+          options: [{ id: 'person-choice', label: 'Ada Beispiel', user_id: 'other-student' }],
+        }),
+        sammlung('photo-once', 'Ein Jahrgangsfoto', 'photo', {
+          repeatable: false,
+          ongoing: false,
+          closes_at: '2027-01-01T00:00:00Z',
+        }),
+      ],
+      submissions: [],
+    });
+
+    const ballots = await screen.findByRole('region', { name: 'Sammlungen, die auf dich warten' });
+    expect(await within(ballots).findByRole('button', { name: 'Gemeinsam' })).toBeInTheDocument();
+    fireEvent.click(within(ballots).getByRole('button', { name: 'Nächste Sammlung' }));
+    expect(await within(ballots).findByRole('button', { name: 'Ada Beispiel' })).toBeInTheDocument();
+    fireEvent.click(within(ballots).getByRole('button', { name: 'Nächste Sammlung' }));
+    const photoLink = await within(ballots).findByRole('link', { name: /Beitragen/ });
+    expect(photoLink).toHaveAttribute('href', '/beitraege/neu?kategorie=photo-once');
+    expect(within(ballots).queryByRole('button', { name: /Stimme speichern/ })).toBeNull();
+    expect(within(ballots).queryByRole('button', { name: /Personen auswählen/ })).toBeNull();
+  });
+
   it('treats multi-selection ballots as submitted even without the legacy single-option field', async () => {
     mount(user, {
       polls: [poll('multi', 'Mehrfachwahl', { my_option_ids: ['multi-a'], my_option_id: null })],
@@ -716,6 +800,25 @@ describe('navigation by view', () => {
     expect(voted.closest('details')).not.toBeNull();
     const main = screen.getByRole('main');
     expect(within(main).queryByRole('heading', { name: 'Mehrfachwahl' })).toBeNull();
+  });
+
+  it('keeps a voted open repeatable ballot available for another submission', async () => {
+    mount(user, {
+      polls: [
+        poll('repeatable-vote', 'Motto erneut wählen', {
+          repeatable: true,
+          my_option_id: 'repeatable-vote-a',
+          my_option_ids: ['repeatable-vote-a'],
+        }),
+      ],
+      submissions: [],
+    });
+
+    const aside = await screen.findByRole('complementary');
+    expect(await within(aside).findByRole('link', { name: /Motto erneut wählen/ })).toBeInTheDocument();
+    expect(within(aside).getByText('Erledigt (0)')).toBeInTheDocument();
+    const ballots = await screen.findByRole('region', { name: 'Sammlungen, die auf dich warten' });
+    expect(await within(ballots).findByRole('button', { name: 'Erneut abstimmen' })).toBeEnabled();
   });
 
   it.each([
@@ -754,7 +857,7 @@ describe('navigation by view', () => {
     expect(within(aside).getByRole('link', { name: /Abimotto/ })).toHaveTextContent('34 Stimmen');
     expect(within(aside).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('3 Beiträge');
     expect(
-      within(within(aside).getByRole('group', { name: 'Fortlaufend' })).getByRole('link', { name: /Erinnerungen/ }),
+      within(within(aside).getByRole('group', { name: 'Beiträge' })).getByRole('link', { name: /Erinnerungen/ }),
     ).toHaveAttribute('href', '/sammlungen/memory');
     expect(within(aside).getByRole('link', { name: 'Neue Sammlung' })).toHaveAttribute('href', '/sammlungen?neu');
 
@@ -1165,6 +1268,7 @@ describe('sammlungen', () => {
   };
   const motto = sammlung('motto', 'Abimotto', 'proposal', {
     status: 'open',
+    ongoing: false,
     options: [
       { id: 'o1', label: 'Eins' },
       { id: 'o2', label: 'Zwei' },
@@ -1173,6 +1277,7 @@ describe('sammlungen', () => {
   });
   const old = sammlung('alt', 'Altlast', 'person', {
     status: 'closed',
+    ongoing: false,
     options: [
       { id: 'x', label: 'X' },
       { id: 'y', label: 'Y' },
@@ -1180,6 +1285,7 @@ describe('sammlungen', () => {
   });
   const draft = sammlung('entwurf', 'Geheimer Entwurf', 'proposal', {
     status: 'draft',
+    ongoing: false,
     options: [
       { id: 'd1', label: 'D1' },
       { id: 'd2', label: 'D2' },
@@ -1386,7 +1492,10 @@ describe('sammlungen', () => {
     ).toEqual(['Ideen', 'Zitate', 'Erinnerungen', 'Fotos', 'Personenwahl', 'Vorschlagswahl']);
     fireEvent.change(klasse, { target: { value: 'proposal' } });
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Neues Motto' } });
-    fireEvent.change(screen.getByLabelText(/Antwortoptionen/), { target: { value: 'A\nB' } });
+    for (const option of ['A', 'B']) {
+      fireEvent.change(screen.getByLabelText('Antwortoption hinzufügen'), { target: { value: option } });
+      fireEvent.click(screen.getByRole('button', { name: 'Hinzufügen' }));
+    }
     fireEvent.click(screen.getByLabelText(/eigene Person/));
     fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
     await waitFor(() => expect(calls).toHaveLength(1));
@@ -1397,6 +1506,9 @@ describe('sammlungen', () => {
         name: 'Neues Motto',
         description: '',
         kind: 'proposal',
+        repeatable: false,
+        ongoing: true,
+        closes_at: null,
         all_people: false,
         max_choices: 1,
         allow_self_vote: true,
@@ -1411,11 +1523,15 @@ describe('sammlungen', () => {
       const calls = mount('/sammlungen?neu', manager);
       fireEvent.change(await screen.findByLabelText('Klasse'), { target: { value: kind } });
       expect(screen.queryByText('Wer darf bearbeiten')).toBeNull();
-      expect(screen.queryByLabelText(/Antwortoptionen/)).toBeNull();
+      expect(screen.queryByLabelText('Antwortoption hinzufügen')).toBeNull();
       fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Neue Sammlung' } });
       fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
       await waitFor(() => expect(calls).toHaveLength(1));
-      expect(calls[0]).toMatchObject({ url: '/categories', method: 'POST', body: { kind, options: [] } });
+      expect(calls[0]).toMatchObject({
+        url: '/categories',
+        method: 'POST',
+        body: { kind, repeatable: true, ongoing: true, closes_at: null, options: [] },
+      });
       expect(vi.mocked(fetch).mock.calls.some(([path]) => String(path).includes('/admin/'))).toBe(false);
     },
   );
@@ -1441,7 +1557,7 @@ describe('sammlungen', () => {
     expect(screen.queryByText('Wer darf bearbeiten')).toBeNull();
   });
 
-  it('offers admins all six classes and hides option fields for repeatable ones', async () => {
+  it('offers admins all six classes and keeps option fields for ballot classes', async () => {
     mount('/sammlungen?neu', admin);
     const klasse = await screen.findByLabelText('Klasse');
     expect(
@@ -1449,16 +1565,16 @@ describe('sammlungen', () => {
         .getAllByRole('option')
         .map((o) => o.textContent),
     ).toEqual(['Ideen', 'Zitate', 'Erinnerungen', 'Fotos', 'Personenwahl', 'Vorschlagswahl']);
-    expect(screen.queryByLabelText(/Antwortoptionen/)).toBeNull();
+    expect(screen.queryByLabelText('Antwortoption hinzufügen')).toBeNull();
     fireEvent.change(klasse, { target: { value: 'proposal' } });
-    expect(screen.getByLabelText(/Antwortoptionen/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Antwortoption hinzufügen')).toBeInTheDocument();
     fireEvent.change(klasse, { target: { value: 'person' } });
     expect(screen.getByRole('switch', { name: /Alle freigegebenen Personen/ })).toBeChecked();
     fireEvent.click(screen.getByRole('switch', { name: /Alle freigegebenen Personen/ }));
     expect(await screen.findByRole('button', { name: 'Anna' })).toBeInTheDocument();
   });
 
-  it('offers only repeatable Sammlungen on the editorial review page', async () => {
+  it('offers only submission Sammlungen on the editorial review page', async () => {
     mount('/redaktion', manager);
     const select = (await screen.findAllByLabelText('Sammlung'))[0];
     await waitFor(() => expect(within(select).getAllByRole('option').length).toBeGreaterThan(1));

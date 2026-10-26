@@ -35,6 +35,8 @@ function personPoll(overrides: Partial<Category> = {}): Category {
     description: '',
     kind: 'person',
     repeatable: false,
+    ongoing: true,
+    closes_at: null,
     status: 'open',
     allow_self_vote: false,
     options: [
@@ -75,6 +77,8 @@ function installApi(initial: Category[] = [], auditRows: unknown[] = []) {
         description: String(body?.description ?? ''),
         kind: body?.kind === 'proposal' ? 'proposal' : 'person',
         repeatable: false,
+        ongoing: true,
+        closes_at: null,
         status: 'draft',
         allow_self_vote: false,
         options: (body?.options as Category['options'] | undefined) ?? [],
@@ -90,6 +94,11 @@ function installApi(initial: Category[] = [], auditRows: unknown[] = []) {
       } as Category;
       categories = [...categories, created];
       return Response.json(created, { status: 201 });
+    }
+    if (path.startsWith('/categories/') && method === 'PATCH') {
+      writes.push({ path, method, body: body ?? {} });
+      const updated = categories.find((category) => category.id === path.split('/')[2]);
+      return Response.json({ ...updated, ...body, version: Number(body?.version ?? 1) + 1 });
     }
     if (path.endsWith('/status') && method === 'POST') {
       writes.push({ path, method, body: body ?? {} });
@@ -155,6 +164,13 @@ async function openPersonForm(kind = 'person') {
   fireEvent.click(screen.getByRole('button', { name: /Neue Sammlung/ }));
   fireEvent.change(screen.getByLabelText('Klasse'), { target: { value: kind } });
   expect(screen.getByLabelText('Maximale Zahl der Stimmen pro Person')).toHaveValue(1);
+}
+
+function addProposalOption(value: string, byEnter = false) {
+  const input = screen.getByLabelText('Antwortoption hinzufügen');
+  fireEvent.change(input, { target: { value } });
+  if (byEnter) fireEvent.keyDown(input, { key: 'Enter', code: 'Enter', charCode: 13 });
+  else fireEvent.click(screen.getByRole('button', { name: 'Hinzufügen' }));
 }
 
 describe('Sammlungen person polls', () => {
@@ -287,8 +303,10 @@ describe('Sammlungen person polls', () => {
       const { writes } = installApi();
       renderPortal('/sammlungen', admin);
       await openPersonForm(kind);
-      if (kind === 'proposal')
-        fireEvent.change(screen.getByLabelText(/Antwortoptionen/), { target: { value: 'A\nB' } });
+      if (kind === 'proposal') {
+        addProposalOption('A');
+        addProposalOption('B');
+      }
 
       const count = screen.getByLabelText('Maximale Zahl der Stimmen pro Person');
       const less = screen.getByRole('button', { name: kind === 'person' ? 'Weniger Personen' : 'Weniger Optionen' });
@@ -336,6 +354,143 @@ describe('Sammlungen person polls', () => {
         options: [],
       },
     });
+  });
+
+  it('creates one-off photo collections without changing their content kind', async () => {
+    const { writes } = installApi();
+    renderPortal('/sammlungen', admin);
+    fireEvent.click(screen.getByRole('button', { name: /Neue Sammlung/ }));
+    const kind = screen.getByLabelText('Klasse');
+    fireEvent.change(kind, { target: { value: 'photo' } });
+    const repeatable = screen.getByRole('switch', { name: 'Wiederholbar' });
+    expect(repeatable).toBeChecked();
+    fireEvent.click(repeatable);
+    expect(kind).toHaveValue('photo');
+    expect(kind.querySelectorAll('option')).toHaveLength(6);
+    fireEvent.click(screen.getByRole('switch', { name: 'Fortlaufend' }));
+    fireEvent.change(screen.getByLabelText('Enddatum'), { target: { value: '2099-06-01T12:00' } });
+    expect(screen.queryByLabelText('Antwortoption hinzufügen')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Ein Foto pro Person' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0].body).toMatchObject({
+      kind: 'photo',
+      repeatable: false,
+      ongoing: false,
+      closes_at: new Date('2099-06-01T12:00').toISOString(),
+      options: [],
+    });
+  });
+
+  it('shows an existing one-off photo contribution without ballot controls or another-create action', async () => {
+    const photo = personPoll({ kind: 'photo', name: 'Ein Foto pro Person', options: [], repeatable: false });
+    const { fetchMock } = installApi([photo]);
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/api/v1/submissions'))
+        return Response.json([
+          {
+            id: 'my-photo',
+            category_id: photo.id,
+            author_id: student.id,
+            author_name: student.name,
+            title: 'Mein Abschlussfoto',
+            body: '',
+            context: '',
+            status: 'pending',
+            version: 1,
+            created_at: '2026-10-25T00:00:00Z',
+            updated_at: '2026-10-25T00:00:00Z',
+            attachments: [],
+          },
+        ]);
+      return fetchMock(input, init);
+    });
+    renderPortal(`/sammlungen/${photo.id}`, student);
+    expect(await screen.findByRole('link', { name: /Mein Abschlussfoto/ })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Beitrag einreichen/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Stimme speichern/ })).toBeNull();
+    expect(fetchMock.mock.calls.some(([url]) => /\/(results|audit)$/.test(String(url)))).toBe(false);
+  });
+
+  it('preserves the exact stored deadline when editing an unrelated photo definition', async () => {
+    const photo = personPoll({ kind: 'photo', options: [], ongoing: false, closes_at: '2099-06-01T10:00:42.123Z' });
+    const { writes } = installApi([photo]);
+    renderPortal(`/sammlungen/${photo.id}`, admin);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung bearbeiten' }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Unser Foto' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0].body).toMatchObject({ name: 'Unser Foto', ongoing: false, closes_at: photo.closes_at });
+  });
+
+  it('preloads proposal options as chips and keeps the collection group locked while editing', async () => {
+    const proposal = personPoll({
+      kind: 'proposal',
+      status: 'draft',
+      opened_at: null,
+      options: [
+        { id: 'option-a', label: 'Mitternachtsblau' },
+        { id: 'option-b', label: 'Sonnengelb' },
+      ],
+    });
+    installApi([proposal]);
+    renderPortal(`/sammlungen/${proposal.id}`, admin);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Definition bearbeiten' }));
+
+    const group = screen.getByRole('switch', { name: 'Wiederholbar' });
+    expect(group).not.toBeChecked();
+    expect(group).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Mitternachtsblau entfernen' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sonnengelb entfernen' })).toBeInTheDocument();
+  });
+
+  it('adds trimmed proposal chips by button or Enter, blocks blanks and duplicates, removes chips, and saves the self-vote switch', async () => {
+    const { writes } = installApi();
+    renderPortal('/sammlungen', admin);
+    await openPersonForm('proposal');
+
+    const selfVote = screen.getByRole('switch', { name: 'Stimme für die eigene Person erlauben' });
+    expect(selfVote).not.toBeChecked();
+    addProposalOption('  A  ');
+    addProposalOption('B', true);
+    addProposalOption('a');
+    expect(screen.getByRole('button', { name: 'A entfernen' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'B entfernen' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /entfernen$/ })).toHaveLength(2);
+
+    const input = screen.getByLabelText('Antwortoption hinzufügen');
+    fireEvent.change(input, { target: { value: '   ' } });
+    expect(screen.getByRole('button', { name: 'Hinzufügen' })).toBeDisabled();
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter', charCode: 13 });
+    expect(screen.getAllByRole('button', { name: /entfernen$/ })).toHaveLength(2);
+
+    addProposalOption('C');
+    fireEvent.click(screen.getByRole('button', { name: 'C entfernen' }));
+    fireEvent.click(selfVote);
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Abimotto' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0].body).toMatchObject({
+      kind: 'proposal',
+      allow_self_vote: true,
+      options: [{ label: 'A' }, { label: 'B' }],
+    });
+  });
+
+  it('includes a valid pending proposal option when saving without adding it first', async () => {
+    const { writes } = installApi();
+    renderPortal('/sammlungen', admin);
+    await openPersonForm('proposal');
+
+    addProposalOption('A');
+    fireEvent.change(screen.getByLabelText('Antwortoption hinzufügen'), { target: { value: ' B ' } });
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Abimotto' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0].body.options).toEqual([{ label: 'A' }, { label: 'B' }]);
   });
 
   it('searches and removes selected subset candidates before creating the poll', async () => {

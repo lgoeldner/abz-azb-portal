@@ -91,26 +91,38 @@ func TestMigration006PreservesDefinitionsVotesAndHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	app := appForPool(t, pool, issuer)
-	if res := authenticatedRequest(t, app, pool, MiaID, http.MethodPut, "/api/v1/categories/"+pollOpen+"/ballot", `{"option_id":"40000000-0000-4000-8000-000000000101"}`); res.Code != 200 {
-		t.Fatal("legacy proposal vote failed")
+	// Seed the pre-007 schema directly. The current API reads the new category
+	// and ballot columns, so it cannot be used until the migration is applied.
+	legacyBallotID := "50000000-0000-4000-8000-000000000001"
+	if _, err := pool.Exec(ctx, `INSERT INTO ballots(poll_id,user_id,option_id) VALUES($1,$2,$3)`, pollOpen, MiaID, "40000000-0000-4000-8000-000000000101"); err != nil {
+		t.Fatal(err)
 	}
-	snapshot := func(table string) string {
+	if _, err := pool.Exec(ctx, `INSERT INTO ballot_audit(id,poll_id,user_id,option_id,ballot_id) VALUES($1,$2,$3,$4,$5)`, ID(), pollOpen, MiaID, "40000000-0000-4000-8000-000000000101", legacyBallotID); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := func(query string) string {
 		t.Helper()
 		var result string
-		if err := pool.QueryRow(ctx, "SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text),'[]'::jsonb)::text FROM "+table+" r").Scan(&result); err != nil {
+		if err := pool.QueryRow(ctx, query).Scan(&result); err != nil {
 			t.Fatal(err)
 		}
 		return result
 	}
+	queries := map[string]string{
+		"categories":   `SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text),'[]'::jsonb)::text FROM (SELECT id,name,description,kind,status,allow_self_vote,version,created_at,opened_at,all_people,max_choices FROM categories) r`,
+		"poll_options": `SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text),'[]'::jsonb)::text FROM poll_options r`,
+		"ballots":      `SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text),'[]'::jsonb)::text FROM (SELECT poll_id,user_id,option_id,created_at FROM ballots) r`,
+		"ballot_audit": `SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text),'[]'::jsonb)::text FROM ballot_audit r`,
+	}
 	before := map[string]string{}
-	for _, table := range []string{"categories", "poll_options", "ballots", "ballot_audit"} {
-		before[table] = snapshot(table)
+	for table, query := range queries {
+		before[table] = snapshot(query)
 	}
 	if err := Migrate(ctx, pool); err != nil {
 		t.Fatal(err)
 	}
 	for table, rows := range before {
-		if snapshot(table) != rows {
+		if snapshot(queries[table]) != rows {
 			t.Fatalf("migration changed existing %s", table)
 		}
 	}

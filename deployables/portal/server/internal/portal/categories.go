@@ -5,33 +5,38 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
 
-const categoryCols = "id::text,name,description,kind,status,allow_self_vote,all_people,max_choices,version,created_at,opened_at"
+const categoryCols = "id::text,name,description,kind,repeatable,ongoing,closes_at,status,allow_self_vote,all_people,max_choices,version,created_at,opened_at"
 
 func validKind(k string) bool {
 	return k == "idea" || k == "quote" || k == "memory" || k == "photo" || k == "person" || k == "proposal"
 }
-func repeatableKind(k string) bool {
+func contributionKind(k string) bool {
 	return k == "idea" || k == "quote" || k == "memory" || k == "photo"
 }
 
+func ballotKind(k string) bool { return k == "person" || k == "proposal" }
+
 func scanCategory(row pgx.Row) (Category, error) {
 	c := Category{Options: []PollOption{}, MyOptionIDs: []string{}}
-	e := row.Scan(&c.ID, &c.Name, &c.Description, &c.Kind, &c.Status, &c.AllowSelfVote, &c.AllPeople, &c.MaxChoices, &c.Version, &c.CreatedAt, &c.OpenedAt)
-	c.Repeatable = repeatableKind(c.Kind)
+	e := row.Scan(&c.ID, &c.Name, &c.Description, &c.Kind, &c.Repeatable, &c.Ongoing, &c.ClosesAt, &c.Status, &c.AllowSelfVote, &c.AllPeople, &c.MaxChoices, &c.Version, &c.CreatedAt, &c.OpenedAt)
+	if e == nil && c.Status == "open" && c.ClosesAt != nil && !c.ClosesAt.After(time.Now()) {
+		c.Status = "closed"
+	}
 	return c, e
 }
 
 // fillBallots adds options, the viewer's own choice and (editors only) ballot counts and participation to the
-// single-answer categories of cs using one query each, however many categories there are.
+// ballot categories of cs using one query each, however many categories there are.
 func fillBallots(ctx context.Context, db DB, u User, cs []Category) error {
 	idx := map[string]int{}
 	ids := []string{}
 	for i := range cs {
-		if !cs[i].Repeatable {
+		if ballotKind(cs[i].Kind) {
 			idx[cs[i].ID] = i
 			ids = append(ids, cs[i].ID)
 		}
@@ -57,7 +62,17 @@ func fillBallots(ctx context.Context, db DB, u User, cs []Category) error {
 	if e != nil {
 		return e
 	}
-	rows, e = db.Query(ctx, "SELECT poll_id::text,option_id::text FROM ballots WHERE user_id=$1 AND poll_id=ANY($2::uuid[]) ORDER BY option_id", u.ID, ids)
+	rows, e = db.Query(ctx, `WITH latest AS (
+		SELECT poll_id,ballot_id FROM (
+			SELECT poll_id,ballot_id,row_number() OVER (PARTITION BY poll_id ORDER BY max(created_at) DESC,ballot_id DESC) AS rank
+			FROM ballots WHERE user_id=$1 AND poll_id=ANY($2::uuid[])
+			GROUP BY poll_id,ballot_id
+		) grouped WHERE rank=1
+	)
+	SELECT b.poll_id::text,b.option_id::text
+	FROM ballots b JOIN latest l USING(poll_id,ballot_id)
+	WHERE b.user_id=$1
+	ORDER BY b.poll_id,b.option_id`, u.ID, ids)
 	if e != nil {
 		return e
 	}
@@ -123,18 +138,34 @@ func loadCategory(ctx context.Context, db DB, id string, u User, lock bool) (Cat
 	return cs[0], nil
 }
 
-// requireRepeatable rejects unknown categories and single-answer ones for submissions.
-func requireRepeatable(ctx context.Context, db DB, id string) error {
+// checkContributionCategory validates the category and enforces its per-author cap.
+// Callers serialize writes for authorID before taking category or submission row locks.
+func checkContributionCategory(ctx context.Context, db DB, id, authorID, excludeID string, requireOpen bool) error {
 	var kind string
-	e := db.QueryRow(ctx, "SELECT kind FROM categories WHERE id=$1", id).Scan(&kind)
+	var repeatable bool
+	var status string
+	var closesAt *time.Time
+	e := db.QueryRow(ctx, "SELECT kind,repeatable,status,closes_at FROM categories WHERE id=$1 FOR SHARE", id).Scan(&kind, &repeatable, &status, &closesAt)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return bad("Sammlung nicht gefunden.")
 	}
 	if e != nil {
 		return e
 	}
-	if !repeatableKind(kind) {
-		return bad("Beiträge sind nur in Sammlungen mit beliebig vielen Einträgen möglich.")
+	if !contributionKind(kind) {
+		return bad("In dieser Sammlung können keine Beiträge eingereicht werden.")
+	}
+	if requireOpen && (status != "open" || closesAt != nil && !closesAt.After(time.Now())) {
+		return bad("In diese Sammlung können nur bei geöffnetem Status Beiträge eingereicht oder verschoben werden.")
+	}
+	if !repeatable {
+		var exists bool
+		if e = db.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM submissions WHERE category_id=$1 AND author_id=$2 AND ($3='' OR id::text<>$3))", id, authorID, excludeID).Scan(&exists); e != nil {
+			return e
+		}
+		if exists {
+			return bad("Für diese Sammlung ist nur ein Beitrag pro Person möglich.")
+		}
 	}
 	return nil
 }
@@ -167,12 +198,15 @@ func (a *App) listCategories(w http.ResponseWriter, r *http.Request) error {
 }
 
 type categoryInput struct {
-	Name          string `json:"name"`
-	Description   string `json:"description"`
-	Kind          string `json:"kind"`
-	AllowSelfVote bool   `json:"allow_self_vote"`
-	AllPeople     *bool  `json:"all_people"`
-	MaxChoices    *int   `json:"max_choices"`
+	Name          string     `json:"name"`
+	Description   string     `json:"description"`
+	Kind          string     `json:"kind"`
+	Repeatable    *bool      `json:"repeatable"`
+	Ongoing       *bool      `json:"ongoing"`
+	ClosesAt      *time.Time `json:"closes_at"`
+	AllowSelfVote bool       `json:"allow_self_vote"`
+	AllPeople     *bool      `json:"all_people"`
+	MaxChoices    *int       `json:"max_choices"`
 	Options       []struct {
 		Label  string  `json:"label"`
 		UserID *string `json:"user_id,omitempty"`
@@ -187,13 +221,13 @@ func validateCategory(in categoryInput) error {
 	if !validKind(in.Kind) {
 		return bad("Ungültiger Sammlungstyp.")
 	}
-	if in.MaxChoices != nil && (*in.MaxChoices < 1 || *in.MaxChoices > 500 || repeatableKind(in.Kind) && *in.MaxChoices != 1) {
-		return bad("Maximale Auswahl muss 1 bis 500 betragen; fortlaufende Sammlungen haben keine Mehrfachauswahl.")
+	if in.MaxChoices != nil && (*in.MaxChoices < 1 || *in.MaxChoices > 500 || contributionKind(in.Kind) && *in.MaxChoices != 1) {
+		return bad("Maximale Auswahl muss 1 bis 500 betragen; Beitragssammlungen haben keine Mehrfachauswahl.")
 	}
 	if in.Kind != "person" && in.AllPeople != nil && *in.AllPeople {
 		return bad("Alle Personen ist nur für Personenabstimmungen erlaubt.")
 	}
-	if repeatableKind(in.Kind) {
+	if contributionKind(in.Kind) {
 		if len(in.Options) != 0 {
 			return bad("Diese Sammlung hat keine Optionen.")
 		}
@@ -239,6 +273,7 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 	}
 	id := r.PathValue("id")
 	create := id == ""
+	var closesAt *time.Time
 	tx, e := a.DB.Begin(r.Context())
 	if e != nil {
 		return e
@@ -257,9 +292,17 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 			all := in.Kind == "person" && old.AllPeople
 			in.AllPeople = &all
 		}
+		if in.Repeatable == nil {
+			repeatable := old.Repeatable
+			in.Repeatable = &repeatable
+		}
+		if in.Ongoing == nil {
+			ongoing := old.Ongoing
+			in.Ongoing = &ongoing
+		}
 		if in.MaxChoices == nil {
 			max := 1
-			if !repeatableKind(in.Kind) {
+			if ballotKind(in.Kind) {
 				max = old.MaxChoices
 			}
 			in.MaxChoices = &max
@@ -267,13 +310,44 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 		if e = validateCategory(in); e != nil {
 			return e
 		}
-		if repeatableKind(in.Kind) != old.Repeatable {
+		if contributionKind(in.Kind) != contributionKind(old.Kind) {
 			return bad("Der Typ darf nur innerhalb seiner Gruppe geändert werden.")
 		}
-		if in.Version != old.Version || !old.Repeatable && (old.Status != "draft" || old.OpenedAt != nil) {
+		if in.Version != old.Version || ballotKind(old.Kind) && (old.Status != "draft" || old.OpenedAt != nil) {
 			return conflict()
 		}
+		if *in.Repeatable != old.Repeatable {
+			return bad("Die Häufigkeit der Beiträge kann nach dem Anlegen nicht geändert werden.")
+		}
+		if *in.Ongoing != old.Ongoing {
+			return bad("Der Fortlaufend-Status kann nach dem Anlegen nicht geändert werden.")
+		}
+		if old.Ongoing {
+			closesAt = nil
+		} else {
+			if old.ClosesAt == nil {
+				return bad("Für eine nicht fortlaufende Sammlung ist ein Endzeitpunkt erforderlich.")
+			}
+			closesAt = old.ClosesAt
+			if in.ClosesAt != nil && !in.ClosesAt.Equal(*old.ClosesAt) {
+				return bad("Der Endzeitpunkt kann nach dem Anlegen nicht geändert werden.")
+			}
+		}
 	} else {
+		if in.Repeatable == nil {
+			repeatable := contributionKind(in.Kind)
+			in.Repeatable = &repeatable
+		}
+		if in.Ongoing == nil {
+			ongoing := true
+			in.Ongoing = &ongoing
+		}
+		if !*in.Ongoing {
+			if in.ClosesAt == nil || !in.ClosesAt.After(time.Now()) {
+				return bad("Für eine nicht fortlaufende Sammlung ist ein zukünftiger Endzeitpunkt erforderlich.")
+			}
+			closesAt = in.ClosesAt
+		}
 		if in.AllPeople == nil {
 			all := in.Kind == "person"
 			in.AllPeople = &all
@@ -282,8 +356,9 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 			return e
 		}
 	}
-	rep := repeatableKind(in.Kind)
-	selfVote := in.AllowSelfVote && !rep
+	rep := *in.Repeatable
+	ongoing := *in.Ongoing
+	selfVote := in.AllowSelfVote && ballotKind(in.Kind)
 	allPeople := in.Kind == "person" && in.AllPeople != nil && *in.AllPeople
 	maxChoices := 1
 	if in.MaxChoices != nil {
@@ -293,16 +368,16 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 	if create {
 		id = ID()
 		status := "draft"
-		if rep {
+		if contributionKind(in.Kind) && ongoing {
 			status = "open"
 		}
-		_, e = tx.Exec(r.Context(), "INSERT INTO categories(id,name,description,kind,status,allow_self_vote,all_people,max_choices,opened_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,CASE WHEN $5='open' THEN now() END)", id, name, in.Description, in.Kind, status, selfVote, allPeople, maxChoices)
+		_, e = tx.Exec(r.Context(), "INSERT INTO categories(id,name,description,kind,repeatable,ongoing,closes_at,status,allow_self_vote,all_people,max_choices,opened_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,CASE WHEN $8='open' THEN now() END)", id, name, in.Description, in.Kind, rep, ongoing, closesAt, status, selfVote, allPeople, maxChoices)
 		if e == nil && u.Role == "manager" {
 			_, e = tx.Exec(r.Context(), "UPDATE users SET category_ids=array_append(category_ids,$2::uuid) WHERE id=$1", u.ID, id)
 		}
 	} else {
-		_, e = tx.Exec(r.Context(), "UPDATE categories SET name=$2,description=$3,kind=$4,allow_self_vote=$5,all_people=$6,max_choices=$7,version=version+1 WHERE id=$1", id, name, in.Description, in.Kind, selfVote, allPeople, maxChoices)
-		if e == nil && !rep {
+		_, e = tx.Exec(r.Context(), "UPDATE categories SET name=$2,description=$3,kind=$4,repeatable=$5,ongoing=$6,closes_at=$7,allow_self_vote=$8,all_people=$9,max_choices=$10,version=version+1 WHERE id=$1", id, name, in.Description, in.Kind, rep, ongoing, closesAt, selfVote, allPeople, maxChoices)
+		if e == nil && ballotKind(in.Kind) {
 			_, e = tx.Exec(r.Context(), "DELETE FROM poll_options WHERE poll_id=$1", id)
 		}
 	}
@@ -331,7 +406,7 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	action := "poll.saved"
-	if rep {
+	if !ballotKind(in.Kind) {
 		action = "category.saved"
 	}
 	if e = audit(r.Context(), tx, u, action, id); e != nil {
@@ -379,8 +454,8 @@ func (a *App) statusCategory(w http.ResponseWriter, r *http.Request) error {
 	if !canEdit(u, c.ID) {
 		return forbidden()
 	}
-	if c.Repeatable {
-		return bad("Diese Sammlung hat keinen Abstimmungsstatus.")
+	if in.Status == "open" && c.ClosesAt != nil && !c.ClosesAt.After(time.Now()) {
+		return conflict()
 	}
 	validTransition := c.Status == "draft" && in.Status == "open" ||
 		c.Status == "open" && (in.Status == "closed" || in.Status == "draft") ||
@@ -397,7 +472,7 @@ func (a *App) statusCategory(w http.ResponseWriter, r *http.Request) error {
 			return e
 		}
 	}
-	if len(c.Options) < 2 {
+	if ballotKind(c.Kind) && len(c.Options) < 2 {
 		return bad("Mindestens zwei Optionen erforderlich.")
 	}
 	if e = tx.QueryRow(r.Context(), "UPDATE categories SET status=$2,version=version+1,opened_at=CASE WHEN $2='open' AND opened_at IS NULL THEN now() ELSE opened_at END WHERE id=$1 RETURNING opened_at", c.ID, in.Status).Scan(&c.OpenedAt); e != nil {
@@ -447,8 +522,8 @@ func (a *App) deleteCategory(w http.ResponseWriter, r *http.Request) error {
 	if version != in.Version {
 		return conflict()
 	}
-	if repeatableKind(kind) {
-		return bad("Fortlaufende Sammlungen können nicht gelöscht werden.")
+	if !ballotKind(kind) {
+		return bad("Beitragssammlungen können hier nicht gelöscht werden.")
 	}
 	for _, table := range []string{"ballots", "ballot_audit", "poll_options"} {
 		if _, e = tx.Exec(r.Context(), "DELETE FROM "+table+" WHERE poll_id=$1", id); e != nil {

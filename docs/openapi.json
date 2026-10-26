@@ -118,7 +118,7 @@
     },
     "/api/v1/categories/{id}": {
       "patch": {
-        "summary": "Update collection (admins or managers with grant; single-answer definitions only before first opening); kind changes stay within their group",
+        "summary": "Update collection (admins or managers with grant; ballot definitions only before first opening); kind changes stay within content family, repeatable and schedule fixed after creation",
         "operationId": "patchCategoriesId",
         "responses": {
           "200": {
@@ -1157,7 +1157,7 @@
     },
     "/api/v1/categories/{id}/status": {
       "post": {
-        "summary": "Open, close or hide a single-answer category (admin or manager with grant; draft->open, open->closed, open/closed->draft; 400 for repeatable). Hiding preserves votes/history and first opened_at; reopening keeps candidates fixed.",
+        "summary": "Open, close or hide a collection (admin or manager with grant; draft->open, open->closed, open/closed->draft). Expired collections cannot reopen. Hiding preserves votes/history and first opened_at; reopening keeps candidates fixed.",
         "operationId": "postCategoriesIdStatus",
         "responses": {
           "200": {
@@ -1224,7 +1224,7 @@
     },
     "/api/v1/categories/{id}/ballot": {
       "put": {
-        "summary": "Cast or replace a named ballot with up to max_choices distinct options",
+        "summary": "Cast a named ballot: replace current selection when one-off; append an idempotent entry when repeatable (ballot_id required)",
         "operationId": "putCategoriesIdBallot",
         "responses": {
           "200": {
@@ -1234,6 +1234,11 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "ballot_id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "description": "Client-generated key required for repeatable ballots; replay with the same selection returns success without an extra entry, changed selection conflicts."
+                    },
                     "option_id": {
                       "type": "string"
                     },
@@ -1286,6 +1291,11 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                    "ballot_id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "description": "Client-generated key required for repeatable ballots; replay with the same selection returns success without an extra entry, changed selection conflicts."
+                    },
                   "option_id": {
                     "type": "string"
                   },
@@ -1482,14 +1492,23 @@
             "type": "string",
             "enum": ["idea", "quote", "memory", "photo", "person", "proposal"]
           },
+          "ongoing": {
+            "type": "boolean",
+            "description": "No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability."
+          },
+          "closes_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "Automatic closing instant for bounded collections; null when ongoing. Open collections are effectively closed at this instant."
+          },
           "repeatable": {
             "type": "boolean",
-            "description": "True for idea, quote, memory, photo (any number of submissions); false for person, proposal (single-answer ballot)."
+            "description": "Allow multiple contributions or independent ballot entries per person, independently of kind. False ballots retain one changeable current selection."
           },
           "status": {
             "type": "string",
             "enum": ["draft", "open", "closed"],
-            "description": "Always open for repeatable categories. Draft means hidden from students, including previously opened polls; opened_at distinguishes editable new drafts from locked hidden polls."
+            "description": "All kinds support draft, open and closed; the closing deadline also makes open collections effectively closed. Draft means hidden from students, including previously opened polls; opened_at distinguishes editable new drafts from locked hidden polls."
           },
           "allow_self_vote": {
             "type": "boolean"
@@ -1499,7 +1518,7 @@
             "items": {
               "$ref": "#/components/schemas/PollOption"
             },
-            "description": "Empty for repeatable categories."
+            "description": "Empty for contribution categories."
           },
           "my_option_id": {
             "type": ["string", "null"],
@@ -1519,11 +1538,11 @@
           },
           "ballot_count": {
             "type": ["integer", "null"],
-            "description": "Number of distinct current voters. Editors only; null for students and repeatable categories."
+            "description": "Number of distinct current voters. Editors only; null for students and contribution categories."
           },
           "participation": {
             "type": ["object", "null"],
-            "description": "Current voting participation among admitted cohort members, regardless of role. Both counts use the same population and database snapshot. Editors only; null for students and repeatable categories. Preserved ballots from people no longer eligible are excluded here but remain in ballot_count.",
+            "description": "Current voting participation among admitted cohort members, regardless of role. Both counts use the same population and database snapshot. Editors only; null for students and contribution categories. Preserved ballots from people no longer eligible are excluded here but remain in ballot_count.",
             "properties": {
               "voted": {
                 "type": "integer",
@@ -1547,14 +1566,14 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 500,
-            "description": "Maximum selections per voter for person and proposal polls; 1 for repeatable categories."
+            "description": "Maximum selections per voter for person and proposal polls; 1 for contribution categories."
           },
           "my_option_ids": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Viewer’s complete current selection; empty for repeatable categories or before voting."
+            "description": "Viewer’s complete current selection; empty for contribution categories or before voting."
           }
         },
         "required": [
@@ -1563,6 +1582,8 @@
           "description",
           "kind",
           "repeatable",
+          "ongoing",
+          "closes_at",
           "status",
           "allow_self_vote",
           "options",
@@ -1898,6 +1919,19 @@
             "type": "string",
             "enum": ["idea", "quote", "memory", "photo", "person", "proposal"]
           },
+          "ongoing": {
+            "type": "boolean",
+            "description": "No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability."
+          },
+          "closes_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "Automatic closing instant for bounded collections; null when ongoing. Open collections are effectively closed at this instant."
+          },
+          "repeatable": {
+            "type": "boolean",
+            "description": "Allow multiple contributions per person independently of kind. Omission defaults from kind on create and preserves the stored flag on edit."
+          },
           "allow_self_vote": {
             "type": "boolean"
           },
@@ -1916,7 +1950,7 @@
               "required": ["label"],
               "additionalProperties": false
             },
-            "description": "Empty for repeatable kinds and all_people person polls; otherwise 2–500 unique options. Person options must reference admitted cohort members."
+            "description": "Empty for contribution kinds and all_people person polls; otherwise 2–500 unique options. Person options must reference admitted cohort members."
           },
           "all_people": {
             "type": "boolean",
@@ -1927,7 +1961,7 @@
             "minimum": 1,
             "maximum": 500,
             "default": 1,
-            "description": "Maximum selections for person and proposal polls; repeatable kinds require 1."
+            "description": "Maximum selections for person and proposal polls; contribution kinds require 1."
           }
         },
         "required": ["name", "description", "kind"],
@@ -2042,6 +2076,19 @@
             "type": "string",
             "enum": ["idea", "quote", "memory", "photo", "person", "proposal"]
           },
+          "ongoing": {
+            "type": "boolean",
+            "description": "No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability."
+          },
+          "closes_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "Automatic closing instant for bounded collections; null when ongoing. Open collections are effectively closed at this instant."
+          },
+          "repeatable": {
+            "type": "boolean",
+            "description": "Allow multiple contributions per person independently of kind. Omission defaults from kind on create and preserves the stored flag on edit."
+          },
           "allow_self_vote": {
             "type": "boolean"
           },
@@ -2060,7 +2107,7 @@
               "required": ["label"],
               "additionalProperties": false
             },
-            "description": "Empty for repeatable kinds and all_people person polls; otherwise 2–500 unique options. Person options must reference admitted cohort members."
+            "description": "Empty for contribution kinds and all_people person polls; otherwise 2–500 unique options. Person options must reference admitted cohort members."
           },
           "version": {
             "type": "integer"
@@ -2074,7 +2121,7 @@
             "minimum": 1,
             "maximum": 500,
             "default": 1,
-            "description": "Maximum selections for person and proposal polls; repeatable kinds require 1."
+            "description": "Maximum selections for person and proposal polls; contribution kinds require 1."
           }
         },
         "required": ["name", "description", "kind", "version"],

@@ -54,6 +54,8 @@ const debugData = (c: Category) => ({
   id: c.id,
   kind: c.kind,
   repeatable: c.repeatable,
+  ongoing: c.ongoing,
+  closesAt: c.closes_at,
   status: c.status,
   version: c.version,
   options: c.options.length,
@@ -73,12 +75,12 @@ export function Sammlungen() {
   const creating = editorial(user) && params.has('neu');
   const setCreating = (open: boolean) => setParams(open ? { neu: '' } : {}, { replace: true });
   const shown = (categories.data ?? []).filter((c) => !klasse || c.kind === klasse);
-  const fortlaufend = shown.filter((c) => c.repeatable);
-  const ballots = shown.filter((c) => !c.repeatable);
+  const fortlaufend = shown.filter((c) => c.ongoing);
+  const ballots = shown.filter((c) => !c.ongoing);
   const groups: [Category['status'], string, string][] = [
-    ['open', 'Offen', 'Stimme während der Öffnung änderbar'],
+    ['open', 'Offen', 'Jetzt mitmachen'],
     ['draft', 'Verborgen', 'Nur für die Redaktion sichtbar'],
-    ['closed', 'Beendet', 'Die Abstimmung ist abgeschlossen'],
+    ['closed', 'Beendet', 'Die Sammlung ist abgeschlossen'],
   ];
   const chip = (active: boolean) =>
     `inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
@@ -140,12 +142,12 @@ export function Sammlungen() {
                 <h2 id="sammlungen-fortlaufend" className={heading}>
                   Fortlaufend
                 </h2>
-                <span className="text-sm text-muted">Beliebig oft beitragen</span>
+                <span className="text-sm text-muted">Ohne festes Enddatum</span>
               </div>
               <Cards items={fortlaufend} />
             </section>
           )}
-          {ballots.length > 0 && (
+          {ballots.some((c) => singleKinds.includes(c.kind)) && (
             <div className={`${notice} space-y-1`}>
               <strong className="block">Transparent abgestimmt.</strong>
               <p>
@@ -192,9 +194,9 @@ function Cards({ items }: { items: Category[] }) {
                 <strong className="block text-[15px] font-semibold">{c.name}</strong>
                 <span className="block text-sm text-muted">{c.description || kindLabel[c.kind]}</span>
               </span>
-              {!c.repeatable && <Badge status={c.status} label={badgeLabel(c)} />}
+              <Badge status={c.status} label={badgeLabel(c)} />
               <span className="hidden text-sm text-muted sm:block">
-                {c.repeatable ? 'Beiträge lesen' : 'Ergebnisse ansehen'}
+                {repeatableKinds.includes(c.kind) ? 'Beiträge lesen' : 'Ergebnisse ansehen'}
               </span>
               <Arrow />
             </Link>
@@ -212,7 +214,7 @@ function Cards({ items }: { items: Category[] }) {
           >
             <div className="flex items-start justify-between gap-3">
               <h3 className={`${heading} min-w-0`}>{c.name}</h3>
-              {!c.repeatable && <Badge status={c.status} label={badgeLabel(c)} />}
+              <Badge status={c.status} label={badgeLabel(c)} />
             </div>
             <p className="text-sm text-muted">{c.description}</p>
             <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line pt-3 text-sm text-muted">
@@ -220,12 +222,13 @@ function Cards({ items }: { items: Category[] }) {
                 <KindIcon icon={kindIcon[c.kind]} className="mt-[3px] size-4" />
                 <span>
                   {kindLabel[c.kind]}
-                  {!c.repeatable &&
+                  {singleKinds.includes(c.kind) &&
                     `, ${c.my_option_ids?.length || c.my_option_id ? 'Deine Stimme ist gespeichert' : plural(c.options.length, 'Option', 'Optionen')}`}
                 </span>
               </span>
               <span className="inline-flex flex-none items-center gap-1 whitespace-nowrap font-semibold text-ink">
-                {c.repeatable ? 'Beitragen' : c.status === 'open' ? 'Abstimmen' : 'Ansehen'} <Arrow />
+                {repeatableKinds.includes(c.kind) ? 'Beitragen' : c.status === 'open' ? 'Abstimmen' : 'Ansehen'}{' '}
+                <Arrow />
               </span>
             </div>
           </Link>
@@ -242,42 +245,70 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
   const { user } = useSession();
   const action = useAction();
   const current = useRef<Category | null>(sammlung ?? null);
-  const classes = sammlung ? (sammlung.repeatable ? repeatableKinds : singleKinds) : allKinds;
   const [kind, setKind] = useState<Kind>(sammlung?.kind ?? 'memory');
+  const [repeatable, setRepeatable] = useState(sammlung?.repeatable ?? true);
+  const repeatabilityChosen = useRef(false);
+  const [ongoing, setOngoing] = useState(sammlung?.ongoing ?? true);
+  const [closesAt, setClosesAt] = useState(() => {
+    if (!sammlung?.closes_at) return '';
+    const end = new Date(sammlung.closes_at);
+    return new Date(end.getTime() - end.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  });
   const single = singleKinds.includes(kind);
   const definitionLocked =
-    !!sammlung && !sammlung.repeatable && (sammlung.status !== 'draft' || Boolean(sammlung.opened_at));
+    !!sammlung && singleKinds.includes(sammlung.kind) && (sammlung.status !== 'draft' || Boolean(sammlung.opened_at));
   const users = useData<User[]>('/admin/users', user.role === 'admin');
   const [grants, setGrants] = useState<Record<string, boolean>>({});
   const managers = (users.data ?? []).filter((u) => u.role === 'manager');
   const roster = useData<{ id: string; name: string }[]>('/roster', kind === 'person');
   const [allPeople, setAllPeople] = useState(sammlung?.kind === 'person' ? sammlung.all_people : true);
+  const [allowSelfVote, setAllowSelfVote] = useState(sammlung?.allow_self_vote ?? false);
   const [maxChoices, setMaxChoices] = useState(sammlung?.max_choices ?? 1);
   const [selected, setSelected] = useState<string[]>(
     sammlung?.options.flatMap((o) => (o.user_id ? [o.user_id] : [])) ?? [],
   );
-  const [options, setOptions] = useState(sammlung?.options.map((o) => o.label).join('\n') ?? '');
+  const [options, setOptions] = useState(sammlung?.options.map((o) => o.label) ?? []);
+  const [optionDraft, setOptionDraft] = useState('');
+  const classes = sammlung ? (single ? singleKinds : repeatableKinds) : allKinds;
+  function addOption() {
+    const next = optionDraft.trim();
+    if (
+      !next ||
+      next.length > 300 ||
+      options.length >= 500 ||
+      options.some((option) => option.toLowerCase() === next.toLowerCase())
+    )
+      return;
+    setOptions([...options, next]);
+    setOptionDraft('');
+  }
   function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
-    const choices = !single
-      ? []
-      : kind === 'person'
-        ? allPeople
-          ? []
-          : selected.map((id) => ({
-              label:
-                roster.data?.find((u) => u.id === id)?.name ??
-                sammlung?.options.find((o) => o.user_id === id)?.label ??
-                '',
-              user_id: id,
-            }))
-        : options
-            .split('\n')
-            .map((s) => s.trim())
-            .filter(Boolean)
-            .map((text) => ({ label: text }));
     action.run(async () => {
+      const proposalOptions = options.map((option) => option.trim()).filter(Boolean);
+      const pendingOption = optionDraft.trim();
+      if (!definitionLocked && single && kind === 'proposal' && pendingOption) {
+        if (pendingOption.length > 300) throw new Error('Antwortoptionen dürfen höchstens 300 Zeichen lang sein.');
+        if (proposalOptions.some((option) => option.toLowerCase() === pendingOption.toLowerCase()))
+          throw new Error('Diese Antwortoption ist bereits vorhanden.');
+        proposalOptions.push(pendingOption);
+      }
+      if (!definitionLocked && single && kind === 'proposal' && proposalOptions.length > 500)
+        throw new Error('Es sind höchstens 500 Antwortoptionen erlaubt.');
+      const choices = !single
+        ? []
+        : kind === 'person'
+          ? allPeople
+            ? []
+            : selected.map((id) => ({
+                label:
+                  roster.data?.find((u) => u.id === id)?.name ??
+                  sammlung?.options.find((o) => o.user_id === id)?.label ??
+                  '',
+                user_id: id,
+              }))
+          : proposalOptions.map((text) => ({ label: text }));
       if (!definitionLocked && single && kind === 'proposal' && choices.length < 2)
         throw new Error('Bitte mindestens zwei Optionen auswählen.');
       if (!definitionLocked && single && kind === 'person' && !allPeople && choices.length < 2)
@@ -295,7 +326,10 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
               name: data.get('name'),
               description: data.get('description'),
               kind,
-              allow_self_vote: single && data.get('allow_self_vote') === 'on',
+              repeatable,
+              ongoing,
+              closes_at: ongoing ? null : (sammlung?.closes_at ?? new Date(closesAt).toISOString()),
+              allow_self_vote: single && allowSelfVote,
               all_people: kind === 'person' && allPeople,
               max_choices: single ? maxChoices : 1,
               options: choices,
@@ -338,9 +372,73 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
             Beschreibung
             <textarea className={field} name="description" defaultValue={sammlung?.description} rows={3} />
           </label>
+          <div className="space-y-2">
+            <label className="flex cursor-pointer items-center justify-between gap-4 text-[15px]">
+              <span>Wiederholbar</span>
+              <input
+                className="peer sr-only"
+                type="checkbox"
+                role="switch"
+                checked={repeatable}
+                disabled={!!sammlung || action.busy}
+                onChange={(event) => {
+                  repeatabilityChosen.current = true;
+                  setRepeatable(event.target.checked);
+                }}
+              />
+              <span className="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full bg-pill transition-colors after:absolute after:left-1 after:size-5 after:rounded-full after:bg-white after:transition-transform peer-checked:bg-ink peer-checked:after:translate-x-5 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink peer-disabled:cursor-not-allowed peer-disabled:opacity-60"></span>
+            </label>
+            <p className="text-sm text-muted">
+              {repeatable
+                ? 'Mehrere Beiträge oder Abstimmungen pro Person erlauben.'
+                : 'Ein Beitrag oder eine änderbare Stimme pro Person.'}
+            </p>
+          </div>
+          <div className="space-y-2">
+            <label className="flex cursor-pointer items-center justify-between gap-4 text-[15px]">
+              <span>Fortlaufend</span>
+              <input
+                className="peer sr-only"
+                type="checkbox"
+                role="switch"
+                checked={ongoing}
+                disabled={!!sammlung || action.busy}
+                onChange={(event) => setOngoing(event.target.checked)}
+              />
+              <span className="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full bg-pill transition-colors after:absolute after:left-1 after:size-5 after:rounded-full after:bg-white after:transition-transform peer-checked:bg-ink peer-checked:after:translate-x-5 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink peer-disabled:opacity-60"></span>
+            </label>
+            <p className="text-sm text-muted">
+              {ongoing ? 'Bleibt bis zum manuellen Schließen offen.' : 'Schließt automatisch zum Enddatum.'}
+            </p>
+          </div>
+          {!ongoing && (
+            <label className={label}>
+              Enddatum
+              <input
+                className={field}
+                type="datetime-local"
+                name="closes_at"
+                required
+                value={closesAt}
+                disabled={!!sammlung || action.busy}
+                onChange={(event) => setClosesAt(event.target.value)}
+              />
+            </label>
+          )}
+          {sammlung && (
+            <p className="text-sm text-muted">Wiederholbarkeit und Zeitplan stehen nach dem Anlegen fest.</p>
+          )}
           <label className={label}>
             Klasse
-            <select className={field} value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
+            <select
+              className={field}
+              value={kind}
+              onChange={(e) => {
+                const next = e.target.value as Kind;
+                setKind(next);
+                if (!sammlung && !repeatabilityChosen.current) setRepeatable(repeatableKinds.includes(next));
+              }}
+            >
               {classes.map((k) => (
                 <option key={k} value={k}>
                   {kindLabel[k]}
@@ -350,17 +448,57 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
           </label>
           {single &&
             (kind === 'proposal' ? (
-              <label className={label}>
-                Antwortoptionen <small className="font-normal text-muted">eine Option pro Zeile</small>
-                <textarea
-                  className={field}
-                  rows={5}
-                  value={options}
-                  onChange={(e) => setOptions(e.target.value)}
-                  required
-                  placeholder={'Option A\nOption B'}
-                />
-              </label>
+              <div className="space-y-3">
+                <label className={label}>
+                  Antwortoption hinzufügen
+                  <input
+                    className={field}
+                    type="text"
+                    maxLength={300}
+                    placeholder="Option eingeben"
+                    value={optionDraft}
+                    disabled={action.busy}
+                    onChange={(event) => setOptionDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        addOption();
+                      }
+                    }}
+                  />
+                </label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    className={btn.secondary}
+                    disabled={action.busy || !optionDraft.trim() || options.length >= 500}
+                    onClick={addOption}
+                  >
+                    Hinzufügen
+                  </button>
+                  <span className="text-sm text-muted">{options.length} von 500 Optionen</span>
+                </div>
+                {options.length > 0 && (
+                  <ul className="flex flex-wrap gap-2" aria-label="Antwortoptionen">
+                    {options.map((option, index) => (
+                      <li key={`${index}-${option}`} className="min-w-0 max-w-full">
+                        <button
+                          type="button"
+                          className="inline-flex min-h-10 max-w-full items-center gap-2 rounded-full bg-pop px-3 text-sm font-semibold text-ink hover:bg-pill focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-60"
+                          aria-label={`${option} entfernen`}
+                          disabled={action.busy}
+                          onClick={() => setOptions(options.filter((_, itemIndex) => itemIndex !== index))}
+                        >
+                          <span className="min-w-0 break-words">{option}</span>
+                          <span className="shrink-0" aria-hidden="true">
+                            ×
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             ) : (
               <div className="space-y-4">
                 <label className="flex cursor-pointer items-center justify-between gap-4 text-[15px]">
@@ -435,14 +573,17 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
                   </button>
                 </div>
               </div>
-              <label className="flex items-center gap-2.5 text-[15px]">
+              <label className="flex cursor-pointer items-center justify-between gap-4 text-[15px]">
+                <span>Stimme für die eigene Person erlauben</span>
                 <input
-                  className="size-4 shrink-0 accent-[var(--color-accent)]"
+                  className="peer sr-only"
                   type="checkbox"
-                  name="allow_self_vote"
-                  defaultChecked={sammlung?.allow_self_vote}
+                  role="switch"
+                  checked={allowSelfVote}
+                  disabled={action.busy}
+                  onChange={(event) => setAllowSelfVote(event.target.checked)}
                 />
-                Stimme für die eigene Person erlauben
+                <span className="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full bg-pill transition-colors after:absolute after:left-1 after:size-5 after:rounded-full after:bg-white after:transition-transform peer-checked:bg-ink peer-checked:after:translate-x-5 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink"></span>
               </label>
               <p className="text-sm text-muted">
                 {`Pro Person bis zu ${maxChoices} Stimme(n).`} Nach dem Öffnen ist die Definition gesperrt.
@@ -502,7 +643,7 @@ export function SammlungDetail() {
   if (categories.isPending) return <Loading />;
   if (categories.error) return <Failure error={categories.error} retry={() => categories.refetch()} />;
   if (!sammlung) return <NotFound />;
-  return sammlung.repeatable ? (
+  return repeatableKinds.includes(sammlung.kind) ? (
     <Fortlaufend key={sammlung.id} sammlung={sammlung} />
   ) : (
     <Ballot key={sammlung.id} sammlung={sammlung} categories={categories.data ?? []} />
@@ -523,6 +664,7 @@ function ClassLine({ sammlung }: { sammlung: Category }) {
         {kindLabel[sammlung.kind]}
       </span>
       {sammlung.description && `. ${sammlung.description}`}
+      {sammlung.closes_at && <span className="block text-sm text-muted">Ende: {date(sammlung.closes_at)}</span>}
     </>
   );
 }
@@ -536,6 +678,12 @@ function CollectionReader({ sammlung }: { sammlung: Category }) {
   const { user } = useSession();
   const [editing, setEditing] = useState(false);
   const [search, setSearch] = useState('');
+  const action = useAction();
+  const setStatus = (status: Category['status']) =>
+    action.run(
+      () => api(`/categories/${sammlung.id}/status`, json('POST', { version: sammlung.version, status })),
+      'Sammlungsstatus gespeichert.',
+    );
   const submissions = useData<Submission[]>(`/submissions?category_id=${sammlung.id}`);
   const items = (submissions.data ?? []).filter((s) =>
     `${s.title} ${s.body} ${s.author_name}`.toLocaleLowerCase('de').includes(search.toLocaleLowerCase('de')),
@@ -547,6 +695,25 @@ function CollectionReader({ sammlung }: { sammlung: Category }) {
         title={sammlung.name}
         action={
           <div className="flex flex-wrap gap-3">
+            {canEdit(user, sammlung.id) && (
+              <>
+                {sammlung.status === 'draft' && (
+                  <button className={btn.primary} disabled={action.busy} onClick={() => setStatus('open')}>
+                    Sammlung öffnen
+                  </button>
+                )}
+                {sammlung.status === 'open' && (
+                  <button className={btn.secondary} disabled={action.busy} onClick={() => setStatus('closed')}>
+                    Sammlung schließen
+                  </button>
+                )}
+                {sammlung.status !== 'draft' && (
+                  <button className={btn.secondary} disabled={action.busy} onClick={() => setStatus('draft')}>
+                    Sammlung verbergen
+                  </button>
+                )}
+              </>
+            )}
             {canEdit(user, sammlung.id) && (
               <button className={btn.secondary} onClick={() => setEditing(!editing)}>
                 {editing ? 'Formular schließen' : 'Sammlung bearbeiten'}
@@ -561,6 +728,7 @@ function CollectionReader({ sammlung }: { sammlung: Category }) {
         <ClassLine sammlung={sammlung} />
       </PageHead>
       <DevDebug label="Sammlung" data={debugData(sammlung)} />
+      {action.feedback}
       {editing && canEdit(user, sammlung.id) && (
         <SammlungForm key={sammlung.id} sammlung={sammlung} onSaved={() => setEditing(false)} />
       )}
@@ -625,14 +793,23 @@ function StudentCollection({ sammlung }: { sammlung: Category }) {
       <DevDebug label="Sammlung" data={debugData(sammlung)} />
       <div>
         <section className={`${panel} min-w-0 space-y-5`}>
-          <h2 className={heading}>Beliebig oft beitragen</h2>
+          <h2 className={heading}>{sammlung.repeatable ? 'Beliebig oft beitragen' : 'Einmal beitragen'}</h2>
           <p className="text-sm text-muted">
-            Du kannst hier so viele Beiträge einreichen, wie du möchtest. Nach der Sammlung kümmert sich die Redaktion
-            um die Auswahl für die Zeitung.
+            {sammlung.repeatable
+              ? 'Du kannst hier so viele Beiträge einreichen, wie du möchtest.'
+              : 'Du kannst hier einen Beitrag einreichen und deinen eigenen Beitrag anschließend bearbeiten.'}
           </p>
-          <Link className={btn.primary} to={`/beitraege/neu?kategorie=${sammlung.id}`}>
-            Beitrag einreichen <Arrow />
-          </Link>
+          {!submissions.isPending &&
+            !submissions.error &&
+            sammlung.status === 'open' &&
+            (sammlung.repeatable || !own.length) && (
+              <Link className={btn.primary} to={`/beitraege/neu?kategorie=${sammlung.id}`}>
+                Beitrag einreichen <Arrow />
+              </Link>
+            )}
+          {sammlung.status === 'closed' && (
+            <p className={notice}>Diese Sammlung ist beendet. Deine bisherigen Beiträge bleiben hier sichtbar.</p>
+          )}
           <h3 className="pt-2 text-sm font-bold">Deine Beiträge hier</h3>
           {submissions.isPending ? (
             <Loading />
@@ -675,9 +852,9 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
       .filter(
         (category) =>
           category.id !== poll.id &&
-          !category.repeatable &&
+          singleKinds.includes(category.kind) &&
           category.status === 'open' &&
-          !(category.my_option_ids?.length || category.my_option_id),
+          (category.repeatable || !(category.my_option_ids?.length || category.my_option_id)),
       )
       .sort(newestOpened),
   ];

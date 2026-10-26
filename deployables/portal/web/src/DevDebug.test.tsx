@@ -63,6 +63,8 @@ it('keeps contribution debug metadata outside its navigation link and omits priv
               name: 'Erinnerungen',
               description: '',
               kind: 'memory',
+              ongoing: true,
+              closes_at: null,
               repeatable: true,
               status: 'open',
               allow_self_vote: false,

@@ -24,6 +24,8 @@ function poll(overrides: Partial<Category> = {}): Category {
     description: '',
     kind: 'proposal',
     repeatable: false,
+    ongoing: true,
+    closes_at: null,
     status: 'open',
     allow_self_vote: false,
     options: [
@@ -117,6 +119,78 @@ describe('BallotForm', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Die Stimme konnte nicht gespeichert werden.');
     expect(screen.getByRole('button', { name: 'Zusammen entfernen' })).toBeInTheDocument();
     expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it('uses a fresh ballot id for each deliberate repeatable vote', async () => {
+    const requests: Record<string, unknown>[] = [];
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return Response.json({ ballot_id: 'saved', option_ids: ['option-1'] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderForm({ ballot: poll({ repeatable: true }) });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zusammen' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stimme speichern' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(/Jede erneute Abgabe wird als eigene Stimme geführt/)).toBeInTheDocument();
+    const reVote = await screen.findByRole('button', { name: 'Erneut abstimmen' });
+    fireEvent.click(reVote);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    const firstId = requests[0].ballot_id;
+    expect(firstId).toEqual(expect.any(String));
+    expect(requests[0].option_ids).toEqual(['option-1']);
+    expect(requests[1].option_ids).toEqual(['option-1']);
+    expect(requests[1].ballot_id).not.toBe(firstId);
+  });
+
+  it('reuses the ballot id for a failed retry of the same selection', async () => {
+    const requests: Record<string, unknown>[] = [];
+    let attempt = 0;
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      attempt += 1;
+      return attempt === 1
+        ? Response.json({ error: { message: 'Bitte erneut versuchen.' } }, { status: 500 })
+        : Response.json({ ballot_id: 'saved', option_ids: ['option-1'] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderForm({ ballot: poll({ repeatable: true }) });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zusammen' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stimme speichern' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Bitte erneut versuchen.');
+    fireEvent.click(screen.getByRole('button', { name: 'Stimme speichern' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    expect(requests[0].ballot_id).toEqual(expect.any(String));
+    expect(requests[1].ballot_id).toBe(requests[0].ballot_id);
+  });
+
+  it('replaces the pending ballot id if the selection changes after a failure', async () => {
+    const requests: Record<string, unknown>[] = [];
+    let attempt = 0;
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      attempt += 1;
+      return attempt === 1
+        ? Response.json({ error: { message: 'Bitte erneut versuchen.' } }, { status: 500 })
+        : Response.json({ ballot_id: 'saved', option_ids: ['option-1', 'option-2'] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderForm({ ballot: poll({ repeatable: true }) });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zusammen' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stimme speichern' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Bitte erneut versuchen.');
+    fireEvent.click(screen.getByRole('button', { name: 'Einmalig' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stimme speichern' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    expect(requests[0].ballot_id).not.toBe(requests[1].ballot_id);
+    expect(requests[0].option_ids).toEqual(['option-1']);
+    expect(requests[1].option_ids).toEqual(['option-1', 'option-2']);
   });
 
   it.each([

@@ -27,6 +27,7 @@ import {
   label,
   notice,
   panel,
+  isSubmissionCollection,
   useAction,
   useData,
   useSession,
@@ -51,8 +52,7 @@ function photoValidationError(files: File[]) {
     return 'Bitte wähle nur JPEG-, PNG- oder WebP-Bilder aus.';
   return '';
 }
-// Submissions live only in repeatable Sammlungen.
-const submittable = (c: Category) => c.repeatable;
+const submittable = (c: Category) => isSubmissionCollection(c.kind);
 export function Contributions() {
   const { user } = useSession();
   const categories = useData<Category[]>('/categories');
@@ -109,14 +109,22 @@ export function Contributions() {
 }
 export function NewContribution() {
   const [view] = useWorkspaceView();
+  const { user } = useSession();
   const categories = useData<Category[]>('/categories');
-  const [params] = useSearchParams();
+  const submissions = useData<Submission[]>('/submissions');
+  const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const action = useAction();
   const key = useRef(crypto.randomUUID());
   const [saved, setSaved] = useState<Submission | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const category = categories.data?.find((c) => c.id === params.get('kategorie') && submittable(c));
+  const own = submissions.data?.filter((s) => s.author_id === user.id) ?? [];
+  const existing =
+    !saved && category && !category.repeatable ? own.find((s) => s.category_id === category.id) : undefined;
+  const choices = (categories.data ?? []).filter(
+    (c) => c.status === 'open' && submittable(c) && (c.repeatable || !own.some((s) => s.category_id === c.id)),
+  );
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -162,25 +170,56 @@ export function NewContribution() {
       <PageHead title={category ? `Beitrag für „${category.name}“` : 'Was sollen wir festhalten?'}>
         Dein Beitrag wird in der Sammlung gespeichert. Die Redaktion sichtet die Sammlung nach dem Sammelzeitraum.
       </PageHead>
-      {categories.isPending ? (
+      {categories.isPending || submissions.isPending ? (
         <Loading />
-      ) : categories.error ? (
-        <Failure error={categories.error} retry={() => categories.refetch()} />
+      ) : categories.error || submissions.error ? (
+        <Failure
+          error={(categories.error ?? submissions.error)!}
+          retry={() => {
+            categories.refetch();
+            submissions.refetch();
+          }}
+        />
       ) : !categories.data?.length ? (
         <Empty>Das Team richtet die Sammlungen gerade ein.</Empty>
+      ) : existing ? (
+        <Empty>
+          Du hast bereits einen Beitrag in dieser Sammlung.{' '}
+          <Link to={`/beitraege/${existing.id}`}>Zum gespeicherten Beitrag</Link>
+        </Empty>
+      ) : category && category.status !== 'open' && !saved ? (
+        <Empty>Neue Beiträge können nur in offenen Sammlungen eingereicht werden.</Empty>
       ) : !category ? (
         <Navigate to="/" replace />
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start">
-          <form className={`${panel} min-w-0 space-y-5`} onSubmit={submit}>
-            <input type="hidden" name="category_id" value={category.id} />
+          <form key={category.id} className={`${panel} min-w-0 space-y-5`} onSubmit={submit}>
+            <label className={label}>
+              Sammlung
+              <select
+                className={field}
+                name="category_id"
+                value={category.id}
+                disabled={action.busy || !!saved}
+                onChange={(e) => {
+                  setFiles([]);
+                  setParams({ kategorie: e.target.value });
+                }}
+              >
+                {choices.map((choice) => (
+                  <option key={choice.id} value={choice.id}>
+                    {choice.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <fieldset className="min-w-0 space-y-5" disabled={action.busy || !!saved}>
               <label className={label}>
                 Titel
                 <input
                   className={field}
                   name="title"
-                  placeholder="Gib deiner Erinnerung einen Namen"
+                  placeholder="Gib deinem Beitrag einen Namen"
                   maxLength={200}
                   required
                 />
@@ -191,7 +230,7 @@ export function NewContribution() {
                   className={field}
                   name="body"
                   rows={7}
-                  placeholder="Was ist passiert? Welcher Spruch darf nicht fehlen?"
+                  placeholder="Was soll die Redaktion dazu wissen?"
                   maxLength={20000}
                 />
               </label>
@@ -277,6 +316,7 @@ export function ContributionDetail() {
   const isRedaktion = view === 'redaktion' || location.pathname.startsWith('/redaktion');
   const item = useData<Submission>(`/submissions/${id}`);
   const categories = useData<Category[]>('/categories');
+  const submissions = useData<Submission[]>('/submissions', !isRedaktion);
   const revisions = useData<Revision[]>(`/submissions/${id}/revisions`);
   const corrections = useData<Correction[]>(`/submissions/${id}/corrections`);
   const action = useAction();
@@ -295,6 +335,19 @@ export function ContributionDetail() {
   const s = item.data;
   const own = s.author_id === user.id;
   const editable = own && s.status === 'pending' && !isRedaktion;
+  const occupied = new Set(
+    (submissions.data ?? [])
+      .filter((other) => other.id !== s.id && other.author_id === s.author_id)
+      .map((other) => other.category_id),
+  );
+  const categoryChoices = (categories.data ?? []).filter(
+    (c) =>
+      c.id === s.category_id ||
+      (c.status === 'open' &&
+        submittable(c) &&
+        (own || canEdit(user, c.id)) &&
+        (c.repeatable || (!submissions.isPending && !submissions.error && !occupied.has(c.id)))),
+  );
   const categoryName = categories.data?.find((c) => c.id === s.category_id)?.name;
   const beginEdit = () => {
     setDraft({
@@ -492,13 +545,11 @@ export function ContributionDetail() {
                   value={draft.category_id}
                   onChange={(e) => setDraft({ ...draft, category_id: e.target.value })}
                 >
-                  {categories.data
-                    ?.filter((c) => submittable(c) && (own || canEdit(user, c.id)))
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
+                  {categoryChoices.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className={label}>

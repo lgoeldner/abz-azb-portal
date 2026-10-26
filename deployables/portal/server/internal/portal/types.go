@@ -17,6 +17,8 @@ type Category struct {
 	Description   string               `json:"description"`
 	Kind          string               `json:"kind"`
 	Repeatable    bool                 `json:"repeatable"`
+	Ongoing       bool                 `json:"ongoing"`
+	ClosesAt      *time.Time           `json:"closes_at"`
 	Status        string               `json:"status"`
 	AllowSelfVote bool                 `json:"allow_self_vote"`
 	AllPeople     bool                 `json:"all_people"`

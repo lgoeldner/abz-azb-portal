@@ -28,6 +28,8 @@ const category: Category = {
   description: 'Was bleibt',
   kind: 'memory',
   repeatable: true,
+  ongoing: true,
+  closes_at: null,
   status: 'open',
   allow_self_vote: false,
   options: [],
@@ -83,7 +85,12 @@ const note: Correction = {
   resolved: false,
 };
 
-function installApi(initialCorrections: Correction[] = [], item: Submission = submission) {
+function installApi(
+  initialCorrections: Correction[] = [],
+  item: Submission = submission,
+  collections: Category[] = [category],
+  allSubmissions: Submission[] = [item],
+) {
   const corrections = [...initialCorrections];
   const writes: { path: string; method: string; body?: unknown }[] = [];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -91,8 +98,8 @@ function installApi(initialCorrections: Correction[] = [], item: Submission = su
     const path = url.pathname.replace('/api/v1', '');
     const method = init?.method ?? 'GET';
     if (path === '/me') return Response.json({ user: student, csrf_token: 'csrf' });
-    if (path === '/categories') return Response.json([category]);
-    if (path === '/submissions' && method === 'GET') return Response.json([item]);
+    if (path === '/categories') return Response.json(collections);
+    if (path === '/submissions' && method === 'GET') return Response.json(allSubmissions);
     if (path === `/submissions/${item.id}`) return Response.json(item);
     if (path === `/submissions/${item.id}/revisions`) return Response.json([revision]);
     if (path === `/submissions/${item.id}/corrections` && method === 'GET') {
@@ -120,6 +127,95 @@ function installApi(initialCorrections: Correction[] = [], item: Submission = su
   vi.stubGlobal('fetch', fetchMock);
   return { fetchMock, writes };
 }
+
+describe('submission collections independent of repeatability', () => {
+  const photo: Category = { ...category, id: 'photo', name: 'Fotos', kind: 'photo', repeatable: false };
+  const ideas: Category = { ...category, id: 'ideas', name: 'Ideen', kind: 'idea', repeatable: true };
+  const person: Category = { ...category, id: 'person', name: 'Personenwahl', kind: 'person', repeatable: false };
+
+  it('shows an existing one-off photo contribution and prevents another create from a direct URL', async () => {
+    const existing: Submission = {
+      ...submission,
+      id: 'oneoff-photo-submission',
+      category_id: photo.id,
+      title: 'Unser Gruppenfoto',
+      status: 'accepted',
+    };
+    const { fetchMock } = installApi([], existing, [photo]);
+    renderPortal(`/beitraege/neu?kategorie=${photo.id}`, student, 'schueler');
+
+    const savedLink = await screen.findByRole('link', { name: 'Zum gespeicherten Beitrag' });
+    expect(savedLink).toHaveAttribute('href', `/beitraege/${existing.id}`);
+    expect(screen.queryByPlaceholderText('Gib deinem Beitrag einen Namen')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Beitrag einreichen/ })).toBeNull();
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => String(input).endsWith('/submissions') && init?.method === 'POST'),
+    ).toBe(false);
+
+    fireEvent.click(savedLink);
+    expect(await screen.findByRole('heading', { name: existing.title })).toBeInTheDocument();
+  });
+
+  it('offers all submission kinds, omits occupied one-off targets, and excludes ballot kinds', async () => {
+    const oneoffMemory: Category = { ...category, repeatable: false };
+    const occupiedPhoto: Submission = {
+      ...submission,
+      id: 'occupied-photo',
+      category_id: photo.id,
+    };
+    installApi([], occupiedPhoto, [oneoffMemory, ideas, photo, person], [occupiedPhoto]);
+    renderPortal(`/beitraege/neu?kategorie=${oneoffMemory.id}`, student, 'schueler');
+
+    const select = await screen.findByLabelText('Sammlung');
+    expect(Array.from((select as HTMLSelectElement).options).map((option) => option.textContent)).toEqual([
+      'Erinnerungen',
+      'Ideen',
+    ]);
+  });
+
+  it('keeps the current one-off category and offers only unfilled submission targets while editing', async () => {
+    const current: Category = { ...category, repeatable: false };
+    const occupiedPhoto: Submission = {
+      ...submission,
+      id: 'occupied-photo',
+      category_id: photo.id,
+    };
+    installApi([], submission, [current, ideas, photo, person], [submission, occupiedPhoto]);
+    renderPortal(`/beitraege/${submission.id}`, student, 'schueler');
+
+    fireEvent.click(await screen.findByRole('button', { name: /Bearbeiten/ }));
+    const select = await screen.findByLabelText('Sammlung');
+    expect(Array.from((select as HTMLSelectElement).options).map((option) => option.textContent)).toEqual([
+      'Erinnerungen',
+      'Ideen',
+    ]);
+  });
+
+  it('keeps a pending original editable after collection close and only offers open move targets', async () => {
+    const closedCurrent: Category = { ...category, status: 'closed' };
+    const openTarget: Category = { ...photo, status: 'open' };
+    const closedTarget: Category = { ...ideas, id: 'closed-ideas', name: 'Beendete Ideen', status: 'closed' };
+    installApi([], submission, [closedCurrent, openTarget, closedTarget]);
+    renderPortal(`/beitraege/${submission.id}`, student, 'schueler');
+
+    fireEvent.click(await screen.findByRole('button', { name: /Bearbeiten/ }));
+    const select = await screen.findByLabelText('Sammlung');
+    expect(Array.from((select as HTMLSelectElement).options).map((option) => option.textContent)).toEqual([
+      'Erinnerungen',
+      'Fotos',
+    ]);
+    expect(screen.getByLabelText(/Foto hinzufügen/)).toBeInTheDocument();
+  });
+
+  it('includes one-off photos in the editorial contribution reader', async () => {
+    const photoItem: Submission = { ...submission, id: 'photo-submission', category_id: photo.id };
+    installApi([], photoItem, [category, photo]);
+    renderPortal('/redaktion', manager);
+
+    expect(await screen.findByText(photoItem.title)).toBeInTheDocument();
+    expect(await screen.findAllByRole('option', { name: 'Fotos' })).toHaveLength(2);
+  });
+});
 
 function renderPortal(path: string, user: Me['user'], view: View = 'redaktion') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -252,9 +348,7 @@ describe('Redaktion contribution reading', () => {
     renderPortal('/beitraege/neu', manager, 'redaktion');
 
     expect(await screen.findByRole('heading', { name: 'Beiträge' })).toBeInTheDocument();
-    expect(
-      screen.queryByPlaceholderText('Was ist passiert? Welcher Spruch darf nicht fehlen?'),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Was soll die Redaktion dazu wissen?')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Beitrag einreichen/ })).not.toBeInTheDocument();
   });
 });

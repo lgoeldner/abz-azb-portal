@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Category } from './api';
-import { Arrow, btn, KindIcon, kindIcon, kindLabel } from './ui';
+import { Arrow, btn, isSubmissionCollection, KindIcon, kindIcon, kindLabel } from './ui';
 import { BallotForm } from './BallotForm';
 import './PollStack.css';
 
@@ -75,12 +75,16 @@ export function PollStack({ items: available, initialId }: { items: Category[]; 
               <h3 className="poll-stack__title">{item.name}</h3>
               {item.description && <span className="poll-stack__description">{item.description}</span>}
             </div>
-            {item.repeatable ? (
+            {isSubmissionCollection(item.kind) ? (
               <div className="poll-stack__bottomline">
-                <span className="poll-stack__meta">Noch nichts eingereicht</span>
-                <Link className={btn.primary} to={`/sammlungen/${item.id}`}>
-                  Beitragen <Arrow />
-                </Link>
+                <span className="poll-stack__meta">
+                  {item.status === 'open' ? 'Noch nichts eingereicht' : 'Diese Sammlung ist beendet'}
+                </span>
+                {item.status === 'open' && (
+                  <Link className={btn.primary} to={`/beitraege/neu?kategorie=${item.id}`}>
+                    Beitragen <Arrow />
+                  </Link>
+                )}
               </div>
             ) : (
               <BallotForm
@@ -92,7 +96,9 @@ export function PollStack({ items: available, initialId }: { items: Category[]; 
                   (item.my_option_ids?.length ? item.my_option_ids : item.my_option_id ? [item.my_option_id] : [])
                 }
                 onChoicesChange={(choices) => setDrafts((previous) => ({ ...previous, [item.id]: choices }))}
-                onSaved={() => setCompleted((previous) => [...previous, item.id])}
+                onSaved={() => {
+                  if (!item.repeatable) setCompleted((previous) => [...previous, item.id]);
+                }}
               />
             )}
           </article>

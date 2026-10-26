@@ -11,6 +11,7 @@ func (a *App) vote(w http.ResponseWriter, r *http.Request) error {
 	var in struct {
 		OptionID  json.RawMessage `json:"option_id"`
 		OptionIDs json.RawMessage `json:"option_ids"`
+		BallotID  string          `json:"ballot_id"`
 	}
 	if e := decode(w, r, &in); e != nil {
 		return e
@@ -48,14 +49,11 @@ func (a *App) vote(w http.ResponseWriter, r *http.Request) error {
 	if e != nil {
 		return e
 	}
-	if p.Repeatable {
+	if !ballotKind(p.Kind) {
 		return bad("Für diese Sammlung kann nicht abgestimmt werden.")
 	}
 	if p.Status == "draft" && !editor(u) {
 		return missing()
-	}
-	if p.Status != "open" {
-		return conflict()
 	}
 	var eligible bool
 	if e = tx.QueryRow(r.Context(), "SELECT admitted AND cohort_member FROM users WHERE id=$1 FOR SHARE", u.ID).Scan(&eligible); e != nil {
@@ -83,13 +81,60 @@ func (a *App) vote(w http.ResponseWriter, r *http.Request) error {
 			return bad("Option gehört nicht zu dieser Umfrage.")
 		}
 	}
-	if !slices.Equal(p.MyOptionIDs, ids) {
+	ballotID := ID()
+	if p.Repeatable {
+		if !validID(in.BallotID) {
+			return bad("Für wiederholbare Stimmabgaben ist eine ballot_id erforderlich.")
+		}
+		ballotID = in.BallotID
+		rows, err := tx.Query(r.Context(), "SELECT option_id::text FROM ballots WHERE poll_id=$1 AND user_id=$2 AND ballot_id=$3 ORDER BY option_id", p.ID, u.ID, ballotID)
+		if err != nil {
+			return err
+		}
+		previous := []string{}
+		for rows.Next() {
+			var optionID string
+			if err = rows.Scan(&optionID); err != nil {
+				rows.Close()
+				return err
+			}
+			previous = append(previous, optionID)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
+		if len(previous) > 0 {
+			if !slices.Equal(previous, ids) {
+				return conflict()
+			}
+			if e = tx.Commit(r.Context()); e != nil {
+				return e
+			}
+			jsonOut(w, 200, map[string]any{"option_id": ids[0], "option_ids": ids, "ballot_id": ballotID})
+			return nil
+		}
+	}
+	if p.Status != "open" {
+		return conflict()
+	}
+	if !p.Repeatable && !slices.Equal(p.MyOptionIDs, ids) {
 		if _, e = tx.Exec(r.Context(), "DELETE FROM ballots WHERE poll_id=$1 AND user_id=$2", p.ID, u.ID); e != nil {
 			return e
 		}
-		ballotID := ID()
 		for _, id := range ids {
-			if _, e = tx.Exec(r.Context(), "INSERT INTO ballots(poll_id,user_id,option_id) VALUES($1,$2,$3)", p.ID, u.ID, id); e != nil {
+			if _, e = tx.Exec(r.Context(), "INSERT INTO ballots(poll_id,user_id,ballot_id,option_id,created_at) VALUES($1,$2,$3,$4,clock_timestamp())", p.ID, u.ID, ballotID, id); e != nil {
+				return e
+			}
+			if _, e = tx.Exec(r.Context(), "INSERT INTO ballot_audit(id,poll_id,user_id,option_id,ballot_id) VALUES($1,$2,$3,$4,$5)", ID(), p.ID, u.ID, id, ballotID); e != nil {
+				return e
+			}
+		}
+	}
+	if p.Repeatable {
+		for _, id := range ids {
+			if _, e = tx.Exec(r.Context(), "INSERT INTO ballots(poll_id,user_id,ballot_id,option_id,created_at) VALUES($1,$2,$3,$4,clock_timestamp())", p.ID, u.ID, ballotID, id); e != nil {
 				return e
 			}
 			if _, e = tx.Exec(r.Context(), "INSERT INTO ballot_audit(id,poll_id,user_id,option_id,ballot_id) VALUES($1,$2,$3,$4,$5)", ID(), p.ID, u.ID, id, ballotID); e != nil {
@@ -100,7 +145,11 @@ func (a *App) vote(w http.ResponseWriter, r *http.Request) error {
 	if e = tx.Commit(r.Context()); e != nil {
 		return e
 	}
-	jsonOut(w, 200, map[string]any{"option_id": ids[0], "option_ids": ids})
+	response := map[string]any{"option_id": ids[0], "option_ids": ids}
+	if p.Repeatable {
+		response["ballot_id"] = ballotID
+	}
+	jsonOut(w, 200, response)
 	return nil
 }
 func (a *App) results(w http.ResponseWriter, r *http.Request) error {
@@ -113,7 +162,7 @@ func (a *App) results(w http.ResponseWriter, r *http.Request) error {
 	if e != nil {
 		return e
 	}
-	if c.Repeatable {
+	if !ballotKind(c.Kind) {
 		return bad("Diese Sammlung hat keine Abstimmung.")
 	}
 	rows, e := a.DB.Query(r.Context(), "SELECT o.id::text,o.label,count(b.user_id)::int FROM poll_options o LEFT JOIN ballots b ON b.option_id=o.id AND b.poll_id=o.poll_id WHERE o.poll_id=$1 GROUP BY o.id ORDER BY o.position", id)
@@ -145,7 +194,7 @@ func (a *App) ballotAudit(w http.ResponseWriter, r *http.Request) error {
 	if e != nil {
 		return e
 	}
-	if c.Repeatable {
+	if !ballotKind(c.Kind) {
 		return bad("Diese Sammlung hat keine Abstimmung.")
 	}
 	rows, e := a.DB.Query(r.Context(), "SELECT b.user_id::text,u.name,b.option_id::text,o.label,b.created_at,b.ballot_id::text FROM ballot_audit b JOIN users u ON u.id=b.user_id JOIN poll_options o ON o.id=b.option_id WHERE b.poll_id=$1 ORDER BY b.created_at,b.ballot_id,b.option_id,b.id", id)

@@ -86,12 +86,21 @@ test('Redaktion creates every collection kind in the shared form without admin r
     'Personenwahl',
     'Vorschlagswahl',
   ]);
+  const repeatable = page.getByRole('switch', { name: 'Wiederholbar', exact: true });
+  await repeatable.locator('..').click();
+  await expect(repeatable).not.toBeChecked();
+  await expect(page.getByRole('combobox', { name: 'Klasse', exact: true })).toHaveValue('memory');
+  await page.getByRole('combobox', { name: 'Klasse', exact: true }).selectOption('photo');
+  await expect(repeatable).not.toBeChecked();
+  await page.getByRole('switch', { name: 'Fortlaufend', exact: true }).locator('..').click();
+  await page.getByLabel('Enddatum', { exact: true }).fill('2099-06-01T12:00');
   await expect(page.getByRole('group', { name: 'Wer darf bearbeiten' })).toHaveCount(0);
-  await page.getByLabel('Name', { exact: true }).fill('Erinnerungen der Redaktion');
+  await page.getByLabel('Name', { exact: true }).fill('Ein Foto pro Person');
   await page.getByRole('button', { name: 'Sammlung speichern' }).click();
   await expect(page.getByText('Sammlung gespeichert.')).toBeVisible();
   expect(writes).toHaveLength(1);
-  expect(writes[0]).toMatchObject({ kind: 'memory', options: [] });
+  expect(writes[0]).toMatchObject({ kind: 'photo', repeatable: false, ongoing: false, options: [] });
+  expect(new Date(String(writes[0].closes_at)).getUTCFullYear()).toBe(2099);
   expect(adminRequests).toEqual([]);
 });
 

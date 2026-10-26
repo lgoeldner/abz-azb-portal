@@ -289,7 +289,7 @@ func (a *App) exportCategory(w http.ResponseWriter, r *http.Request) error {
 	if e = tx.QueryRow(r.Context(), "SELECT name,kind FROM categories WHERE id=$1", id).Scan(&name, &kind); e != nil {
 		return e
 	}
-	if !repeatableKind(kind) {
+	if !contributionKind(kind) {
 		return bad("Abstimmungen können nicht exportiert werden.")
 	}
 	rows, e := tx.Query(r.Context(), "SELECT id::text FROM submissions WHERE category_id=$1 AND ($2='all' OR status=$2) ORDER BY created_at,id", id, status)

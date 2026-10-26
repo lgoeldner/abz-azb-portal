@@ -42,13 +42,14 @@ import {
   SubmissionList,
   btn,
   allKinds,
+  isBallot,
+  isSubmissionCollection,
   heading,
   kindIcon,
   kindLabel,
   newestOpened,
   notice,
   plural,
-  repeatableKinds,
   roleName,
   since,
   useAction,
@@ -550,6 +551,7 @@ function NavGroup({ id, label, children }: { id: string; label: string; children
 }
 const quiet = 'px-3.5 text-[13px] text-muted';
 const hasVoted = (c: Category) => Boolean(c.my_option_ids?.length || c.my_option_id);
+const ongoing = (c: Category) => c.ongoing ?? c.repeatable;
 const participationColor = (percent: number) => {
   const from = [209, 213, 219];
   const to = [22, 101, 52];
@@ -560,9 +562,11 @@ function StudentNav() {
   const { user } = useSession();
   const categories = useData<Category[]>('/categories');
   const submissions = useData<Submission[]>('/submissions');
-  const ballots = (categories.data ?? []).filter((c) => !c.repeatable);
-  const todo = ballots.filter((c) => c.status === 'open' && !hasVoted(c)).sort(newestOpened);
-  const done = ballots.filter((c) => c.status === 'closed' || (c.status === 'open' && hasVoted(c))).sort(newestOpened);
+  const ballots = (categories.data ?? []).filter((c) => isBallot(c.kind));
+  const todo = ballots.filter((c) => c.status === 'open' && (!hasVoted(c) || c.repeatable)).sort(newestOpened);
+  const done = ballots
+    .filter((c) => c.status === 'closed' || (c.status === 'open' && hasVoted(c) && !c.repeatable))
+    .sort(newestOpened);
   const own = (submissions.data ?? []).filter((s) => s.author_id === user.id);
   return (
     <>
@@ -587,14 +591,16 @@ function StudentNav() {
           </ol>
         )}
       </NavGroup>
-      <NavGroup id="nav-fortlaufend" label="Fortlaufend">
+      <NavGroup id="nav-student-beitraege" label="Beiträge">
         {categories.isPending || submissions.isPending ? (
           <p className={quiet}>Einen Moment …</p>
         ) : categories.error ? null : submissions.error ? (
           <p className={quiet}>Beiträge nicht erreichbar.</p>
         ) : (
           categories.data
-            ?.filter((c) => c.repeatable && !own.some((s) => s.category_id === c.id))
+            ?.filter(
+              (c) => c.status === 'open' && isSubmissionCollection(c.kind) && !own.some((s) => s.category_id === c.id),
+            )
             .map((c) => (
               <NavRow
                 key={c.id}
@@ -650,7 +656,7 @@ function EditorNav() {
     ['draft', 'Entwürfe', 'nav-sammlung-entwuerfe'],
     ['closed', 'Beendet', 'nav-sammlung-beendet'],
   ];
-  const ballots = (categories.data ?? []).filter((c) => !c.repeatable);
+  const ballots = (categories.data ?? []).filter((c) => isBallot(c.kind));
   return (
     <>
       <NavGroup id="nav-sammlungen" label="Sammlungen">
@@ -691,12 +697,12 @@ function EditorNav() {
           Alle Sammlungen
         </NavItem>
       </NavGroup>
-      <NavGroup id="nav-fortlaufend" label="Fortlaufend">
+      <NavGroup id="nav-editor-beitraege" label="Beiträge">
         {categories.isPending ? (
           <p className={quiet}>Einen Moment …</p>
         ) : categories.error ? null : (
           categories.data
-            ?.filter((c) => c.repeatable)
+            ?.filter((c) => isSubmissionCollection(c.kind))
             .map((c) => {
               const mine = (submissions.data ?? []).filter((s) => s.category_id === c.id);
               return (
@@ -735,15 +741,22 @@ function StudentHome() {
   const categories = useData<Category[]>('/categories');
   const submissions = useData<Submission[]>('/submissions');
   const first = user.name.split(' ')[0];
-  const ballots = (categories.data ?? []).filter((c) => !c.repeatable);
-  const todo = ballots.filter((c) => c.status === 'open' && !hasVoted(c)).sort(newestOpened);
-  const done = ballots.filter((c) => c.status === 'closed' || (c.status === 'open' && hasVoted(c))).sort(newestOpened);
+  const ballots = (categories.data ?? []).filter((c) => isBallot(c.kind));
+  const todoBallots = ballots.filter((c) => c.status === 'open' && (!hasVoted(c) || c.repeatable)).sort(newestOpened);
+  const done = ballots
+    .filter((c) => c.status === 'closed' || (c.status === 'open' && hasVoted(c) && !c.repeatable))
+    .sort(newestOpened);
   const own = (submissions.data ?? []).filter((s) => s.author_id === user.id);
   const firstContributions =
     submissions.data && !submissions.error
-      ? (categories.data ?? []).filter((c) => c.repeatable && !own.some((s) => s.category_id === c.id))
+      ? (categories.data ?? []).filter(
+          (c) => c.status === 'open' && isSubmissionCollection(c.kind) && !own.some((s) => s.category_id === c.id),
+        )
       : [];
-  const waiting = [...todo, ...firstContributions];
+  const ongoingContributions = firstContributions.filter(ongoing);
+  const boundedContributions = firstContributions.filter((c) => !ongoing(c)).sort(newestOpened);
+  const todo = [...todoBallots, ...boundedContributions];
+  const waiting = [...todo, ...ongoingContributions];
   const title =
     categories.data && submissions.data
       ? waiting.length === 0
@@ -769,8 +782,8 @@ function StudentHome() {
             <Failure error={categories.error} retry={() => categories.refetch()} />
           ) : todo.length === 0 ? (
             <Empty>
-              Gerade gibt es keine neuen Abstimmungen. Unter <Link to="/sammlungen">Alle Sammlungen</Link> kannst du
-              deine gespeicherten Stimmen ändern.
+              Gerade gibt es keine neuen Aufgaben. Unter <Link to="/sammlungen">Alle Sammlungen</Link> kannst du deine
+              gespeicherten Stimmen ändern.
             </Empty>
           ) : (
             <PollStack items={todo} />
@@ -793,14 +806,14 @@ function StudentHome() {
                 submissions.refetch();
               }}
             />
-          ) : firstContributions.length === 0 ? (
+          ) : ongoingContributions.length === 0 ? (
             <Empty>Gerade wartet keine fortlaufende Sammlung auf deinen ersten Beitrag.</Empty>
           ) : (
             <ul className="grid gap-4 sm:grid-cols-2">
-              {firstContributions.map((collection) => (
+              {ongoingContributions.map((collection) => (
                 <li key={collection.id} className="min-w-0">
                   <Link
-                    to={`/sammlungen/${collection.id}`}
+                    to={`/beitraege/neu?kategorie=${collection.id}`}
                     className="flex h-full flex-col gap-3 rounded-ui bg-white p-5 transition-colors hover:bg-soft"
                   >
                     <span className="flex items-center gap-2 text-sm text-muted">
@@ -886,7 +899,7 @@ function EditorialHome() {
   const latest = isAdmin
     ? [...(categories.data ?? [])].sort(newestOpened).slice(0, 4)
     : (categories.data ?? [])
-        .filter((c) => !c.repeatable && canEdit(user, c.id))
+        .filter((c) => isBallot(c.kind) && canEdit(user, c.id))
         .sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || newestOpened(a, b));
   const writableCategoryIds = new Set((categories.data ?? []).filter((c) => canEdit(user, c.id)).map((c) => c.id));
   const writableSubmissions = (submissions.data ?? []).filter((s) => writableCategoryIds.has(s.category_id));
@@ -949,7 +962,7 @@ function EditorialHome() {
               const mine = (categories.data ?? []).filter((c) => c.kind === kind && canEdit(user, c.id));
               const ids = new Set(mine.map((c) => c.id));
               const n = writableSubmissions.filter((s) => ids.has(s.category_id)).length;
-              const repeatable = repeatableKinds.includes(kind);
+              const submissionsKind = isSubmissionCollection(kind);
               return (
                 <li key={kind} className="min-w-0">
                   <Link
@@ -964,7 +977,7 @@ function EditorialHome() {
                       <strong className={figure}>{categories.isPending ? '–' : mine.length}</strong>{' '}
                       <span className="text-[13px] text-muted">{mine.length === 1 ? 'Sammlung' : 'Sammlungen'}</span>
                     </span>
-                    {repeatable ? (
+                    {submissionsKind ? (
                       <span className="mt-4 text-[13px] text-muted">
                         <strong className="text-lg font-extrabold tabular-nums leading-tight text-ink">
                           {submissions.isPending ? '–' : n}
@@ -1140,7 +1153,7 @@ function EditorialHome() {
             ) : (
               <ul className="mt-3 divide-y divide-line">
                 {latest.map((c) => {
-                  const participation = c.repeatable ? null : c.participation;
+                  const participation = isBallot(c.kind) ? c.participation : null;
                   const showParticipation = Boolean(participation);
                   const voted = participation?.voted ?? 0;
                   const eligible = participation?.eligible ?? 0;
@@ -1160,10 +1173,10 @@ function EditorialHome() {
                             <strong className="block min-w-0 flex-1 break-words text-[15px] font-semibold leading-snug">
                               {c.name}
                             </strong>
-                            {!c.repeatable && <Badge status={c.status} />}
+                            {isBallot(c.kind) && <Badge status={c.status} />}
                           </span>
                           <span className="block text-[13px] text-muted">
-                            {[kindLabel[c.kind], c.status === 'open' && !c.repeatable ? since(c.opened_at) : '']
+                            {[kindLabel[c.kind], c.status === 'open' && isBallot(c.kind) ? since(c.opened_at) : '']
                               .filter(Boolean)
                               .join(', ')}
                           </span>

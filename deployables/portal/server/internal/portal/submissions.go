@@ -3,9 +3,11 @@ package portal
 import (
 	"context"
 	"encoding/json"
-	"github.com/jackc/pgx/v5"
+	"errors"
 	"net/http"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
 )
 
 const submissionCols = "s.id::text,s.category_id::text,s.author_id::text,u.name,s.title,s.body,s.context,s.status,s.version,s.created_at,s.updated_at"
@@ -122,6 +124,13 @@ func validateSubmission(in submissionInput) error {
 	}
 	return nil
 }
+
+// Serialize one author's creates and category changes before taking row locks.
+func lockSubmissionAuthor(ctx context.Context, tx pgx.Tx, authorID string) error {
+	_, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", authorID)
+	return err
+}
+
 func (a *App) createSubmission(w http.ResponseWriter, r *http.Request) error {
 	var in submissionInput
 	if e := decode(w, r, &in); e != nil {
@@ -134,9 +143,6 @@ func (a *App) createSubmission(w http.ResponseWriter, r *http.Request) error {
 		return bad("Idempotenzschlüssel erforderlich (8–200 Zeichen).")
 	}
 	u := current(r)
-	if e := requireRepeatable(r.Context(), a.DB, in.CategoryID); e != nil {
-		return e
-	}
 	payload, _ := json.Marshal(in)
 	hash := digest(string(payload))
 	tx, e := a.DB.Begin(r.Context())
@@ -144,6 +150,31 @@ func (a *App) createSubmission(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	defer tx.Rollback(r.Context())
+	if e = lockSubmissionAuthor(r.Context(), tx, u.ID); e != nil {
+		return e
+	}
+	var existingID, originalHash string
+	e = tx.QueryRow(r.Context(), "SELECT id::text,request_hash FROM submissions WHERE author_id=$1 AND idempotency_key=$2", u.ID, in.IdempotencyKey).Scan(&existingID, &originalHash)
+	if e == nil {
+		if hash != originalHash {
+			return conflict()
+		}
+		s, e := loadSubmission(r.Context(), tx, existingID, false)
+		if e != nil {
+			return e
+		}
+		if e = tx.Commit(r.Context()); e != nil {
+			return e
+		}
+		jsonOut(w, http.StatusOK, s)
+		return nil
+	}
+	if !errors.Is(e, pgx.ErrNoRows) {
+		return e
+	}
+	if e = checkContributionCategory(r.Context(), tx, in.CategoryID, u.ID, "", true); e != nil {
+		return e
+	}
 	id := ID()
 	tag, e := tx.Exec(r.Context(), "INSERT INTO submissions(id,category_id,author_id,title,body,context,idempotency_key,request_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(author_id,idempotency_key) DO NOTHING", id, in.CategoryID, u.ID, strings.TrimSpace(in.Title), in.Body, in.Context, in.IdempotencyKey, hash)
 	if e != nil {
@@ -194,6 +225,9 @@ func (a *App) editSubmission(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	defer tx.Rollback(r.Context())
+	if e = lockSubmissionAuthor(r.Context(), tx, u.ID); e != nil {
+		return e
+	}
 	s, e := loadSubmission(r.Context(), tx, r.PathValue("id"), true)
 	if e != nil {
 		return e
@@ -207,10 +241,8 @@ func (a *App) editSubmission(w http.ResponseWriter, r *http.Request) error {
 	if s.Version != in.Version {
 		return conflict()
 	}
-	if in.CategoryID != s.CategoryID {
-		if e = requireRepeatable(r.Context(), tx, in.CategoryID); e != nil {
-			return e
-		}
+	if e = checkContributionCategory(r.Context(), tx, in.CategoryID, s.AuthorID, s.ID, in.CategoryID != s.CategoryID); e != nil {
+		return e
 	}
 	if in.CategoryID != s.CategoryID && !(u.ID == s.AuthorID && s.Status == "pending") && !canEdit(u, in.CategoryID) {
 		return forbidden()

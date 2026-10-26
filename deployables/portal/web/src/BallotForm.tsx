@@ -1,14 +1,17 @@
-import type { FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import type { Category } from './api';
 import { api, json } from './api';
 import { PeoplePicker } from './PeoplePicker';
 import { Arrow, btn, notice, useAction, useSession } from './ui';
 
-export function BallotPrivacyNotice() {
+const pendingBallots = new Map<string, { id: string; choicesKey: string }>();
+
+export function BallotPrivacyNotice({ repeatable = false }: { repeatable?: boolean }) {
   return (
     <p className="text-sm text-muted">
-      Namentliche Abstimmung: Die Administration kann deine Stimme und Änderungen zuordnen. Während der Öffnung kannst
-      du deine Auswahl ändern. Ergebnisse sind für Schüler:innen nicht sichtbar.
+      {repeatable
+        ? 'Namentliche Abstimmung: Die Administration kann jede Abgabe zuordnen. Jede erneute Abgabe wird als eigene Stimme geführt. Ergebnisse sind für Schüler:innen nicht sichtbar.'
+        : 'Namentliche Abstimmung: Die Administration kann deine Stimme und Änderungen zuordnen. Während der Öffnung kannst du deine Auswahl ändern. Ergebnisse sind für Schüler:innen nicht sichtbar.'}
     </p>
   );
 }
@@ -30,6 +33,7 @@ export function BallotForm({
 }) {
   const { user } = useSession();
   const action = useAction();
+  const [submitted, setSubmitted] = useState(false);
   const savedChoices = poll.my_option_ids?.length ? poll.my_option_ids : poll.my_option_id ? [poll.my_option_id] : [];
   const eligible = user.admitted && user.cohort_member;
   const hasSelfVote =
@@ -49,12 +53,28 @@ export function BallotForm({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit) return;
+    const choicesKey = JSON.stringify([...choices].sort());
+    const key = JSON.stringify([user.id, poll.id]);
+    const pendingBallot = pendingBallots.get(key);
+    const ballotId = poll.repeatable
+      ? pendingBallot?.choicesKey === choicesKey
+        ? pendingBallot.id
+        : crypto.randomUUID()
+      : undefined;
+    if (ballotId) pendingBallots.set(key, { id: ballotId, choicesKey });
     onBusyChange?.(true);
     let saved = false;
     void action
       .run(async () => {
-        await api(`/categories/${poll.id}/ballot`, json('PUT', { option_ids: choices }));
+        await api(
+          `/categories/${poll.id}/ballot`,
+          json('PUT', { option_ids: choices, ...(ballotId ? { ballot_id: ballotId } : {}) }),
+        );
         saved = true;
+        if (ballotId) {
+          if (pendingBallots.get(key)?.id === ballotId) pendingBallots.delete(key);
+          setSubmitted(true);
+        }
       }, 'Deine Stimme wurde gespeichert.')
       .finally(() => {
         onBusyChange?.(false);
@@ -85,7 +105,14 @@ export function BallotForm({
         )}
         {poll.status === 'open' && (
           <button className={btn.primary} disabled={!canSubmit}>
-            {savedChoices.length ? 'Stimme ändern' : 'Stimme speichern'} <Arrow />
+            {poll.repeatable
+              ? savedChoices.length || submitted
+                ? 'Erneut abstimmen'
+                : 'Stimme speichern'
+              : savedChoices.length
+                ? 'Stimme ändern'
+                : 'Stimme speichern'}{' '}
+            <Arrow />
           </button>
         )}
         {!eligible && <p className={notice}>Nur freigegebene Mitglieder des Jahrgangs dürfen abstimmen.</p>}
@@ -99,7 +126,7 @@ export function BallotForm({
           </p>
         )}
       </form>
-      <BallotPrivacyNotice />
+      <BallotPrivacyNotice repeatable={poll.repeatable} />
     </>
   );
 }

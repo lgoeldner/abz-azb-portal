@@ -277,12 +277,23 @@ test('login error state stays readable on a narrow screen', async ({ page }) => 
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
-test('poll count stepper supports direct input with field styling only while focused', async ({ page }) => {
+test('poll chips, switches and count controls fit narrow and wide screens', async ({ page }) => {
   await useFixtures(page, 'admin');
   for (const width of [320, 390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/sammlungen?neu');
     await page.getByRole('combobox', { name: 'Klasse', exact: true }).selectOption('proposal');
+    const optionInput = page.getByRole('textbox', { name: 'Antwortoption hinzufügen' });
+    const longOption = 'Abimotto ' + 'X'.repeat(180);
+    await optionInput.fill(longOption);
+    await optionInput.press('Enter');
+    await expect(page.getByRole('button', { name: longOption + ' entfernen', exact: true })).toBeVisible();
+    await optionInput.fill('Gemeinsam zum Abi');
+    await page.getByRole('button', { name: 'Hinzufügen', exact: true }).click();
+    await expect(optionInput).toHaveValue('');
+    const selfVote = page.getByRole('switch', { name: 'Stimme für die eigene Person erlauben' });
+    await selfVote.locator('..').click();
+    await expect(selfVote).toBeChecked();
     const count = page.getByRole('spinbutton', { name: 'Maximale Zahl der Stimmen pro Person' });
     const more = page.getByRole('button', { name: 'Mehr Optionen' });
     const less = page.getByRole('button', { name: 'Weniger Optionen' });

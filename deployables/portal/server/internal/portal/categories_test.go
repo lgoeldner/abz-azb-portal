@@ -67,19 +67,21 @@ func TestSubmissionsRequireRepeatableCategoryAndBallotsRequireSingleAnswer(t *te
 	if res := authenticatedRequest(t, app, pool, MiaID, http.MethodPost, "/api/v1/submissions", submissionBody("99999999-0000-4000-8000-000000000009")); res.Code != http.StatusBadRequest {
 		t.Fatalf("create in unknown category: %d", res.Code)
 	}
-	// Ballot-side routes reject repeatable categories for everyone allowed to call them.
+	// Ballot-side routes reject contribution categories independently of their repeatability.
 	rep := categoryID(1)
 	opt := "40000000-0000-4000-8000-000000000101"
 	for _, tc := range []struct{ actor, method, path, body string }{
 		{MiaID, http.MethodPut, "/ballot", fmt.Sprintf(`{"option_id":%q}`, opt)},
-		{AdminID, http.MethodPost, "/status", `{"version":1,"status":"closed"}`},
-		{ManagerID, http.MethodPost, "/status", `{"version":1,"status":"closed"}`},
 		{AdminID, http.MethodGet, "/results", ""},
 		{AdminID, http.MethodGet, "/audit", ""},
 	} {
 		if res := authenticatedRequest(t, app, pool, tc.actor, tc.method, "/api/v1/categories/"+rep+tc.path, tc.body); res.Code != http.StatusBadRequest {
-			t.Errorf("%s %s as %s on repeatable category: %d %s", tc.method, tc.path, tc.actor, res.Code, res.Body)
+			t.Errorf("%s %s as %s on contribution category: %d %s", tc.method, tc.path, tc.actor, res.Code, res.Body)
 		}
+	}
+	closed := authenticatedRequest(t, app, pool, AdminID, http.MethodPost, "/api/v1/categories/"+rep+"/status", `{"version":1,"status":"closed"}`)
+	if closed.Code != http.StatusOK {
+		t.Fatalf("close a contribution category: %d %s", closed.Code, closed.Body)
 	}
 	// Exports cover repeatable categories only.
 	if res := authenticatedRequest(t, app, pool, AdminID, http.MethodGet, "/api/v1/categories/"+pollOpen+"/export", ""); res.Code != http.StatusBadRequest {

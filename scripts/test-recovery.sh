@@ -81,6 +81,11 @@ dc run --rm -i -v "$uploads_volume:/uploads" alpine:3.22 sh -c \
 dc exec -i "$pg" psql -X -v ON_ERROR_STOP=1 -U portal -d portal \
   -v attachment_id="$attachment_id" -v original_hash="$original_hash" \
   -v original_key="$original_key" -v preview_key="$preview_key" <<'SQL'
+-- Independent repeatability and a filled one-off photo slot must survive recovery.
+INSERT INTO categories(id,name,description,kind,repeatable,ongoing,closes_at)
+VALUES ('60000000-0000-4000-8000-000000000001','Ein Foto pro Person','Recovery fixture','photo',false,false,now()+interval '30 days');
+INSERT INTO submissions(id,category_id,author_id,title,body,context,idempotency_key,request_hash)
+VALUES ('60000000-0000-4000-8000-000000000002','60000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003','Ein Foto','','','recovery-one-off','recovery');
 INSERT INTO attachments(id,submission_id,filename,mime_type,size_bytes,sha256,storage_key,preview_key)
 VALUES (:'attachment_id','20000000-0000-4000-8000-000000000004','drill.png','image/png',29,:'original_hash',:'original_key',:'preview_key');
 UPDATE categories SET max_choices=2 WHERE id='30000000-0000-4000-8000-000000000002';

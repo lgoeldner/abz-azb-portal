@@ -108,7 +108,7 @@ route GET /auth/login, GET /auth/callback, POST /auth/logout :: outside /api/v1 
 file `deployables/portal/web/vite.config.ts` :: Vite dev server allows OrbStack proxy host; localhost at 5173 with free-port fallback [frontend, dev, port]
 
 file `deployables/portal/web/src/App.tsx` :: router, Layout, nav (StudentNav, EditorNav, AdminNav), StudentHome unanswered voting stack and separate repeatable card section (only before any own submission), shared EditorialHome dashboard with class widgets, admin admissions, manager writable polls and recent assigned contributions, voting participation bars [routes, nav, dashboard, home, participation, grants]
-file `deployables/portal/web/src/sammlungen.tsx` :: Shared Sammlungen workspace (Fortlaufend section, status groups, ?klasse filter), all-kind editor creation, grant-controlled definition edits and poll hiding, admin-confirmed poll deletion, admin manager assignments in SammlungForm, SammlungDetail, all-submission editorial collection reader, read-only ballot options/results and an inline student voting stack [sammlung, poll, vote, form]
+file `deployables/portal/web/src/sammlungen.tsx` :: Shared Sammlungen workspace (Fortlaufend section, status groups, ?klasse filter), editor creation with independent Wiederholbar/Fortlaufend switches and required bounded end date, proposal option chips and self-vote switch, grant-controlled definition edits and poll hiding, admin-confirmed poll deletion, admin manager assignments in SammlungForm, SammlungDetail, all-submission editorial collection reader, read-only ballot options/results and an inline student voting stack [sammlung, poll, vote, form]
 file `deployables/portal/web/src/PeoplePicker.tsx` :: shared candidate/choice voting with removable chips, selection limits, and search only for 10+ options [person, picker, chips]
 file `deployables/portal/web/src/pages.tsx` :: Contributions, NewContribution, author detail and read-only editorial reader with annotations, all-submissions list, NotFound [beitrag, redaktion, export]
 file `deployables/portal/web/src/admin.tsx` :: Verwaltung: People, ActivityLog, audit action labels [verwaltung, admin, personen, protokoll]
@@ -118,8 +118,8 @@ file `deployables/portal/web/public/favicon.svg` :: tab icon, the sidebar Mark w
 file `deployables/portal/web/src/api.ts` :: fetch wrapper, CSRF header, shared user PATCH payload [api, fetch, grants]
 file `deployables/portal/web/src/api-types.ts` :: aliases over generated types [types]
 file `deployables/portal/web/src/generated/api.d.ts` :: generated from openapi.json, never edit by hand [codegen]
-file `deployables/portal/web/src/BallotForm.tsx` :: shared voting form and named-vote notice; bounded valid choices, eligibility/self-vote guards, save errors and cache refresh [poll, vote, privacy]
-test `deployables/portal/web/src/BallotForm.test.tsx` :: successful PUT/refresh, failed-save choices and submit-time eligibility/selection/pending guards [poll, vote, invariants]
+file `deployables/portal/web/src/BallotForm.tsx` :: shared voting form and named-vote notice; repeatable ballot keys survive failed-save card navigation; bounded valid choices, eligibility/self-vote guards, save errors and cache refresh [poll, vote, privacy]
+test `deployables/portal/web/src/BallotForm.test.tsx` :: successful PUT/refresh, repeatable ballot idempotency, failed-save choices and submit-time eligibility/selection/pending guards [poll, vote, invariants]
 file `deployables/portal/web/src/PollStack.tsx` :: inline student voting queue: top arrow controls, choices and submit on each card, drafts retained across arrows, save-then-advance, guarded navigation while saving and live position [poll, stack, navigation, accessibility]
 file `deployables/portal/web/src/PollStack.css` :: responsive layered cards, directional animations and reduced-motion fallback [poll, stack, animation]
 test `deployables/portal/web/src/PollStack.test.tsx` :: inline save/advance, failed-save preservation, draft retention, bounded navigation and active-card removal/reorder [poll, stack, ui]
@@ -127,7 +127,7 @@ file `deployables/portal/web/src/DevDebug.tsx` :: dev-only debug overlay [debug]
 test `deployables/portal/web/src/editorial.test.tsx` :: editorial readers, annotation grants, mode changes and collection defaults [test, redaktion, permissions]
 test `deployables/portal/web/src/App.test.tsx` :: component tests (vitest), unanswered poll and first-contribution queues, dashboard voting participation against admitted cohort members, manager assignment scoping and loading/error states [test, ui, dashboard, participation, grants]
 test `deployables/portal/web/src/PeoplePicker.test.tsx` :: search, chip placement/removal, limits and disabled candidates [person, picker]
-test `deployables/portal/web/src/sammlungen.test.tsx` :: poll defaults, candidate mode, count stepper, person/proposal multi-vote behavior, hide/delete permissions, saved-choice revisits and editorial isolation from the student stack [poll, ui]
+test `deployables/portal/web/src/sammlungen.test.tsx` :: poll defaults, independent repeatability switches, proposal option authoring chips, candidate mode, count stepper, person/proposal multi-vote behavior, hide/delete permissions, saved-choice revisits and editorial isolation from the student stack [poll, ui]
 test `deployables/portal/web/e2e/portal.spec.ts` :: Playwright journeys against a running seeded app [e2e]
 test `deployables/portal/web/e2e/verwaltung.spec.ts` :: Verwaltung e2e [e2e, admin]
 test `deployables/portal/web/e2e/responsive.spec.ts` :: phone-width layout checks [e2e, responsive]
@@ -143,7 +143,7 @@ page /abstimmungen[/:id], /verwaltung/sammlungen, /verwaltung/rubriken, /admin :
 
 ## Domain rules
 
-rule Sammlung = categories row; kind is its class: repeatable idea/quote/memory/photo (submissions), person/proposal ballots (both bounded multi-selection; person: all or selected candidates; draft->open->closed; open/closed->draft hides, preserves votes and locks previously opened definitions; delete admin only) [sammlung, class, kind, rubrik, poll]
+rule Sammlung = categories row; kind selects contribution or ballot content; independent repeatable permits one or many contributions/ballot entries per person; ongoing means manual close, otherwise required closes_at automatically closes; all kinds support draft/open/closed and hiding preserves data [sammlung, kind, repeatable, ongoing, deadline, lifecycle]
 rule Managers create all six kinds with atomic creator grants, read all submissions and manage/annotate assigned categories; admins manage all categories and assign grants; only authors mutate pending originals and only admins see named ballots [permissions]
 rule Dev identities: subject = UUIDv5(display_slug); seeded fixtures map via fixtureSlugs in seed.go [login, fixtures]
 rule Integration tests: TEST_DATABASE_URL to a disposable DB only; never the dev `portal` DB [test, database]
@@ -151,3 +151,6 @@ rule Integration tests: TEST_DATABASE_URL to a disposable DB only; never the dev
 rule Redaktion is a read-only collection desk: originals and photos are author-owned, annotations require category grants, all statuses listed/exported by default, moderation after collection [redaktion, permissions, workflow]
 
 rule People polls: new definitions default all_people; roster refreshed on first opening then fixed, including hiding/reopening. max_choices 1–500; votes atomically replace full selection. Existing polls retain explicit candidate sets [poll, candidates, invariant]
+
+file `deployables/portal/server/migrations/007_collection_repeatability.sql` :: independent repeatability/scheduling and ballot entry keys, legacy data preserved [migration, one-off, photo]
+test `deployables/portal/server/internal/portal/collection_repeatability_test.go` :: one-off cardinality, repeated ballots, bounded lifecycle, concurrency, idempotency and migration preservation [invariant, photo, repeatable]

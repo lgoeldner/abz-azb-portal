@@ -14,6 +14,8 @@ function category(overrides: Partial<Category> = {}): Category {
     description: 'Stimme für deinen Favoriten ab.',
     kind: 'proposal',
     repeatable: false,
+    ongoing: true,
+    closes_at: null,
     status: 'open',
     allow_self_vote: false,
     options: [{ id: 'option-1', label: 'Zusammen' }],
@@ -68,7 +70,7 @@ describe('PollStack', () => {
         options: [],
         opened_at: null,
       }),
-      category({ id: 'photo', name: 'Fotowünsche', kind: 'photo', repeatable: true, options: [] }),
+      category({ id: 'photo', name: 'Fotowünsche', kind: 'photo', repeatable: false, options: [] }),
     ];
     renderStack(items);
 
@@ -77,11 +79,12 @@ describe('PollStack', () => {
     expect(screen.getByRole('button', { name: /Stimme speichern/ })).toBeEnabled();
     expect(screen.getByText('Sammlung 1 von 3: Abimotto-Abstimmung')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Nächste Sammlung' }));
-    expect(screen.getByRole('link', { name: /Beitragen/ })).toHaveAttribute('href', '/sammlungen/ideen');
+    expect(screen.getByRole('link', { name: /Beitragen/ })).toHaveAttribute('href', '/beitraege/neu?kategorie=ideen');
     expect(screen.getByText('Sammlung 2 von 3: Ideensammlung')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Nächste Sammlung' }));
     expect(screen.getByRole('heading', { name: 'Fotowünsche' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Beitragen/ })).toHaveAttribute('href', '/sammlungen/photo');
+    expect(screen.getByRole('link', { name: /Beitragen/ })).toHaveAttribute('href', '/beitraege/neu?kategorie=photo');
+    expect(screen.queryByRole('button', { name: /Stimme speichern/ })).toBeNull();
     expect(screen.getByRole('button', { name: 'Nächste Sammlung' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Vorherige Sammlung' }));
     expect(screen.getByRole('heading', { name: 'Ideensammlung' })).toBeInTheDocument();
@@ -171,5 +174,32 @@ describe('PollStack', () => {
     await screen.findByRole('alert');
     expect(screen.getByRole('heading', { name: 'Nächste Frage' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Zusammen' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('reuses a failed repeatable ballot id after navigating away and back', async () => {
+    const requests: Record<string, unknown>[] = [];
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return requests.length === 1
+        ? Response.json({ error: { message: 'Bitte erneut versuchen.' } }, { status: 500 })
+        : Response.json({ option_ids: ['option-1'] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const first = category({ id: 'retry-after-navigation', repeatable: true });
+    const second = category({ id: 'other-poll', name: 'Andere Abstimmung' });
+    renderStack([first, second]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zusammen' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stimme speichern' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Bitte erneut versuchen.');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nächste Sammlung' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Vorherige Sammlung' }));
+    expect(screen.getByRole('button', { name: 'Zusammen' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Stimme speichern' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    expect(requests[0].ballot_id).toEqual(expect.any(String));
+    expect(requests[1].ballot_id).toBe(requests[0].ballot_id);
   });
 });
