@@ -1,9 +1,13 @@
 # syntax=docker/dockerfile:1.7
-FROM node:24-alpine AS web-build
+FROM node:24-alpine AS web-dev
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
+
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
+
+FROM web-dev AS web-build
 RUN npm run build
 
 FROM golang:1.27.3-alpine AS go-build

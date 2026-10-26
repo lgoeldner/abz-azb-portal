@@ -10,7 +10,7 @@ Line format: `<kind> <path or name> :: <what it is> [keywords]`. Kinds: `dir`, `
 ## Layout
 
 dir `deployables/` :: one folder per Docker image, each folder is the complete build context [docker, compose, build]
-dir `deployables/portal/` :: portal image: Go API + built frontend [Dockerfile, .dockerignore]
+dir `deployables/portal/` :: portal image: Go API + built frontend; web-dev image target for container hot reload [Dockerfile, .dockerignore]
 dir `deployables/portal/server/` :: Go module abizeitbetrug/server [backend, api, go]
 dir `deployables/portal/web/` :: React + TypeScript + Vite + Tailwind frontend [ui, frontend]
 dir `deployables/auth-mock/` :: dev-only OIDC provider, own Go module abizeitbetrug/auth-mock [login, mock, oidc, identities]
@@ -18,7 +18,8 @@ dir `deployables/backup/` :: restic backup image, backup.sh/restore.sh plus thei
 dir `deployables/caddy/` :: Caddyfile, mounted into the stock caddy image [tls, https, proxy]
 file `go.work` :: joins portal and auth-mock modules for dev/tests only; Docker builds use GOWORK=off [workspace]
 file `compose.yaml` :: production stack: db, portal, caddy, backup [deploy, production]
-file `compose.dev.yaml` :: dev overrides: auth-mock, local ports, dev bind mounts; runtime services recover with unless-stopped [dev, docker, restart]
+file `deployables/caddy/Caddyfile.dev` :: development proxy: pages/HMR to Vite, API/auth/health to Go [dev, caddy, proxy, hot reload]
+file `compose.dev.yaml` :: dev overrides: auth-mock, detached Vite hot reload, local ports, dev bind mounts; runtime services recover with unless-stopped [dev, docker, restart]
 file `Makefile` :: dev, check, lint, audit, backup, restore, migrate targets [make, ci]
 file `.github/workflows/ci.yaml` :: CI: lint, audit, Go/web tests, e2e [ci, github]
 file `.githooks/pre-commit` :: prettier and gofmt on staged files [hook, format]
@@ -28,13 +29,13 @@ file `docs/openapi.json` :: OpenAPI spec; source of generated TS types [openapi,
 file `docs/verification.md` :: how the system was verified [verification]
 file `docs/school-login.md` :: school OIDC integration notes [login, oidc, production]
 file `docs/dev-debug.md` :: DevDebug overlay and its browser checks [debug]
-file `docs/dev-build.md` :: incremental make dev builds, Go caches, container reuse and host reload behavior [dev, docker, cache]
+file `docs/dev-build.md` :: detached make dev builds, Go caches, container reuse and optional host development [dev, docker, cache]
 file `ops/README.md` :: operations, backup, restore, tidy caveat [ops, restore, production]
 
 ## Scripts
 
-cmd `scripts/dev.sh` :: `make dev`: containers + host Go API :8080 + Vite starting at :5173 with free-port fallback [dev, start]
-cmd `scripts/dev-common.sh` :: dev env vars (DATABASE_URL, UPLOAD_DIR), start_dev_services, prepare_dev_database (migrate+seed) [env, dev]
+cmd `scripts/dev.sh` :: `make dev`: build/start containers, wait for readiness, print OrbStack URL and exit [dev, start]
+cmd `scripts/dev-common.sh` :: dev env vars (DATABASE_URL, UPLOAD_DIR), start_dev_services (detached Vite, fresh dependency volumes), prepare_dev_database (migrate+seed) [env, dev]
 cmd `scripts/dev-backend.sh` :: builds and runs the host Go API; SKIP_DEV_DB_SETUP=1 skips containers/migrate/seed [backend, dev]
 cmd `scripts/dev-frontend.sh` :: Vite dev server starts at 5173 and uses the next free port if occupied [frontend, dev, port]
 cmd `scripts/doctor.sh` :: checks local prerequisites [setup]
@@ -42,7 +43,7 @@ cmd `scripts/env.sh` :: creates .env.dev [env]
 cmd `scripts/check-contract.mjs` :: routes in http.go vs openapi.json; `--write` regenerates `deployables/portal/web/src/generated/api.d.ts` [contract, codegen]
 cmd `scripts/check-repo-map.sh` :: fails if a path in this map no longer exists [map, stale]
 cmd `scripts/test-recovery.sh` :: backup/restore against throwaway containers [recovery, backup]
-cmd `scripts/test-compose-startup.sh` :: disposable cold/existing runtime starts before PostgreSQL, then Compose restart and readiness checks [docker, startup, restart, regression]
+cmd `scripts/test-compose-startup.sh` :: disposable cold/existing runtime starts before PostgreSQL, then Compose restart and API/Vite readiness checks [docker, startup, restart, regression]
 
 ## Backend (deployables/portal/server)
 
@@ -104,7 +105,7 @@ route GET /admin/users, PATCH|DELETE /admin/users/{id}, GET /admin/audit, GET /a
 route GET /auth/login, GET /auth/callback, POST /auth/logout :: outside /api/v1 (auth.go) [auth]
 
 ## Frontend (deployables/portal/web)
-file `deployables/portal/web/vite.config.ts` :: Vite dev server binds localhost at 5173 and falls back to the next free port [frontend, dev, port]
+file `deployables/portal/web/vite.config.ts` :: Vite dev server allows OrbStack proxy host; localhost at 5173 with free-port fallback [frontend, dev, port]
 
 file `deployables/portal/web/src/App.tsx` :: router, Layout, nav (StudentNav, EditorNav, AdminNav), StudentHome unanswered card queue (repeatable collections only before any own submission), shared EditorialHome dashboard with class widgets, admin admissions, manager writable polls and recent assigned contributions, voting participation bars [routes, nav, dashboard, home, participation, grants]
 file `deployables/portal/web/src/sammlungen.tsx` :: Shared Sammlungen workspace (Fortlaufend section, status groups, ?klasse filter), all-kind editor creation, grant-controlled definition edits and poll hiding, admin-confirmed poll deletion, admin manager assignments in SammlungForm, SammlungDetail, all-submission editorial collection reader, read-only ballot options/results and an inline student voting stack [sammlung, poll, vote, form]

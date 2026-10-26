@@ -47,18 +47,38 @@ services:
       UPLOAD_DIR: /var/lib/portal/uploads
       STATIC_DIR: /app/static
       BACKUP_STATUS_FILE: /var/lib/portal/status/status.json
-    # No host port: the host Go API owns 8080; this container is reached through caddy.
+    # Reached through caddy; leaves 8080 free for optional host Go development.
     volumes:
       - ./deployables/portal/server/data/uploads:/var/lib/portal/uploads
       - backup_status:/var/lib/portal/status:ro
     depends_on:
       auth-mock: { condition: service_healthy }
 
+  frontend:
+    restart: unless-stopped
+    build:
+      context: ./deployables/portal
+      target: web-dev
+    volumes:
+      - ./deployables/portal/web:/src/web
+      - /src/web/node_modules
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5173/"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    networks: [internal]
+
   caddy:
     ports: !override
       - "127.0.0.1:80:80"
       - "127.0.0.1:443:443"
       - "127.0.0.1:443:443/udp"
+    volumes:
+      - ./deployables/caddy/Caddyfile.dev:/etc/caddy/Caddyfile:ro
+    depends_on:
+      portal: { condition: service_started }
+      frontend: { condition: service_healthy }
 
   backup:
     entrypoint: ["/bin/sh", "-c", "restic cat config >/dev/null 2>&1 || restic init; exec /usr/local/bin/backup.sh"]
