@@ -13,6 +13,51 @@ const people: PeoplePickerOption[] = [
 ];
 
 describe('PeoplePicker', () => {
+  it('uses toggle chips with selection limits and single-choice replacement', () => {
+    const onChange = vi.fn();
+    const options = people.slice(0, 3);
+    const { rerender } = render(
+      <PeoplePicker
+        legend="Optionen"
+        options={options}
+        selectedIds={['alice']}
+        onChange={onChange}
+        maxSelected={2}
+        chips
+      />,
+    );
+    expect(screen.queryByRole('list', { name: 'Ausgewählt' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Alice Beispiel' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Alice Beispiel' }));
+    expect(onChange).toHaveBeenLastCalledWith([]);
+    fireEvent.click(screen.getByRole('button', { name: 'Bob Beispiel' }));
+    expect(onChange).toHaveBeenLastCalledWith(['alice', 'bob']);
+    rerender(
+      <PeoplePicker
+        legend="Optionen"
+        options={options}
+        selectedIds={['alice', 'bob']}
+        onChange={onChange}
+        maxSelected={2}
+        chips
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Mia Beispiel' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Alice Beispiel' })).toBeEnabled();
+    rerender(
+      <PeoplePicker
+        legend="Optionen"
+        options={options}
+        selectedIds={['alice']}
+        onChange={onChange}
+        maxSelected={1}
+        chips
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Bob Beispiel' }));
+    expect(onChange).toHaveBeenLastCalledWith(['bob']);
+  });
+
   it('only shows search for at least ten choices and clears its filtering when the list shrinks', () => {
     const onChange = vi.fn();
     const { rerender } = render(

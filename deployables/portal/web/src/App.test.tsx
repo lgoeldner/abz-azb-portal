@@ -162,7 +162,7 @@ describe('contribution submission', () => {
       updated_at: '2026-10-23T12:00:00Z',
       attachments: [],
     };
-    const photoCategory = sammlung('photo', 'Fotos', 'photo', {
+    const photoCategory = sammlung('photo', 'Fotos', 'memory', {
       repeatable: false,
       ongoing: false,
       closes_at: '2027-01-01T00:00:00Z',
@@ -213,6 +213,7 @@ describe('contribution submission', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Das Foto ist ungültig.'));
     expect(screen.getByRole('button', { name: 'Ohne weitere Fotos fortfahren' })).toBeInTheDocument();
     expect(photoPicker).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Entfernen' }));
     fireEvent.change(photoPicker, {
       target: { files: [new File(['replacement'], 'replacement.jpg', { type: 'image/jpeg' })] },
     });

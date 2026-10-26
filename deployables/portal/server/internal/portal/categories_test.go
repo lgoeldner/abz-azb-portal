@@ -337,8 +337,13 @@ func TestCategoryKindChangesStayWithinTheirGroup(t *testing.T) {
 	if res := authenticatedRequest(t, app, pool, AdminID, http.MethodPatch, "/api/v1/categories/"+pollDraft, `{"name":"X","description":"","kind":"memory","version":1}`); res.Code != http.StatusBadRequest {
 		t.Fatalf("single-answer to repeatable: %d %s", res.Code, res.Body)
 	}
-	// Within a group it works.
-	if res := authenticatedRequest(t, app, pool, AdminID, http.MethodPatch, "/api/v1/categories/"+categoryID(1), `{"name":"Fotos 2","description":"","kind":"photo","version":1}`); res.Code != http.StatusOK {
+	// Existing prose cannot silently turn into an image-only submission.
+	if res := authenticatedRequest(t, app, pool, AdminID, http.MethodPatch, "/api/v1/categories/"+categoryID(1), `{"name":"Fotos 2","description":"","kind":"photo","version":1}`); res.Code != http.StatusBadRequest {
+		t.Fatalf("text collection converted to photo: %d %s", res.Code, res.Body)
+	}
+	empty := createPhotoCategory(t, app, pool, nil)
+	// Within a group it works when no incompatible originals would be reclassified.
+	if res := authenticatedRequest(t, app, pool, AdminID, http.MethodPatch, "/api/v1/categories/"+empty.ID, `{"name":"Fotos 2","description":"","kind":"memory","version":1}`); res.Code != http.StatusOK {
 		t.Fatalf("idea to photo: %d %s", res.Code, res.Body)
 	}
 	if res := authenticatedRequest(t, app, pool, AdminID, http.MethodPatch, "/api/v1/categories/"+pollDraft, `{"name":"X","description":"","kind":"person","version":1,"options":[{"label":"x","user_id":"`+MiaID+`"},{"label":"y","user_id":"`+LeonID+`"}]}`); res.Code != http.StatusOK {

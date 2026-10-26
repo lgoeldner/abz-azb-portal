@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -7,7 +8,6 @@ import {
   date,
   json,
   statusLabels,
-  type Attachment,
   type Category,
   type Correction,
   type Revision,
@@ -34,8 +34,12 @@ import {
   useWorkspaceView,
 } from './ui';
 import { DevDebug } from './DevDebug';
-function photoValidationError(files: File[]) {
-  if (files.length > 10) return 'Bitte wähle höchstens 10 Bilder aus.';
+import { PhotoGallery } from './PhotoGallery';
+
+type SelectedImage = { file: File; caption: string };
+
+function photoValidationError(files: File[], alreadyAttached = 0) {
+  if (files.length + alreadyAttached > 10) return 'Bitte wähle höchstens 10 Bilder aus.';
   if (files.some((file) => file.size > 20 * 1024 * 1024)) return 'Jedes Bild darf höchstens 20 MiB groß sein.';
   const extensions: Record<string, string[]> = {
     'image/jpeg': ['jpg', 'jpeg'],
@@ -117,8 +121,9 @@ export function NewContribution() {
   const action = useAction();
   const key = useRef(crypto.randomUUID());
   const [saved, setSaved] = useState<Submission | null>(null);
-  const [files, setFiles] = useState<File[]>([]);
+  const [images, setImages] = useState<SelectedImage[]>([]);
   const category = categories.data?.find((c) => c.id === params.get('kategorie') && submittable(c));
+  const isPhoto = category?.kind === 'photo';
   const own = submissions.data?.filter((s) => s.author_id === user.id) ?? [];
   const existing =
     !saved && category && !category.repeatable ? own.find((s) => s.category_id === category.id) : undefined;
@@ -130,12 +135,26 @@ export function NewContribution() {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
     await action.run(async () => {
-      const invalidFiles = photoValidationError(files);
+      const files = images.map((image) => image.file);
+      const invalidFiles = photoValidationError(files, saved?.attachments.length ?? 0);
       if (invalidFiles) throw new Error(invalidFiles);
+      if (isPhoto && !saved && !images.length) throw new Error('Bitte wähle mindestens ein Foto aus.');
 
-      let current =
-        saved ??
-        (await api<Submission>(
+      let current = saved;
+      let remaining = [...images];
+      if (!current && isPhoto) {
+        const first = remaining.shift();
+        if (!first) throw new Error('Bitte wähle mindestens ein Foto aus.');
+        const create = new FormData();
+        create.set('category_id', String(data.get('category_id') ?? category!.id));
+        create.set('idempotency_key', key.current);
+        create.set('file', first.file);
+        if (first.caption.trim()) create.set('caption', first.caption);
+        current = await api<Submission>('/submissions', { method: 'POST', body: create });
+        setSaved(current);
+        setImages([...remaining]);
+      } else if (!current) {
+        current = await api<Submission>(
           '/submissions',
           json('POST', {
             idempotency_key: key.current,
@@ -144,19 +163,20 @@ export function NewContribution() {
             body: data.get('body'),
             context: data.get('context'),
           }),
-        ));
-      setSaved(current);
-      let remaining = [...files];
-      for (const file of files) {
+        );
+        setSaved(current);
+      }
+      for (const image of remaining) {
         const upload = new FormData();
-        upload.set('file', file);
+        upload.set('file', image.file);
         upload.set('version', String(current.version));
+        if (image.caption.trim()) upload.set('caption', image.caption);
         current = await api<Submission>(`/submissions/${current.id}/attachments`, { method: 'POST', body: upload });
         setSaved(current);
         remaining = remaining.slice(1);
-        setFiles(remaining);
+        setImages([...remaining]);
       }
-      navigate(`/beitraege/${current.id}`);
+      if (current) navigate(`/beitraege/${current.id}`);
     });
   }
 
@@ -167,8 +187,18 @@ export function NewContribution() {
       <Link className="mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink" to="/beitraege">
         ← Meine Beiträge
       </Link>
-      <PageHead title={category ? `Beitrag für „${category.name}“` : 'Was sollen wir festhalten?'}>
-        Dein Beitrag wird in der Sammlung gespeichert. Die Redaktion sichtet die Sammlung nach dem Sammelzeitraum.
+      <PageHead
+        title={
+          category
+            ? isPhoto
+              ? `Fotos für „${category.name}“`
+              : `Beitrag für „${category.name}“`
+            : 'Was sollen wir festhalten?'
+        }
+      >
+        {isPhoto
+          ? 'Lade mindestens ein Foto hoch. Zu jedem Bild kannst du einen optionalen Bildtext hinzufügen.'
+          : 'Dein Beitrag wird in der Sammlung gespeichert. Die Redaktion sichtet die Sammlung nach dem Sammelzeitraum.'}
       </PageHead>
       {categories.isPending || submissions.isPending ? (
         <Loading />
@@ -202,7 +232,7 @@ export function NewContribution() {
                 value={category.id}
                 disabled={action.busy || !!saved}
                 onChange={(e) => {
-                  setFiles([]);
+                  setImages([]);
                   setParams({ kategorie: e.target.value });
                 }}
               >
@@ -213,42 +243,45 @@ export function NewContribution() {
                 ))}
               </select>
             </label>
-            <fieldset className="min-w-0 space-y-5" disabled={action.busy || !!saved}>
-              <label className={label}>
-                Titel
-                <input
-                  className={field}
-                  name="title"
-                  placeholder="Gib deinem Beitrag einen Namen"
-                  maxLength={200}
-                  required
-                />
-              </label>
-              <label className={label}>
-                Dein Beitrag
-                <textarea
-                  className={field}
-                  name="body"
-                  rows={7}
-                  placeholder="Was soll die Redaktion dazu wissen?"
-                  maxLength={20000}
-                />
-              </label>
-              <label className={label}>
-                Kontext & Hinweise <small className="font-normal text-muted">optional</small>
-                <textarea
-                  className={field}
-                  name="context"
-                  rows={3}
-                  placeholder="Wer, wann, wo? Was soll die Redaktion dazu wissen?"
-                  maxLength={5000}
-                />
-              </label>
-            </fieldset>
+            {!isPhoto && (
+              <fieldset className="min-w-0 space-y-5" disabled={action.busy || !!saved}>
+                <label className={label}>
+                  Titel
+                  <input
+                    className={field}
+                    name="title"
+                    placeholder="Gib deinem Beitrag einen Namen"
+                    maxLength={200}
+                    required
+                  />
+                </label>
+                <label className={label}>
+                  Dein Beitrag
+                  <textarea
+                    className={field}
+                    name="body"
+                    rows={7}
+                    placeholder="Was soll die Redaktion dazu wissen?"
+                    maxLength={20000}
+                  />
+                </label>
+                <label className={label}>
+                  Kontext & Hinweise <small className="font-normal text-muted">optional</small>
+                  <textarea
+                    className={field}
+                    name="context"
+                    rows={3}
+                    placeholder="Wer, wann, wo? Was soll die Redaktion dazu wissen?"
+                    maxLength={5000}
+                  />
+                </label>
+              </fieldset>
+            )}
             <label className={label}>
-              Fotos{' '}
+              {isPhoto ? 'Fotos' : 'Fotos hinzufügen'}{' '}
               <small className="block font-normal text-muted">
-                JPEG, PNG oder WebP, höchstens 10 Bilder, je 20 MiB und höchstens 24 Megapixel.
+                {isPhoto ? 'Mindestens ein Foto. ' : ''}JPEG, PNG oder WebP, höchstens 10 Bilder, je 20 MiB und
+                höchstens 24 Megapixel. Pro Bild passt ein Bildtext.
               </small>
               <input
                 className="mt-2 block w-full text-sm text-muted file:mr-3 file:rounded-ui file:border file:border-line file:bg-white file:px-3 file:py-2 file:text-sm file:font-semibold file:text-ink hover:file:bg-soft"
@@ -256,24 +289,65 @@ export function NewContribution() {
                 multiple
                 accept="image/jpeg,image/png,image/webp"
                 disabled={action.busy}
-                onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+                required={Boolean(isPhoto && !saved && images.length === 0)}
+                onChange={(e) => {
+                  const selected = Array.from(e.target.files ?? []).map((file) => ({ file, caption: '' }));
+                  setImages((current) => [...current, ...selected]);
+                  e.currentTarget.value = '';
+                }}
               />
             </label>
-            {files.length > 0 && (
-              <p className="text-sm text-muted">
-                {files.length} Datei(en) zum Hochladen: {files.map((f) => f.name).join(', ')}
-              </p>
+            {!!images.length && (
+              <ul className="space-y-3" aria-label="Ausgewählte Fotos">
+                {images.map((image, index) => (
+                  <li
+                    key={`${image.file.name}-${image.file.size}-${image.file.lastModified}-${index}`}
+                    className="rounded-ui border border-line bg-white p-3 sm:p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <strong className="min-w-0 break-all text-sm">{image.file.name}</strong>
+                      <button
+                        type="button"
+                        className={btn.text}
+                        disabled={action.busy}
+                        onClick={() => setImages((current) => current.filter((_, i) => i !== index))}
+                      >
+                        Entfernen
+                      </button>
+                    </div>
+                    <label className={`${label} mt-3`}>
+                      Bildtext <small className="font-normal text-muted">optional</small>
+                      <textarea
+                        className={field}
+                        rows={2}
+                        maxLength={2000}
+                        value={image.caption}
+                        disabled={action.busy}
+                        onChange={(e) =>
+                          setImages((current) =>
+                            current.map((candidate, i) =>
+                              i === index ? { ...candidate, caption: e.target.value } : candidate,
+                            ),
+                          )
+                        }
+                      />
+                    </label>
+                  </li>
+                ))}
+              </ul>
             )}
             {saved && (
               <p className={notice}>
-                Der Text ist bereits gespeichert. Noch ausstehende Fotos kannst du erneut hochladen.{' '}
+                {isPhoto
+                  ? 'Das erste Foto ist gespeichert. Noch ausstehende Fotos kannst du erneut hochladen.'
+                  : 'Der Text ist bereits gespeichert. Noch ausstehende Fotos kannst du erneut hochladen.'}{' '}
                 <Link className="font-semibold underline" to={`/beitraege/${saved.id}`}>
                   Zum gespeicherten Beitrag
                 </Link>
               </p>
             )}
             {action.feedback}
-            {saved && action.error && files.length > 0 && (
+            {saved && action.error && images.length > 0 && (
               <button type="button" className={btn.secondary} onClick={() => navigate(`/beitraege/${saved.id}`)}>
                 Ohne weitere Fotos fortfahren
               </button>
@@ -282,8 +356,17 @@ export function NewContribution() {
               <Link to="/beitraege" className={btn.text}>
                 Abbrechen
               </Link>
-              <button className={btn.primary} disabled={action.busy}>
-                {action.busy ? 'Wird gespeichert …' : saved ? 'Fotos erneut hochladen' : 'Beitrag einreichen'} <Arrow />
+              <button className={btn.primary} disabled={action.busy || (isPhoto && !saved && images.length === 0)}>
+                {action.busy
+                  ? 'Wird gespeichert …'
+                  : isPhoto
+                    ? saved
+                      ? 'Weitere Fotos hochladen'
+                      : 'Fotos einreichen'
+                    : saved
+                      ? 'Fotos erneut hochladen'
+                      : 'Beitrag einreichen'}{' '}
+                <Arrow />
               </button>
             </div>
           </form>
@@ -319,6 +402,7 @@ export function ContributionDetail() {
   const submissions = useData<Submission[]>('/submissions', !isRedaktion);
   const revisions = useData<Revision[]>(`/submissions/${id}/revisions`);
   const corrections = useData<Correction[]>(`/submissions/${id}/corrections`);
+  const queryClient = useQueryClient();
   const action = useAction();
   const [editing, setEditing] = useState(false);
   const [baseVersion, setBaseVersion] = useState(0);
@@ -329,6 +413,7 @@ export function ContributionDetail() {
     category_id: '',
   });
   const [file, setFile] = useState<File | null>(null);
+  const [caption, setCaption] = useState('');
   const [correction, setCorrection] = useState('');
   if (item.isPending) return <Loading />;
   if (item.error) return <Failure error={item.error} retry={() => item.refetch()} />;
@@ -345,10 +430,13 @@ export function ContributionDetail() {
       c.id === s.category_id ||
       (c.status === 'open' &&
         submittable(c) &&
+        (c.kind !== 'photo' || (!s.body.trim() && s.attachments.length > 0)) &&
         (own || canEdit(user, c.id)) &&
         (c.repeatable || (!submissions.isPending && !submissions.error && !occupied.has(c.id)))),
   );
   const categoryName = categories.data?.find((c) => c.id === s.category_id)?.name;
+  const categoryKind = categories.data?.find((c) => c.id === s.category_id)?.kind;
+  const isPhoto = categoryKind === 'photo';
   const beginEdit = () => {
     setDraft({
       title: s.title,
@@ -377,11 +465,13 @@ export function ContributionDetail() {
       const data = new FormData();
       data.set('file', file!);
       data.set('version', String(s.version));
+      if (caption.trim()) data.set('caption', caption);
       await api(`/submissions/${id}/attachments`, {
         method: 'POST',
         body: data,
       });
       setFile(null);
+      setCaption('');
     }, 'Datei hochgeladen.');
   }
   const annotationPanel = (
@@ -526,7 +616,7 @@ export function ContributionDetail() {
       )}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start">
         <div className="min-w-0 space-y-6">
-          {editing && editable ? (
+          {editing && editable && !isPhoto ? (
             <form className={`${panel} space-y-5`} onSubmit={save}>
               <label className={label}>
                 Titel
@@ -580,66 +670,104 @@ export function ContributionDetail() {
               </div>
             </form>
           ) : null}
-          <article className={panel}>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className={heading}>
-                {editing && editable ? 'Aktueller Stand' : isRedaktion ? 'Beitrag' : 'Dein Beitrag'}
-              </h2>
-              {editable && !editing && (
-                <button className={btn.secondary} onClick={beginEdit}>
-                  Bearbeiten <Arrow />
-                </button>
-              )}
-            </div>
-            <p className="mt-4 whitespace-pre-wrap break-words text-[15px]">{s.body || 'Kein Text hinzugefügt.'}</p>
-            {s.context && (
-              <div className="mt-5 border-t border-line pt-4">
-                <h3 className="text-sm font-semibold text-muted">Kontext & Hinweise</h3>
-                <p className="mt-1 whitespace-pre-wrap break-words text-[15px]">{s.context}</p>
+          {(!isPhoto || s.body || s.context) && (
+            <article className={panel}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className={heading}>
+                  {isPhoto
+                    ? 'Älterer Textbeitrag'
+                    : editing && editable
+                      ? 'Aktueller Stand'
+                      : isRedaktion
+                        ? 'Beitrag'
+                        : 'Dein Beitrag'}
+                </h2>
+                {editable && !isPhoto && !editing && (
+                  <button className={btn.secondary} onClick={beginEdit}>
+                    Bearbeiten <Arrow />
+                  </button>
+                )}
               </div>
-            )}
-          </article>
+              {(s.body || !isPhoto) && (
+                <p className="mt-4 whitespace-pre-wrap break-words text-[15px]">{s.body || 'Kein Text hinzugefügt.'}</p>
+              )}
+              {s.context && (
+                <div className="mt-5 border-t border-line pt-4">
+                  <h3 className="text-sm font-semibold text-muted">Kontext & Hinweise</h3>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-[15px]">{s.context}</p>
+                </div>
+              )}
+            </article>
+          )}
           <section className={panel}>
             <h2 className={heading}>
-              Fotos <small className="font-normal text-muted">({s.attachments?.length ?? 0})</small>
+              {isPhoto ? 'Deine Fotos' : 'Fotos'}{' '}
+              <small className="font-normal text-muted">({s.attachments?.length ?? 0})</small>
             </h2>
             {!!s.attachments?.length && (
-              <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
-                {s.attachments.map((a) => (
-                  <AttachmentCard
-                    key={a.id}
-                    attachment={a}
-                    removable={editable}
-                    busy={action.busy}
-                    onRemove={() =>
-                      action.run(
-                        () => api(`/submissions/${id}/attachments/${a.id}`, json('DELETE', { version: s.version })),
-                        'Datei entfernt.',
-                      )
+              <div className="mt-4">
+                <PhotoGallery
+                  photos={s.attachments}
+                  allowCaptionEdit={editable}
+                  busy={action.busy}
+                  onSaveCaption={async (attachmentId, value) => {
+                    try {
+                      await api<Submission>(
+                        `/submissions/${id}/attachments/${attachmentId}`,
+                        json('PATCH', { version: s.version, caption: value }),
+                      );
+                    } finally {
+                      await queryClient.invalidateQueries();
                     }
-                  />
-                ))}
+                  }}
+                  canRemove={() =>
+                    editable && categoryKind !== undefined && (categoryKind !== 'photo' || s.attachments.length > 1)
+                  }
+                  onRemove={(photo) =>
+                    action.run(
+                      () => api(`/submissions/${id}/attachments/${photo.id}`, json('DELETE', { version: s.version })),
+                      'Foto entfernt.',
+                    )
+                  }
+                />
               </div>
             )}
             {editable && (
               <form className="mt-5 flex flex-wrap items-end gap-3 border-t border-line pt-5" onSubmit={upload}>
-                <label className={`${label} min-w-0 flex-1 basis-64`}>
-                  Foto hinzufügen{' '}
-                  <small className="block font-normal text-muted">
-                    JPEG, PNG oder WebP, höchstens 10 Bilder, je 20 MiB und höchstens 24 Megapixel.
-                  </small>
-                  <input
-                    className="mt-2 block w-full text-sm text-muted file:mr-3 file:rounded-ui file:border file:border-line file:bg-white file:px-3 file:py-2 file:text-sm file:font-semibold file:text-ink hover:file:bg-soft"
-                    type="file"
-                    required
-                    accept="image/jpeg,image/png,image/webp"
-                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                  />
-                </label>
+                <div className="min-w-0 flex-1 basis-64 space-y-3">
+                  <label className={`${label} block`}>
+                    Foto hinzufügen{' '}
+                    <small className="block font-normal text-muted">
+                      JPEG, PNG oder WebP, höchstens 10 Bilder, je 20 MiB und höchstens 24 Megapixel.
+                    </small>
+                    <input
+                      className="mt-2 block w-full text-sm text-muted file:mr-3 file:rounded-ui file:border file:border-line file:bg-white file:px-3 file:py-2 file:text-sm file:font-semibold file:text-ink hover:file:bg-soft"
+                      type="file"
+                      required
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                  <label className={`${label} block`}>
+                    Bildtext <small className="font-normal text-muted">optional</small>
+                    <textarea
+                      className={field}
+                      rows={2}
+                      maxLength={2000}
+                      value={caption}
+                      onChange={(e) => setCaption(e.target.value)}
+                    />
+                  </label>
+                </div>
                 <button className={btn.secondary} disabled={action.busy || !file}>
                   Hochladen ↑
                 </button>
               </form>
+            )}
+            {!s.attachments?.length && isPhoto && editable && (
+              <p className="mt-3 text-sm text-muted">
+                Dieser ältere Eintrag hat noch kein Foto. Du kannst es hier ergänzen.
+              </p>
             )}
             {!s.attachments?.length && !editable && <p className="mt-3 text-sm text-muted">Keine Fotos vorhanden.</p>}
           </section>
@@ -661,9 +789,11 @@ export function ContributionDetail() {
               </dl>
             ) : (
               <p className="text-sm text-muted">
-                {s.status === 'pending'
-                  ? 'Du kannst deinen eingereichten Beitrag noch anpassen.'
-                  : 'Du kannst eine Änderung als Korrekturwunsch an die Redaktion senden.'}
+                {isPhoto && s.status === 'pending'
+                  ? 'Du kannst deine Fotos und Bildtexte noch anpassen.'
+                  : s.status === 'pending'
+                    ? 'Du kannst deinen eingereichten Beitrag noch anpassen.'
+                    : 'Du kannst eine Änderung als Korrekturwunsch an die Redaktion senden.'}
               </p>
             )}
             {!isRedaktion && own && s.status === 'pending' && (
@@ -701,6 +831,16 @@ export function ContributionDetail() {
                     <h4 className="font-semibold">{r.title}</h4>
                     <p className="whitespace-pre-wrap break-words">{r.body}</p>
                     {r.context && <p className="whitespace-pre-wrap break-words text-muted">{r.context}</p>}
+                    {!!r.attachments.length && (
+                      <ul className="border-t border-line pt-2 text-muted">
+                        {r.attachments.map((attachment) => (
+                          <li key={attachment.id}>
+                            {attachment.filename}
+                            {attachment.caption && <span> · {attachment.caption}</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 </details>
               ))
@@ -709,41 +849,6 @@ export function ContributionDetail() {
         </aside>
       </div>
     </>
-  );
-}
-function AttachmentCard({
-  attachment: a,
-  removable,
-  busy,
-  onRemove,
-}: {
-  attachment: Attachment;
-  removable: boolean;
-  busy: boolean;
-  onRemove: () => void;
-}) {
-  return (
-    <div className="flex min-w-0 flex-col gap-2 text-sm">
-      {a.mime_type.startsWith('image/') && (
-        <a href={a.url} target="_blank" rel="noreferrer">
-          <img
-            className="aspect-[4/3] w-full rounded-ui bg-pill object-cover"
-            src={a.preview_url}
-            alt={a.filename}
-            loading="lazy"
-          />
-        </a>
-      )}
-      <a className="min-w-0 break-words font-semibold underline" href={a.url} target="_blank" rel="noreferrer">
-        {a.filename} ↗
-      </a>
-      <small className="text-muted">{(a.size_bytes / 1024).toFixed(0)} KB</small>
-      {removable && (
-        <button type="button" className={btn.danger} disabled={busy} onClick={onRemove}>
-          Datei entfernen
-        </button>
-      )}
-    </div>
   );
 }
 export function Editorial() {

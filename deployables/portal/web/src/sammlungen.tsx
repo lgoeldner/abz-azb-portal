@@ -46,6 +46,7 @@ import {
 import { PeoplePicker } from './PeoplePicker';
 import { BallotForm, BallotPrivacyNotice } from './BallotForm';
 import { PollStack } from './PollStack';
+import { PhotoGallery, photosFromSubmissions } from './PhotoGallery';
 import { DevDebug } from './DevDebug';
 import { NotFound } from './pages';
 
@@ -700,8 +701,13 @@ function CollectionReader({ sammlung }: { sammlung: Category }) {
     );
   const submissions = useData<Submission[]>(`/submissions?category_id=${sammlung.id}`);
   const items = (submissions.data ?? []).filter((s) =>
-    `${s.title} ${s.body} ${s.author_name}`.toLocaleLowerCase('de').includes(search.toLocaleLowerCase('de')),
+    `${s.title} ${s.body} ${s.author_name} ${s.attachments.map((a) => a.caption).join(' ')}`
+      .toLocaleLowerCase('de')
+      .includes(search.toLocaleLowerCase('de')),
   );
+  const photoCollection = sammlung.kind === 'photo';
+  const photos = photosFromSubmissions(items, (submission) => `/redaktion/beitraege/${submission.id}`);
+  const withoutPhotos = items.filter((submission) => !submission.attachments.length);
   return (
     <>
       <BackLink />
@@ -748,9 +754,11 @@ function CollectionReader({ sammlung }: { sammlung: Category }) {
       )}
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className={heading}>Gesammelte Beiträge</h2>
+          <h2 className={heading}>{photoCollection ? 'Gesammelte Fotos' : 'Gesammelte Beiträge'}</h2>
           <p className="mt-1 text-sm text-muted">
-            Originale lesen und Anmerkungen für die spätere Moderation festhalten.
+            {photoCollection
+              ? 'Alle eingereichten Fotos ansehen und ihre Bildtexte lesen.'
+              : 'Originale lesen und Anmerkungen für die spätere Moderation festhalten.'}
           </p>
         </div>
         <label className={`${label} w-full sm:w-72`}>
@@ -759,7 +767,7 @@ function CollectionReader({ sammlung }: { sammlung: Category }) {
             type="search"
             maxLength={200}
             className={field}
-            placeholder="Titel, Text, Name …"
+            placeholder={photoCollection ? 'Bildtext, Name …' : 'Titel, Text, Name …'}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -773,15 +781,40 @@ function CollectionReader({ sammlung }: { sammlung: Category }) {
         <>
           <p className="mb-3 text-sm tabular-nums text-muted">
             {search ? (
-              `${items.length} von ${submissions.data.length} Beiträgen`
+              photoCollection ? (
+                `${photos.length} von ${submissions.data.reduce((count, item) => count + item.attachments.length, 0)} Fotos`
+              ) : (
+                `${items.length} von ${submissions.data.length} Beiträgen`
+              )
             ) : (
               <>
-                <strong style={{ color: 'var(--editorial-data)' }}>{items.length}</strong>{' '}
-                {items.length === 1 ? 'Beitrag' : 'Beiträge'}
+                <strong style={{ color: 'var(--editorial-data)' }}>
+                  {photoCollection ? photos.length : items.length}
+                </strong>{' '}
+                {photoCollection
+                  ? photos.length === 1
+                    ? 'Foto'
+                    : 'Fotos'
+                  : items.length === 1
+                    ? 'Beitrag'
+                    : 'Beiträge'}
               </>
             )}
           </p>
-          {items.length ? (
+          {photoCollection ? (
+            <>
+              {photos.length > 0 && <PhotoGallery photos={photos} />}
+              {withoutPhotos.length > 0 && (
+                <section className={photos.length ? 'mt-8' : undefined}>
+                  <h3 className="mb-3 text-sm font-bold">Einträge ohne Foto</h3>
+                  <SubmissionList items={withoutPhotos} categories={[sammlung]} showAuthor editorialView />
+                </section>
+              )}
+              {!photos.length && !withoutPhotos.length && (
+                <Empty>{search ? 'Keine Fotos zu dieser Suche.' : 'Hier sind noch keine Fotos eingegangen.'}</Empty>
+              )}
+            </>
+          ) : items.length ? (
             <SubmissionList items={items} categories={[sammlung]} showAuthor editorialView />
           ) : (
             <Empty>{search ? 'Keine Beiträge zu dieser Suche.' : 'Hier sind noch keine Beiträge eingegangen.'}</Empty>
@@ -798,6 +831,9 @@ function StudentCollection({ sammlung }: { sammlung: Category }) {
   const categories = useData<Category[]>('/categories');
   const mine = (submissions.data ?? []).filter((s) => s.category_id === sammlung.id);
   const own = mine.filter((s) => s.author_id === user.id);
+  const photoCollection = sammlung.kind === 'photo';
+  const photos = photosFromSubmissions(own, (submission) => `/beitraege/${submission.id}`);
+  const withoutPhotos = own.filter((submission) => !submission.attachments.length);
   return (
     <>
       <BackLink />
@@ -807,28 +843,68 @@ function StudentCollection({ sammlung }: { sammlung: Category }) {
       <DevDebug label="Sammlung" data={debugData(sammlung)} />
       <div>
         <section className={`${panel} min-w-0 space-y-5`}>
-          <h2 className={heading}>{sammlung.repeatable ? 'Beliebig oft beitragen' : 'Einmal beitragen'}</h2>
+          <h2 className={heading}>
+            {photoCollection
+              ? sammlung.repeatable
+                ? 'Fotos beisteuern'
+                : 'Einmal Fotos beisteuern'
+              : sammlung.repeatable
+                ? 'Beliebig oft beitragen'
+                : 'Einmal beitragen'}
+          </h2>
           <p className="text-sm text-muted">
-            {sammlung.repeatable
-              ? 'Du kannst hier so viele Beiträge einreichen, wie du möchtest.'
-              : 'Du kannst hier einen Beitrag einreichen und deinen eigenen Beitrag anschließend bearbeiten.'}
+            {photoCollection
+              ? 'Lade deine Fotos mit einem optionalen Bildtext hoch. Nur du und die Redaktion sehen deine Beiträge.'
+              : sammlung.repeatable
+                ? 'Du kannst hier so viele Beiträge einreichen, wie du möchtest.'
+                : 'Du kannst hier einen Beitrag einreichen und deinen eigenen Beitrag anschließend bearbeiten.'}
           </p>
           {!submissions.isPending &&
             !submissions.error &&
             sammlung.status === 'open' &&
             (sammlung.repeatable || !own.length) && (
               <Link className={btn.primary} to={`/beitraege/neu?kategorie=${sammlung.id}`}>
-                Beitrag einreichen <Arrow />
+                {photoCollection ? 'Fotos hochladen' : 'Beitrag einreichen'} <Arrow />
               </Link>
             )}
           {sammlung.status === 'closed' && (
             <p className={notice}>Diese Sammlung ist beendet. Deine bisherigen Beiträge bleiben hier sichtbar.</p>
           )}
-          <h3 className="pt-2 text-sm font-bold">Deine Beiträge hier</h3>
+          <h3 className="pt-2 text-sm font-bold">{photoCollection ? 'Deine Fotos' : 'Deine Beiträge hier'}</h3>
           {submissions.isPending ? (
             <Loading />
           ) : submissions.error ? (
             <Failure error={submissions.error} retry={() => submissions.refetch()} />
+          ) : photoCollection ? (
+            <>
+              {photos.length > 0 && <PhotoGallery photos={photos} />}
+              {withoutPhotos.length > 0 && (
+                <ul
+                  className={`overflow-hidden rounded-ui border-2 border-line bg-white${photos.length ? ' mt-8' : ''}`}
+                  aria-label="Einträge ohne Foto"
+                >
+                  {withoutPhotos.map((entry) => (
+                    <li
+                      key={entry.id}
+                      className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-4 last:border-b-0"
+                    >
+                      <Link className="min-w-0 flex-1" to={`/beitraege/${entry.id}`}>
+                        <strong className="block break-words text-[15px] font-semibold">{entry.title}</strong>
+                        <span className="mt-1 block text-sm text-muted">
+                          {entry.status === 'pending' ? 'Noch ohne Foto' : 'Älterer Eintrag ohne Foto'}
+                        </span>
+                      </Link>
+                      {entry.status === 'pending' && (
+                        <Link className={btn.secondary} to={`/beitraege/${entry.id}`}>
+                          Foto ergänzen <Arrow />
+                        </Link>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {!photos.length && !withoutPhotos.length && <Empty>Du hast hier noch keine Fotos eingereicht.</Empty>}
+            </>
           ) : own.length ? (
             <SubmissionList items={own} categories={categories.data ?? []} />
           ) : (

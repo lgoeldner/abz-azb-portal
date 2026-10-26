@@ -283,7 +283,7 @@
         ]
       },
       "post": {
-        "summary": "Create idempotent contribution",
+        "summary": "Create idempotent contribution; photo collections require multipart image and create atomically",
         "operationId": "postSubmissions",
         "responses": {
           "201": {
@@ -323,6 +323,44 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SubmissionInput"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "category_id": {
+                    "type": "string"
+                  },
+                  "idempotency_key": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200
+                  },
+                  "title": {
+                    "type": "string",
+                    "maxLength": 300,
+                    "description": "Defaults to filename when omitted"
+                  },
+                  "body": {
+                    "type": "string",
+                    "enum": [""]
+                  },
+                  "context": {
+                    "type": "string",
+                    "maxLength": 10000
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "caption": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": ["category_id", "idempotency_key", "file"],
+                "additionalProperties": false
               }
             }
           }
@@ -575,6 +613,10 @@
                   },
                   "version": {
                     "type": "integer"
+                  },
+                  "caption": {
+                    "type": "string",
+                    "maxLength": 2000
                   }
                 },
                 "required": ["file", "version"],
@@ -587,7 +629,7 @@
     },
     "/api/v1/submissions/{id}/attachments/{attachmentID}": {
       "delete": {
-        "summary": "Remove attachment from own pending contribution",
+        "summary": "Remove attachment from own pending contribution; final image in a photo collection cannot be removed",
         "operationId": "deleteSubmissionsIdAttachmentsAttachmentid",
         "responses": {
           "200": {
@@ -650,6 +692,80 @@
                 },
                 "required": ["version"],
                 "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Edit photo caption on own pending contribution with optimistic concurrency",
+        "operationId": "patchSubmissionsIdAttachmentsAttachmentid",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "attachmentID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "caption": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": ["version", "caption"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Submission"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
@@ -1295,11 +1411,11 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                    "ballot_id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "description": "Client-generated key required for repeatable ballots; replay with the same selection returns success without an extra entry, changed selection conflicts."
-                    },
+                  "ballot_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Client-generated key required for repeatable ballots; replay with the same selection returns success without an extra entry, changed selection conflicts."
+                  },
                   "option_id": {
                     "type": "string"
                   },
@@ -1827,6 +1943,10 @@
           },
           "preview_url": {
             "type": "string"
+          },
+          "caption": {
+            "type": "string",
+            "maxLength": 2000
           }
         },
         "required": [
@@ -1835,7 +1955,8 @@
           "mime_type",
           "size_bytes",
           "url",
-          "preview_url"
+          "preview_url",
+          "caption"
         ],
         "additionalProperties": false
       },
@@ -1929,6 +2050,12 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Attachment"
+            }
           }
         },
         "required": [
@@ -1939,7 +2066,8 @@
           "body",
           "context",
           "status",
-          "created_at"
+          "created_at",
+          "attachments"
         ],
         "additionalProperties": false
       },

@@ -27,12 +27,19 @@ func createPhotoCategory(t *testing.T, app *App, pool *pgxpool.Pool, repeatable 
 
 func createContribution(t *testing.T, app *App, pool *pgxpool.Pool, author, category, key, title string) *httptest.ResponseRecorder {
 	t.Helper()
+	var kind string
+	if err := pool.QueryRow(context.Background(), "SELECT kind FROM categories WHERE id=$1", category).Scan(&kind); err != nil {
+		t.Fatal(err)
+	}
+	if kind == "photo" {
+		return photoRequest(t, app, pool, author, "/api/v1/submissions", map[string]string{"idempotency_key": key, "category_id": category, "title": title}, "photo.jpg", testJPEG(t))
+	}
 	body := fmt.Sprintf(`{"idempotency_key":%q,"category_id":%q,"title":%q,"body":"Text","context":""}`, key, category, title)
 	return authenticatedRequest(t, app, pool, author, http.MethodPost, "/api/v1/submissions", body)
 }
 
 func editContributionBody(version int, category, title string) string {
-	return fmt.Sprintf(`{"version":%d,"category_id":%q,"title":%q,"body":"Bearbeiteter Text","context":""}`, version, category, title)
+	return fmt.Sprintf(`{"version":%d,"category_id":%q,"title":%q,"body":"","context":""}`, version, category, title)
 }
 
 func TestOneOffContributionCapAndIdempotentRetries(t *testing.T) {
@@ -270,6 +277,7 @@ func TestOneOffContributionCapSerializesConcurrentCreatesAndMoves(t *testing.T) 
 		t.Fatalf("create repeatable source contribution: %d %s", second.Code, second.Body)
 	}
 	secondSubmission := decodeSubmission(t, second)
+	secondSubmission = decodeSubmission(t, authenticatedFileUpload(t, app, pool, MiaID, "/api/v1/submissions/"+secondSubmission.ID+"/attachments", secondSubmission.Version, "move.jpg", testJPEG(t)))
 	moveBody := editContributionBody(secondSubmission.Version, other.ID, "Move into full category")
 	if moved := authenticatedRequest(t, app, pool, MiaID, http.MethodPatch, "/api/v1/submissions/"+secondSubmission.ID, moveBody); moved.Code != http.StatusBadRequest {
 		t.Fatalf("move into occupied one-off category: %d %s", moved.Code, moved.Body)
@@ -292,9 +300,11 @@ func TestOneOffContributionCapSerializesConcurrentCreatesAndMoves(t *testing.T) 
 		t.Fatalf("create second move source: %d %s", otherSource.Code, otherSource.Body)
 	}
 	secondSource := decodeSubmission(t, otherSource)
+	secondSource = decodeSubmission(t, authenticatedFileUpload(t, app, pool, MiaID, "/api/v1/submissions/"+secondSource.ID+"/attachments", secondSource.Version, "move.jpg", testJPEG(t)))
+	seedSource := decodeSubmission(t, authenticatedFileUpload(t, app, pool, MiaID, "/api/v1/submissions/20000000-0000-4000-8000-000000000001/attachments", 1, "move.jpg", testJPEG(t)))
 	var moves sync.WaitGroup
 	moveResults := make(chan *httptest.ResponseRecorder, 2)
-	for _, item := range []Submission{{ID: "20000000-0000-4000-8000-000000000001", Version: 1}, secondSource} {
+	for _, item := range []Submission{seedSource, secondSource} {
 		moves.Add(1)
 		go func(item Submission) {
 			defer moves.Done()

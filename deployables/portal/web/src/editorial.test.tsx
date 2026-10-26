@@ -59,6 +59,7 @@ const submission: Submission = {
     {
       id: 'photo-1',
       filename: 'klassenfahrt.jpg',
+      caption: '',
       mime_type: 'image/jpeg',
       size_bytes: 2048,
       url: '/api/v1/attachments/photo-1',
@@ -67,6 +68,7 @@ const submission: Submission = {
   ],
 };
 const revision: Revision = {
+  attachments: [],
   id: 'revision-1',
   version: 1,
   actor_name: student.name,
@@ -193,7 +195,7 @@ describe('submission collections independent of repeatability', () => {
 
   it('keeps a pending original editable after collection close and only offers open move targets', async () => {
     const closedCurrent: Category = { ...category, status: 'closed' };
-    const openTarget: Category = { ...photo, status: 'open' };
+    const openTarget: Category = { ...ideas, status: 'open' };
     const closedTarget: Category = { ...ideas, id: 'closed-ideas', name: 'Beendete Ideen', status: 'closed' };
     installApi([], submission, [closedCurrent, openTarget, closedTarget]);
     renderPortal(`/beitraege/${submission.id}`, student, 'schueler');
@@ -202,7 +204,7 @@ describe('submission collections independent of repeatability', () => {
     const select = await screen.findByLabelText('Sammlung');
     expect(Array.from((select as HTMLSelectElement).options).map((option) => option.textContent)).toEqual([
       'Erinnerungen',
-      'Fotos',
+      'Ideen',
     ]);
     expect(screen.getByLabelText(/Foto hinzufügen/)).toBeInTheDocument();
   });

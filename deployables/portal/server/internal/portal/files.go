@@ -3,6 +3,7 @@ package portal
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -22,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const maxImageBytes = 20 << 20
@@ -100,6 +102,81 @@ func immutableWrite(path string, data []byte) error {
 	defer d.Close()
 	return d.Sync()
 }
+
+type imageUpload struct {
+	Filename, Caption, MimeType string
+	Data, Preview               []byte
+}
+
+func validateCaption(caption string) error {
+	if !utf8.ValidString(caption) || utf8.RuneCountInString(caption) > 2000 {
+		return bad("Bildunterschrift darf maximal 2000 Zeichen enthalten.")
+	}
+	return nil
+}
+
+func readImageUpload(w http.ResponseWriter, r *http.Request, allowedFields ...string) (imageUpload, error) {
+	var upload imageUpload
+	r.Body = http.MaxBytesReader(w, r.Body, maxImageBytes+(1<<20))
+	if e := r.ParseMultipartForm(1 << 20); e != nil {
+		if r.MultipartForm != nil {
+			_ = r.MultipartForm.RemoveAll()
+		}
+		var large *http.MaxBytesError
+		if errors.As(e, &large) {
+			return upload, fail(413, "too_large", "Bild darf maximal 20 MiB groß sein.")
+		}
+		return upload, bad("Ungültiger Bildupload.")
+	}
+	defer r.MultipartForm.RemoveAll()
+	for field, values := range r.MultipartForm.Value {
+		allowed := false
+		for _, name := range allowedFields {
+			if field == name {
+				allowed = true
+			}
+		}
+		if !allowed || len(values) != 1 {
+			return upload, bad("Ungültiges Uploadfeld.")
+		}
+	}
+	if len(r.MultipartForm.File) != 1 || len(r.MultipartForm.File["file"]) != 1 {
+		return upload, bad("Genau eine Bilddatei erforderlich.")
+	}
+	upload.Caption = r.FormValue("caption")
+	if e := validateCaption(upload.Caption); e != nil {
+		return upload, e
+	}
+	f, header, e := r.FormFile("file")
+	if e != nil {
+		return upload, bad("Bilddatei erforderlich.")
+	}
+	defer f.Close()
+	upload.Filename = safeFilename(header.Filename)
+	upload.Data, e = io.ReadAll(io.LimitReader(f, maxImageBytes+1))
+	if e != nil {
+		return upload, e
+	}
+	if len(upload.Data) > maxImageBytes {
+		return upload, fail(413, "too_large", "Bild darf maximal 20 MiB groß sein.")
+	}
+	upload.Preview, upload.MimeType, e = imagePreview(upload.Data)
+	return upload, e
+}
+
+func (a *App) storeImage(ctx context.Context, tx pgx.Tx, submissionID string, upload imageUpload) error {
+	id := ID()
+	originalKey, previewKey := id+".original", id+".preview.jpg"
+	if e := immutableWrite(filepath.Join(a.Config.UploadDir, originalKey), upload.Data); e != nil {
+		return e
+	}
+	if e := immutableWrite(filepath.Join(a.Config.UploadDir, previewKey), upload.Preview); e != nil {
+		return e
+	}
+	_, e := tx.Exec(ctx, "INSERT INTO attachments(id,submission_id,filename,mime_type,size_bytes,sha256,storage_key,preview_key,caption) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)", id, submissionID, upload.Filename, upload.MimeType, len(upload.Data), digest(string(upload.Data)), originalKey, previewKey, upload.Caption)
+	return e
+}
+
 func (a *App) upload(w http.ResponseWriter, r *http.Request) error {
 	select {
 	case a.imageSlots <- struct{}{}:
@@ -107,40 +184,13 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) error {
 	case <-r.Context().Done():
 		return r.Context().Err()
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxImageBytes+(1<<20))
-	if e := r.ParseMultipartForm(1 << 20); e != nil {
-		var large *http.MaxBytesError
-		if errors.As(e, &large) {
-			return fail(413, "too_large", "Bild darf maximal 20 MiB groß sein.")
-		}
-		return bad("Ungültiger Bildupload.")
-	}
-	if r.MultipartForm != nil {
-		defer r.MultipartForm.RemoveAll()
+	upload, e := readImageUpload(w, r, "version", "caption")
+	if e != nil {
+		return e
 	}
 	version, e := strconv.Atoi(r.FormValue("version"))
 	if e != nil || version < 1 {
 		return bad("Version erforderlich.")
-	}
-	files := r.MultipartForm.File["file"]
-	if len(files) != 1 {
-		return bad("Genau eine Bilddatei erforderlich.")
-	}
-	f, header, e := r.FormFile("file")
-	if e != nil {
-		return bad("Bilddatei erforderlich.")
-	}
-	defer f.Close()
-	data, e := io.ReadAll(io.LimitReader(f, maxImageBytes+1))
-	if e != nil {
-		return e
-	}
-	if len(data) > maxImageBytes {
-		return fail(413, "too_large", "Bild darf maximal 20 MiB groß sein.")
-	}
-	preview, mimeType, e := imagePreview(data)
-	if e != nil {
-		return e
 	}
 	u := current(r)
 	tx, e := a.DB.Begin(r.Context())
@@ -164,15 +214,7 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) error {
 	if len(s.Attachments) >= 10 {
 		return bad("Maximal 10 Bilder je Beitrag.")
 	}
-	id := ID()
-	originalKey, previewKey := id+".original", id+".preview.jpg"
-	if e = immutableWrite(filepath.Join(a.Config.UploadDir, originalKey), data); e != nil {
-		return e
-	}
-	if e = immutableWrite(filepath.Join(a.Config.UploadDir, previewKey), preview); e != nil {
-		return e
-	}
-	if _, e = tx.Exec(r.Context(), "INSERT INTO attachments(id,submission_id,filename,mime_type,size_bytes,sha256,storage_key,preview_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8)", id, s.ID, safeFilename(header.Filename), mimeType, len(data), digest(string(data)), originalKey, previewKey); e != nil {
+	if e = a.storeImage(r.Context(), tx, s.ID, upload); e != nil {
 		return e
 	}
 	if _, e = tx.Exec(r.Context(), "UPDATE submissions SET version=version+1,updated_at=now() WHERE id=$1", s.ID); e != nil {
@@ -217,11 +259,68 @@ func (a *App) deleteAttachment(w http.ResponseWriter, r *http.Request) error {
 	if tag.RowsAffected() == 0 {
 		return missing()
 	}
+	var kind string
+	if e = tx.QueryRow(r.Context(), "SELECT kind FROM categories WHERE id=$1 FOR SHARE", s.CategoryID).Scan(&kind); e != nil {
+		return e
+	}
+	if kind == "photo" && len(s.Attachments) <= 1 {
+		return bad("Ein Fotobeitrag muss mindestens ein Bild behalten.")
+	}
 	if _, e = tx.Exec(r.Context(), "UPDATE submissions SET version=version+1,updated_at=now() WHERE id=$1", s.ID); e != nil {
 		return e
 	}
 	return a.finishSubmission(w, r, tx, u, s.ID, "attachment.removed")
 }
+func (a *App) editAttachment(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Version int     `json:"version"`
+		Caption *string `json:"caption"`
+	}
+	if e := decode(w, r, &in); e != nil {
+		return e
+	}
+	if in.Caption == nil {
+		return bad("Bildunterschrift erforderlich.")
+	}
+	if e := validateCaption(*in.Caption); e != nil {
+		return e
+	}
+	u := current(r)
+	tx, e := a.DB.Begin(r.Context())
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback(r.Context())
+	s, e := loadSubmission(r.Context(), tx, r.PathValue("id"), true)
+	if e != nil {
+		return e
+	}
+	if !canRead(u, s) {
+		return missing()
+	}
+	if !canMutate(u, s) {
+		return forbidden()
+	}
+	if s.Version != in.Version {
+		return conflict()
+	}
+	id := r.PathValue("attachmentID")
+	if !validID(id) {
+		return missing()
+	}
+	tag, e := tx.Exec(r.Context(), "UPDATE attachments SET caption=$3 WHERE id=$1 AND submission_id=$2 AND NOT deleted", id, s.ID, *in.Caption)
+	if e != nil {
+		return e
+	}
+	if tag.RowsAffected() == 0 {
+		return missing()
+	}
+	if _, e = tx.Exec(r.Context(), "UPDATE submissions SET version=version+1,updated_at=now() WHERE id=$1", s.ID); e != nil {
+		return e
+	}
+	return a.finishSubmission(w, r, tx, u, s.ID, "attachment.caption.edited")
+}
+
 func (a *App) download(w http.ResponseWriter, r *http.Request) error {
 	id := r.PathValue("id")
 	if !validID(id) {
@@ -350,6 +449,7 @@ func (a *App) exportCategory(w http.ResponseWriter, r *http.Request) error {
 		Path         string `json:"path"`
 		SHA256       string `json:"sha256"`
 		SizeBytes    int64  `json:"size_bytes"`
+		Caption      string `json:"caption"`
 	}
 	files := []manifestFile{}
 	for _, s := range submissions {
@@ -372,7 +472,7 @@ func (a *App) exportCategory(w http.ResponseWriter, r *http.Request) error {
 			if e != nil {
 				return e
 			}
-			files = append(files, manifestFile{att.ID, s.ID, path, hash, att.SizeBytes})
+			files = append(files, manifestFile{att.ID, s.ID, path, hash, att.SizeBytes, att.Caption})
 		}
 	}
 	manifest, e := zw.Create("manifest.json")

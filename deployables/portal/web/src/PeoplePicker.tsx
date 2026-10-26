@@ -1,4 +1,5 @@
 import { useId, useState } from 'react';
+import { Check } from 'lucide-react';
 import { field, label } from './ui';
 
 export type PeoplePickerOption = {
@@ -17,6 +18,7 @@ export function PeoplePicker({
   disabledUserIds = [],
   disabled = false,
   searchLabel = 'Person suchen',
+  chips = false,
 }: {
   legend: string;
   options: PeoplePickerOption[];
@@ -26,6 +28,7 @@ export function PeoplePicker({
   disabledUserIds?: string[];
   disabled?: boolean;
   searchLabel?: string;
+  chips?: boolean;
 }) {
   const [search, setSearch] = useState('');
   const inputId = useId();
@@ -54,7 +57,7 @@ export function PeoplePicker({
           ? `${selectedIds.length} ausgewählt`
           : `${selectedIds.length} von ${maxSelected} ausgewählt`}
       </p>
-      {selectedIds.length > 0 && (
+      {!chips && selectedIds.length > 0 && (
         <ul className="flex flex-wrap gap-2" aria-label="Ausgewählt">
           {selectedIds.map((id) => {
             const option = options.find((item) => item.id === id);
@@ -92,7 +95,11 @@ export function PeoplePicker({
         </label>
       )}
       <ul
-        className="max-h-64 space-y-1 overflow-y-auto rounded-ui bg-white p-2"
+        className={
+          chips
+            ? 'flex max-h-80 flex-wrap gap-2 overflow-y-auto p-1'
+            : 'max-h-64 space-y-1 overflow-y-auto rounded-ui bg-white p-2'
+        }
         aria-label={`${legend}: Suchergebnisse`}
       >
         {matching.map((option) => {
@@ -101,13 +108,16 @@ export function PeoplePicker({
           const isAtLimit = atLimit && !isSelected && maxSelected !== 1;
           const unavailable = isSelf || isAtLimit;
           return (
-            <li key={option.id}>
+            <li key={option.id} className={chips ? 'min-w-0 max-w-full' : undefined}>
               <button
                 type="button"
-                className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-ui px-3 text-left text-[15px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink ${
-                  unavailable ? 'cursor-not-allowed text-muted' : 'hover:bg-soft'
-                }`}
+                className={
+                  chips
+                    ? `inline-flex min-h-11 max-w-full items-center gap-2 rounded-full border-2 px-4 py-2 text-left text-[15px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${isSelected ? 'border-ink bg-ink text-white' : unavailable ? 'cursor-not-allowed border-transparent bg-pill text-muted' : 'border-transparent bg-white text-ink hover:border-ink'}`
+                    : `flex min-h-11 w-full items-center justify-between gap-3 rounded-ui px-3 text-left text-[15px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink ${unavailable ? 'cursor-not-allowed text-muted' : 'hover:bg-soft'}`
+                }
                 aria-pressed={isSelected}
+                aria-label={chips ? option.name : undefined}
                 disabled={unavailable}
                 onClick={() => toggle(option)}
               >
@@ -117,10 +127,10 @@ export function PeoplePicker({
                     Eigene Stimme nicht erlaubt
                   </small>
                 ) : isAtLimit ? (
-                  <small className="shrink-0 text-xs">Limit erreicht</small>
+                  !chips && <small className="shrink-0 text-xs">Limit erreicht</small>
                 ) : isSelected ? (
                   <span className="shrink-0" aria-hidden="true">
-                    Ausgewählt
+                    {chips ? <Check className="size-4" /> : 'Ausgewählt'}
                   </span>
                 ) : null}
               </button>

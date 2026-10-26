@@ -110,6 +110,7 @@ export function BallotForm({
       {action.feedback}
       <form className="space-y-4" onSubmit={submit}>
         <PeoplePicker
+          chips={poll.kind === 'proposal'}
           legend={`${poll.kind === 'person' ? 'Personen' : 'Optionen'} auswählen (bis zu ${poll.max_choices})`}
           searchLabel={poll.kind === 'person' ? 'Person suchen' : 'Option suchen'}
           options={poll.options.map((option) => ({

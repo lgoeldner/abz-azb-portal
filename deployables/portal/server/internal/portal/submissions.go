@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"mime"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -29,14 +31,14 @@ func loadSubmission(ctx context.Context, db DB, id string, lock bool) (Submissio
 	if e != nil {
 		return s, e
 	}
-	rows, e := db.Query(ctx, "SELECT id::text,filename,mime_type,size_bytes FROM attachments WHERE submission_id=$1 AND NOT deleted ORDER BY created_at,id", id)
+	rows, e := db.Query(ctx, "SELECT id::text,filename,mime_type,size_bytes,caption FROM attachments WHERE submission_id=$1 AND NOT deleted ORDER BY created_at,id", id)
 	if e != nil {
 		return s, e
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var a Attachment
-		if e = rows.Scan(&a.ID, &a.Filename, &a.MimeType, &a.SizeBytes); e != nil {
+		if e = rows.Scan(&a.ID, &a.Filename, &a.MimeType, &a.SizeBytes, &a.Caption); e != nil {
 			return s, e
 		}
 		a.URL = "/api/v1/attachments/" + a.ID
@@ -119,7 +121,7 @@ func validateSubmission(in submissionInput) error {
 	if !validID(in.CategoryID) {
 		return bad("Kategorie erforderlich.")
 	}
-	if strings.TrimSpace(in.Title) == "" || len(in.Title) > 300 || len(in.Body) > 100000 || len(in.Context) > 10000 {
+	if strings.TrimSpace(in.Title) == "" || utf8.RuneCountInString(in.Title) > 300 || len(in.Body) > 100000 || len(in.Context) > 10000 {
 		return bad("Titel erforderlich (max. 300 Zeichen); Text oder Kontext zu lang.")
 	}
 	return nil
@@ -133,7 +135,25 @@ func lockSubmissionAuthor(ctx context.Context, tx pgx.Tx, authorID string) error
 
 func (a *App) createSubmission(w http.ResponseWriter, r *http.Request) error {
 	var in submissionInput
-	if e := decode(w, r, &in); e != nil {
+	var upload *imageUpload
+	mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if mediaType == "multipart/form-data" {
+		select {
+		case a.imageSlots <- struct{}{}:
+			defer func() { <-a.imageSlots }()
+		case <-r.Context().Done():
+			return r.Context().Err()
+		}
+		image, e := readImageUpload(w, r, "category_id", "title", "body", "context", "idempotency_key", "caption")
+		if e != nil {
+			return e
+		}
+		upload = &image
+		in = submissionInput{CategoryID: r.FormValue("category_id"), Title: r.FormValue("title"), Body: r.FormValue("body"), Context: r.FormValue("context"), IdempotencyKey: r.FormValue("idempotency_key")}
+		if strings.TrimSpace(in.Title) == "" {
+			in.Title = image.Filename
+		}
+	} else if e := decode(w, r, &in); e != nil {
 		return e
 	}
 	if e := validateSubmission(in); e != nil {
@@ -145,6 +165,10 @@ func (a *App) createSubmission(w http.ResponseWriter, r *http.Request) error {
 	u := current(r)
 	payload, _ := json.Marshal(in)
 	hash := digest(string(payload))
+	if upload != nil {
+		imagePayload, _ := json.Marshal([]string{hash, upload.Filename, upload.Caption, digest(string(upload.Data))})
+		hash = digest(string(imagePayload))
+	}
 	tx, e := a.DB.Begin(r.Context())
 	if e != nil {
 		return e
@@ -175,6 +199,17 @@ func (a *App) createSubmission(w http.ResponseWriter, r *http.Request) error {
 	if e = checkContributionCategory(r.Context(), tx, in.CategoryID, u.ID, "", true); e != nil {
 		return e
 	}
+	var kind string
+	if e = tx.QueryRow(r.Context(), "SELECT kind FROM categories WHERE id=$1", in.CategoryID).Scan(&kind); e != nil {
+		return e
+	}
+	if kind == "photo" {
+		if upload == nil || in.Body != "" {
+			return bad("Fotobeiträge benötigen ein Bild und dürfen keinen Beitragstext enthalten.")
+		}
+	} else if upload != nil {
+		return bad("Dieser Upload ist nur für Fotosammlungen vorgesehen.")
+	}
 	id := ID()
 	tag, e := tx.Exec(r.Context(), "INSERT INTO submissions(id,category_id,author_id,title,body,context,idempotency_key,request_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(author_id,idempotency_key) DO NOTHING", id, in.CategoryID, u.ID, strings.TrimSpace(in.Title), in.Body, in.Context, in.IdempotencyKey, hash)
 	if e != nil {
@@ -187,6 +222,11 @@ func (a *App) createSubmission(w http.ResponseWriter, r *http.Request) error {
 		}
 		if hash != originalHash {
 			return conflict()
+		}
+	}
+	if tag.RowsAffected() > 0 && upload != nil {
+		if e = a.storeImage(r.Context(), tx, id, *upload); e != nil {
+			return e
 		}
 	}
 	s, e := loadSubmission(r.Context(), tx, id, false)
@@ -246,6 +286,13 @@ func (a *App) editSubmission(w http.ResponseWriter, r *http.Request) error {
 	}
 	if in.CategoryID != s.CategoryID && !(u.ID == s.AuthorID && s.Status == "pending") && !canEdit(u, in.CategoryID) {
 		return forbidden()
+	}
+	var kind string
+	if e = tx.QueryRow(r.Context(), "SELECT kind FROM categories WHERE id=$1", in.CategoryID).Scan(&kind); e != nil {
+		return e
+	}
+	if kind == "photo" && (in.Body != "" || in.CategoryID != s.CategoryID && len(s.Attachments) == 0) {
+		return bad("Fotobeiträge benötigen ein Bild und dürfen keinen Beitragstext enthalten.")
 	}
 	_, e = tx.Exec(r.Context(), "UPDATE submissions SET category_id=$2,title=$3,body=$4,context=$5,version=version+1,updated_at=now() WHERE id=$1", s.ID, in.CategoryID, strings.TrimSpace(in.Title), in.Body, in.Context)
 	if e != nil {
@@ -322,7 +369,7 @@ func (a *App) revisions(w http.ResponseWriter, r *http.Request) error {
 	if e != nil {
 		return e
 	}
-	rows, e := a.DB.Query(r.Context(), "SELECT r.id::text,r.version,u.name,r.title,r.body,r.context,r.status,r.created_at FROM revisions r JOIN users u ON u.id=r.actor_id WHERE r.submission_id=$1 ORDER BY r.version DESC", s.ID)
+	rows, e := a.DB.Query(r.Context(), "SELECT r.id::text,r.version,u.name,r.title,r.body,r.context,r.status,r.created_at,r.attachments FROM revisions r JOIN users u ON u.id=r.actor_id WHERE r.submission_id=$1 ORDER BY r.version DESC", s.ID)
 	if e != nil {
 		return e
 	}
@@ -330,7 +377,7 @@ func (a *App) revisions(w http.ResponseWriter, r *http.Request) error {
 	out := []Revision{}
 	for rows.Next() {
 		var v Revision
-		if e = rows.Scan(&v.ID, &v.Version, &v.ActorName, &v.Title, &v.Body, &v.Context, &v.Status, &v.CreatedAt); e != nil {
+		if e = rows.Scan(&v.ID, &v.Version, &v.ActorName, &v.Title, &v.Body, &v.Context, &v.Status, &v.CreatedAt, &v.Attachments); e != nil {
 			return e
 		}
 		out = append(out, v)

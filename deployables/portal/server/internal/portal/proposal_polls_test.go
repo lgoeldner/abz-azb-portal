@@ -87,8 +87,15 @@ func TestProposalMultipleSelectionsPreserveCapAndReplaceAtomically(t *testing.T)
 func TestMigration006PreservesDefinitionsVotesAndHistory(t *testing.T) {
 	pool, issuer := migrateTo(t, "005_people_multiselect.sql")
 	ctx := context.Background()
-	if err := SeedWithIssuer(ctx, pool, "development", issuer); err != nil {
-		t.Fatal(err)
+	// Populate only pre-006 columns; current seed reads the latest attachment schema.
+	for _, query := range []string{
+		"INSERT INTO users(id,subject,name,role,admitted,cohort_member) VALUES ('" + MiaID + "','mia','Mia','student',true,true)",
+		"INSERT INTO categories(id,name,kind,status,all_people,max_choices) VALUES ('" + pollOpen + "','Motto','proposal','open',false,1)",
+		"INSERT INTO poll_options(id,poll_id,label,position) VALUES ('40000000-0000-4000-8000-000000000101','" + pollOpen + "','A',0),('40000000-0000-4000-8000-000000000102','" + pollOpen + "','B',1)",
+	} {
+		if _, err := pool.Exec(ctx, query); err != nil {
+			t.Fatal(err)
+		}
 	}
 	app := appForPool(t, pool, issuer)
 	// Seed the pre-008 schema directly. The current API reads the new category

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -85,6 +86,10 @@ func audit(ctx context.Context, db DB, u User, action, entity string) error {
 	return e
 }
 func snapshot(ctx context.Context, db DB, u User, s Submission) error {
-	_, e := db.Exec(ctx, "INSERT INTO revisions(id,submission_id,version,actor_id,title,body,context,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8)", ID(), s.ID, s.Version, u.ID, s.Title, s.Body, s.Context, s.Status)
+	attachments, e := json.Marshal(s.Attachments)
+	if e != nil {
+		return e
+	}
+	_, e = db.Exec(ctx, "INSERT INTO revisions(id,submission_id,version,actor_id,title,body,context,status,attachments) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)", ID(), s.ID, s.Version, u.ID, s.Title, s.Body, s.Context, s.Status, attachments)
 	return e
 }

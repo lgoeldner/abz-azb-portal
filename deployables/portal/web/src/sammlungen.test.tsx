@@ -747,7 +747,7 @@ describe('Sammlungen person polls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sonnengelb' }));
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Waldgrün/ })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Mitternachtsblau entfernen' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mitternachtsblau' }));
     fireEvent.click(screen.getByRole('button', { name: 'Waldgrün' }));
     fireEvent.click(screen.getByRole('button', { name: /Stimme speichern/ }));
     await waitFor(() => expect(writes[0].body).toEqual({ option_ids: ['gold', 'green'] }));
@@ -755,8 +755,8 @@ describe('Sammlungen person polls', () => {
     fireEvent.click(screen.getByRole('link', { name: /Alle Sammlungen ansehen/ }));
     fireEvent.click(await screen.findByRole('link', { name: /Abimotto-Team/ }));
     expect(await screen.findByText('Gespeicherte Stimmen: Sonnengelb, Waldgrün')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sonnengelb entfernen' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Waldgrün entfernen' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sonnengelb' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Waldgrün' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('keeps editorial controls out of the student voting queue as its active poll changes', async () => {

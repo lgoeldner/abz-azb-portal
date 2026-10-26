@@ -40,6 +40,7 @@ type VotingParticipation struct {
 type Attachment struct {
 	ID         string `json:"id"`
 	Filename   string `json:"filename"`
+	Caption    string `json:"caption"`
 	MimeType   string `json:"mime_type"`
 	SizeBytes  int64  `json:"size_bytes"`
 	URL        string `json:"url"`
@@ -60,14 +61,15 @@ type Submission struct {
 	Attachments []Attachment `json:"attachments"`
 }
 type Revision struct {
-	ID        string    `json:"id"`
-	Version   int       `json:"version"`
-	ActorName string    `json:"actor_name"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body"`
-	Context   string    `json:"context"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
+	Attachments []Attachment `json:"attachments"`
+	ID          string       `json:"id"`
+	Version     int          `json:"version"`
+	ActorName   string       `json:"actor_name"`
+	Title       string       `json:"title"`
+	Body        string       `json:"body"`
+	Context     string       `json:"context"`
+	Status      string       `json:"status"`
+	CreatedAt   time.Time    `json:"created_at"`
 }
 type Correction struct {
 	ID           string    `json:"id"`

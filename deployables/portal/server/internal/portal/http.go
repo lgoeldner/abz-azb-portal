@@ -236,6 +236,7 @@ func (a *App) routes() {
 	bind("POST /api/v1/submissions/{id}/corrections/{correctionID}/resolve", a.resolveCorrection)
 	bind("POST /api/v1/submissions/{id}/attachments", a.upload)
 	bind("DELETE /api/v1/submissions/{id}/attachments/{attachmentID}", a.deleteAttachment)
+	bind("PATCH /api/v1/submissions/{id}/attachments/{attachmentID}", a.editAttachment)
 	bind("GET /api/v1/attachments/{id}", a.download)
 	bind("GET /api/v1/attachments/{id}/preview", a.download)
 	bind("GET /api/v1/categories/{id}/export", a.exportCategory)

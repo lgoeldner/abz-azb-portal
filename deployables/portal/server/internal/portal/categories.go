@@ -334,6 +334,15 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 		if in.Version != old.Version || ballotKind(old.Kind) && (old.Status != "draft" || old.OpenedAt != nil) {
 			return conflict()
 		}
+		if in.Kind == "photo" && old.Kind != "photo" {
+			var incompatible bool
+			if e = tx.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM submissions s WHERE category_id=$1 AND (body<>'' OR NOT EXISTS(SELECT 1 FROM attachments a WHERE a.submission_id=s.id AND NOT a.deleted)))", id).Scan(&incompatible); e != nil {
+				return e
+			}
+			if incompatible {
+				return bad("Eine Fotosammlung darf nur Beiträge mit Bild und ohne Beitragstext enthalten.")
+			}
+		}
 		if *in.Repeatable != old.Repeatable {
 			return bad("Die Häufigkeit der Beiträge kann nach dem Anlegen nicht geändert werden.")
 		}

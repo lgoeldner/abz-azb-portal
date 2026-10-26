@@ -117,7 +117,7 @@ describe('BallotForm', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Stimme speichern' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Die Stimme konnte nicht gespeichert werden.');
-    expect(screen.getByRole('button', { name: 'Zusammen entfernen' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Zusammen' })).toHaveAttribute('aria-pressed', 'true');
     expect(onSaved).not.toHaveBeenCalled();
   });
 

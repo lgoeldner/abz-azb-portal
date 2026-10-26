@@ -62,7 +62,7 @@ export interface paths {
         /** List authorized submissions */
         get: operations["getSubmissions"];
         put?: never;
-        /** Create idempotent contribution */
+        /** Create idempotent contribution; photo collections require multipart image and create atomically */
         post: operations["postSubmissions"];
         delete?: never;
         options?: never;
@@ -149,11 +149,12 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Remove attachment from own pending contribution */
+        /** Remove attachment from own pending contribution; final image in a photo collection cannot be removed */
         delete: operations["deleteSubmissionsIdAttachmentsAttachmentid"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Edit photo caption on own pending contribution with optimistic concurrency */
+        patch: operations["patchSubmissionsIdAttachmentsAttachmentid"];
         trace?: never;
     };
     "/api/v1/attachments/{id}": {
@@ -524,6 +525,7 @@ export interface components {
             size_bytes: number;
             url: string;
             preview_url: string;
+            caption: string;
         };
         Submission: {
             id: string;
@@ -553,6 +555,7 @@ export interface components {
             status: "pending" | "accepted" | "rejected" | "withdrawn";
             /** Format: date-time */
             created_at: string;
+            attachments: components["schemas"]["Attachment"][];
         };
         Correction: {
             id: string;
@@ -922,6 +925,18 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SubmissionInput"];
+                "multipart/form-data": {
+                    category_id: string;
+                    idempotency_key: string;
+                    /** @description Defaults to filename when omitted */
+                    title?: string;
+                    /** @enum {string} */
+                    body?: "";
+                    context?: string;
+                    /** Format: binary */
+                    file: string;
+                    caption?: string;
+                };
             };
         };
         responses: {
@@ -1098,6 +1113,7 @@ export interface operations {
                     /** Format: binary */
                     file: string;
                     version: number;
+                    caption?: string;
                 };
             };
         };
@@ -1138,6 +1154,47 @@ export interface operations {
             content: {
                 "application/json": {
                     version: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Submission"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    patchSubmissionsIdAttachmentsAttachmentid: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                id: string;
+                attachmentID: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    version: number;
+                    caption: string;
                 };
             };
         };

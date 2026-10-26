@@ -22,9 +22,9 @@ Types (snake_case JSON):
 User { id, name, role: 'student'|'manager'|'admin', admitted: boolean, cohort_member: boolean, category_ids: string[], created_at: string }
 Me { user: User, csrf_token: string }
 Category { id, name, description, kind: 'idea'|'quote'|'memory'|'photo'|'person'|'proposal'|'words', repeatable: boolean, ongoing: boolean, closes_at: string|null, status: 'draft'|'open'|'closed', allow_self_vote: boolean, all_people: boolean, max_choices: number, options: PollOption[], my_option_ids: string[], my_words: string[], my_option_id: string|null, version: number, created_at, opened_at: string|null, ballot_count: number|null, participation: {voted: number, eligible: number}|null }
-Attachment { id, filename, mime_type, size_bytes, url, preview_url }
+Attachment { id, filename, mime_type, size_bytes, url, preview_url, caption }
 Submission { id, category_id, author_id, author_name, title, body, context, status: 'pending'|'accepted'|'rejected'|'withdrawn', version: number, created_at, updated_at, attachments: Attachment[] }
-Revision { id, version, actor_name, title, body, context, status, created_at }
+Revision { id, version, actor_name, title, body, context, status, created_at, attachments: Attachment[] }
 Correction { id, submission_id, author_name, body, created_at, resolved: boolean }
 PollOption { id, label, user_id?: string }
 PollResult { option_id, label, count: number }
@@ -91,3 +91,13 @@ Independent collection controls: all seven classes remain selectable independent
 All editorial roles can read aggregate results, anonymous original-word tallies, and CSV, including managers without a category grant. Students cannot read any of these, even after closing. `GET /categories/{id}/words` returns `WordEntry[] {option_id,word,label,excluded,count,version}` with current original-word counts and no voter identity. `PATCH /categories/{id}/words/{optionID}` accepts `{version,label,excluded}` and requires an admin or the category's manager grant. It checks the moderation version under the category lock, returning 409 on stale updates. Exclusion is reversible; editing an effective label corrects a word, and matching effective labels merge words. Neither action changes the original word or named history. Results count each ballot entry at most once per effective label (one current entry per voter in nonrepeatable polls), omit excluded words and zero counts, and reuse `PollResult[]`.
 
 `GET /categories/{id}/words/export` downloads a UTF-8 CSV of those same effective labels and counts, with formula-safe cells and a fixed download filename. The React word cloud renders text nodes in a responsive weighted layout without HTML insertion or an additional dependency. Student entry uses removable lowercase chips. Redaktion displays toggleable original-word chips and correction/merge controls; managers with read access see the cloud and tallies without mutation controls. Named history remains admin-only.
+
+## Photo collections and choice chips
+
+Choice (`proposal`) ballots render every option as a wrapping toggle chip with a pressed state; selection caps, search thresholds, eligibility, repeatability and ballot privacy are unchanged.
+
+Photo collection creation requires `POST /submissions` multipart with `category_id`, `idempotency_key`, exactly one `file`, optional `title` (defaults to filename), optional `context`, and optional `caption`. The first validated JPEG, PNG or WebP image and its submission commit together; JSON photo creation and nonempty photo `body` are rejected. Same-key/same-payload retries return the existing submission; changed payload conflicts. Additional images use the existing attachment upload endpoint, up to ten images total, each at most 20 MiB/24 megapixels. Photo edits and category changes must retain an image and an empty body; existing legacy empty photo entries remain readable and can receive uploads. A populated non-photo category cannot become photo unless every contribution already meets these constraints. Deleting a photo contribution's final image is rejected.
+
+Every attachment has an optional caption represented as a string (empty by default), limited to 2000 Unicode codepoints. Uploads accept multipart `caption`; `PATCH /submissions/{id}/attachments/{attachmentID}` accepts `{version,caption}` and returns the version-incremented Submission. Only the pending original's author can change captions. Caption edits, uploads and removals preserve attachment metadata in revision snapshots and captions in ZIP export manifests; old revisions have empty attachment snapshots. Migration 009 adds caption storage and revision attachment snapshots without changing existing contributions or files.
+
+Photo collections use a responsive loose album layout with rounded images at natural aspect ratios. Students see only their own images, while Redaktion sees all originals and captions with no editing controls.
