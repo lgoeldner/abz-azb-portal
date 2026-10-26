@@ -62,11 +62,20 @@ test('word portrait chips, private cloud, reversible moderation and CSV at deskt
   }
 
   await page.goto(`/sammlungen/${poll.id}`);
+  const moderationWrites: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'PATCH' && request.url().includes('/words/')) moderationWrites.push(request.url());
+  });
   const words = await (await api(page, `${path}/words`)).json();
   const chaotic = words.find((word: { word: string }) => word.word === 'chaotisch');
   const row = page
     .getByRole('listitem')
-    .filter({ has: page.getByRole('button', { name: 'Begriff chaotisch ausschließen', exact: true }) });
+    .filter({ has: page.getByRole('button', { name: 'Aktionen für Begriff chaotisch', exact: true }) });
+  const chip = row.getByRole('button', { name: 'Aktionen für Begriff chaotisch', exact: true });
+  await expect(row.getByLabel('Bezeichnung bearbeiten', { exact: true })).toHaveCount(0);
+  await chip.click();
+  await expect(row.getByRole('dialog', { name: 'Begriff chaotisch bearbeiten' })).toBeVisible();
+  expect(moderationWrites).toEqual([]);
   await row.getByLabel('Bezeichnung bearbeiten', { exact: true }).fill('CHAOS');
   await row.getByRole('button', { name: 'Umbenennen', exact: true }).click();
   await expect(page.getByRole('list', { name: /^Wortwolke mit/ }).getByRole('listitem')).toHaveCount(1);
@@ -74,10 +83,20 @@ test('word portrait chips, private cloud, reversible moderation and CSV at deskt
     'aria-label',
     'chaos: 1 Nennung',
   );
-  await page.getByRole('button', { name: 'Begriff chaotisch ausschließen', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Begriff chaotisch wiederherstellen', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Begriff chaotisch wiederherstellen', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Begriff chaotisch ausschließen', exact: true })).toBeVisible();
+  const moderationChip = page.getByRole('button', { name: 'Aktionen für Begriff chaotisch', exact: true });
+  await moderationChip.click();
+  await page.getByRole('button', { name: 'Ausschließen', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Begriff chaotisch bearbeiten' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Aktionen für Begriff chaotisch', exact: true }).click();
+  await page.getByRole('button', { name: 'Wiederherstellen', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Begriff chaotisch bearbeiten' })).toHaveCount(0);
+  await moderationChip.click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Begriff chaotisch bearbeiten' })).toHaveCount(0);
+  await expect(moderationChip).toBeFocused();
+  await moderationChip.click();
+  await page.mouse.click(5, 5);
+  await expect(page.getByRole('dialog', { name: 'Begriff chaotisch bearbeiten' })).toHaveCount(0);
   const exported = await api(page, `${path}/words/export`);
   expect(exported.status()).toBe(200);
   expect(await exported.text()).toBe('word,count\nchaos,1\n');
@@ -89,8 +108,12 @@ test('word portrait chips, private cloud, reversible moderation and CSV at deskt
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     await expect(page.getByRole('list', { name: /^Wortwolke mit/ })).toBeVisible();
+    await moderationChip.click();
+    await expect(page.getByRole('dialog', { name: 'Begriff chaotisch bearbeiten' })).toBeVisible();
+    await expect(page.getByLabel('Bezeichnung bearbeiten', { exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: `/tmp/abi-words-${width}.png`, fullPage: true });
+    await page.keyboard.press('Escape');
   }
 
   const managerContext = await browser.newContext();
@@ -99,7 +122,7 @@ test('word portrait chips, private cloud, reversible moderation and CSV at deskt
   await manager.getByRole('button', { name: 'Redaktion', exact: true }).click();
   await manager.goto(`/sammlungen/${poll.id}`);
   await expect(manager.getByRole('list', { name: /^Wortwolke mit/ })).toBeVisible();
-  await expect(manager.getByRole('button', { name: /Begriff .* ausschließen/ })).toHaveCount(0);
+  await expect(manager.getByRole('button', { name: /Aktionen für Begriff/ })).toHaveCount(0);
   expect((await api(manager, `${path}/words/export`)).status()).toBe(200);
   expect(
     (
