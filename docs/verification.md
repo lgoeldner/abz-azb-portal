@@ -138,3 +138,5 @@ Proposal answer options use removable chips. Collection content kind, repeatabil
 - Chrome checks passed for option chips and switches at 320, 390 and 1440 pixels, and for creating a bounded one-off photo collection without changing its content kind.
 - The Docker recovery drill passed with migrations 007 and 008, a bounded one-off photo slot, word moderation, current ballot groups and named history. Restored table signatures and immutable attachment hashes matched. The non-empty-target restore guard also passed; all disposable recovery resources were removed.
 - Independent review found no remaining actionable defects after the word portrait integration.
+
+The final word-chip context-menu integration also passed all 151 frontend tests, Go race tests, typecheck, build, contract checks and repo-map validation. The Go proxy timed out during the final lint invocation; building the same pinned golangci-lint v2.15.0 from the verified local module cache completed lint for both Go services with zero issues. Frontend ESLint and shellcheck passed too.

@@ -293,7 +293,7 @@ describe('words polls', () => {
     expect(
       await within(screen.getByRole('list', { name: 'Eingegebene Wörter' })).findByText('freiheit'),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Begriff freiheit ausschließen' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Aktionen für Begriff freiheit' })).not.toBeInTheDocument();
     const aside = screen.getByRole('complementary');
     expect(aside).not.toContainElement(screen.getByRole('heading', { name: 'Gesamtergebnisse' }));
     expect(aside).not.toContainElement(screen.getByRole('heading', { name: 'Stimmen' }));
@@ -313,9 +313,24 @@ describe('words polls', () => {
     const aside = screen.getByRole('complementary');
     expect(aside).toContainElement(screen.getByRole('heading', { name: 'Sammlung verwalten' }));
     expect(aside).not.toContainElement(screen.getByRole('heading', { name: 'Gesamtergebnisse' }));
-    const labelInput = (await screen.findAllByLabelText('Bezeichnung bearbeiten'))[0];
+    await screen.findByRole('button', { name: 'Aktionen für Begriff freiheit' });
+    const firstTrigger = screen.getByRole('button', { name: 'Aktionen für Begriff freiheit' });
+    const secondTrigger = screen.getByRole('button', { name: 'Aktionen für Begriff liebe' });
+    expect(screen.queryByLabelText('Bezeichnung bearbeiten')).not.toBeInTheDocument();
+    fireEvent.click(firstTrigger);
+    expect(await screen.findByLabelText('Bezeichnung bearbeiten')).toBeInTheDocument();
+    expect(writes).toHaveLength(0);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Begriff freiheit bearbeiten' })).not.toBeInTheDocument();
+    expect(firstTrigger).toHaveFocus();
+    fireEvent.click(firstTrigger);
+    expect(await screen.findByLabelText('Bezeichnung bearbeiten')).toBeInTheDocument();
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole('dialog', { name: 'Begriff freiheit bearbeiten' })).not.toBeInTheDocument();
+    fireEvent.click(firstTrigger);
+    const reopenedInput = await screen.findByLabelText('Bezeichnung bearbeiten');
 
-    fireEvent.change(labelInput, { target: { value: 'LIEBE' } });
+    fireEvent.change(reopenedInput, { target: { value: 'LIEBE' } });
     fireEvent.click(screen.getAllByRole('button', { name: 'Umbenennen' })[0]);
     await waitFor(() =>
       expect(writes).toContainEqual({
@@ -324,7 +339,10 @@ describe('words polls', () => {
         body: { version: 2, label: 'liebe', excluded: false },
       }),
     );
-    fireEvent.click(await screen.findByRole('button', { name: 'Begriff liebe ausschließen' }));
+    fireEvent.mouseDown(secondTrigger);
+    fireEvent.click(secondTrigger);
+    const secondMenu = await screen.findByRole('dialog', { name: 'Begriff liebe bearbeiten' });
+    fireEvent.click(within(secondMenu).getByRole('button', { name: 'Ausschließen' }));
     await waitFor(() =>
       expect(writes).toContainEqual({
         path: `/categories/${poll.id}/words/word-2`,

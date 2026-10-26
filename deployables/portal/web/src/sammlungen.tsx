@@ -1,5 +1,5 @@
 import { Minus, Plus } from 'lucide-react';
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   api,
@@ -1188,6 +1188,13 @@ function WordCloud({ entries, total }: { entries: PollResult[]; total: number })
 function WordEntryRow({ categoryId, entry, editable }: { categoryId: string; entry: WordEntry; editable: boolean }) {
   const action = useAction();
   const [labelValue, setLabelValue] = useState(entry.label);
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLLIElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const close = (restoreFocus = false) => {
+    setOpen(false);
+    if (restoreFocus) trigger.current?.focus();
+  };
   const normalizedLabel = labelValue.trim().toLowerCase().normalize('NFC');
   const validLabel =
     Boolean(normalizedLabel) &&
@@ -1195,6 +1202,26 @@ function WordEntryRow({ categoryId, entry, editable }: { categoryId: string; ent
     !/\p{Cc}/u.test(normalizedLabel) &&
     Array.from(normalizedLabel).length <= 64;
   const canSave = validLabel && normalizedLabel !== entry.label;
+
+  useEffect(() => {
+    if (!open) return;
+    box.current?.querySelector<HTMLInputElement>('input')?.focus();
+    const down = (event: MouseEvent) => {
+      if (!box.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        close(true);
+      }
+    };
+    document.addEventListener('mousedown', down);
+    document.addEventListener('keydown', key);
+    return () => {
+      document.removeEventListener('mousedown', down);
+      document.removeEventListener('keydown', key);
+    };
+  }, [open]);
 
   function updateWord(label: string, excluded: boolean, message: string) {
     return action.run(
@@ -1208,24 +1235,20 @@ function WordEntryRow({ categoryId, entry, editable }: { categoryId: string; ent
   }
 
   return (
-    <li className="min-w-0 rounded-ui bg-white p-3">
+    <li ref={box} className="relative min-w-0 rounded-ui bg-white p-3">
       <div className="flex flex-wrap items-center gap-2">
         {editable ? (
           <button
+            ref={trigger}
             className={`inline-flex max-w-full items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ${entry.excluded ? 'bg-pill text-muted line-through' : 'bg-pop text-ink'}`}
             type="button"
-            disabled={action.busy}
-            aria-pressed={!entry.excluded}
-            aria-label={
-              entry.excluded ? `Begriff ${entry.word} wiederherstellen` : `Begriff ${entry.word} ausschließen`
-            }
-            onClick={() =>
-              void updateWord(
-                entry.label,
-                !entry.excluded,
-                entry.excluded ? 'Begriff wiederhergestellt.' : 'Begriff ausgeschlossen.',
-              )
-            }
+            aria-haspopup="dialog"
+            aria-expanded={open}
+            aria-label={`Aktionen für Begriff ${entry.word}`}
+            onClick={() => {
+              setLabelValue(entry.label);
+              setOpen((value) => !value);
+            }}
           >
             <span className="break-all">{entry.word}</span>
             <span className="shrink-0 text-xs tabular-nums text-muted">{entry.count}</span>
@@ -1240,33 +1263,56 @@ function WordEntryRow({ categoryId, entry, editable }: { categoryId: string; ent
         )}
         {entry.label !== entry.word && <span className="text-sm text-muted">→ {entry.label}</span>}
       </div>
-      {editable && (
-        <div className="mt-3 flex flex-wrap items-end gap-2">
-          <label className="min-w-0 flex-1 text-xs font-semibold text-muted" htmlFor={`word-label-${entry.option_id}`}>
-            Bezeichnung bearbeiten
-            <input
-              className="mt-1.5 block min-h-10 w-full rounded-ui border-2 border-line bg-white px-3 py-1.5 text-sm font-normal text-ink focus:border-ink"
-              id={`word-label-${entry.option_id}`}
-              maxLength={64}
-              value={labelValue}
+      {editable && open && (
+        <div
+          role="dialog"
+          aria-label={`Begriff ${entry.word} bearbeiten`}
+          className="absolute left-0 top-12 z-20 w-full max-w-sm rounded-ui border border-line bg-white p-3 shadow-lg"
+        >
+          <div className="flex flex-wrap items-end gap-2">
+            <label
+              className="w-full min-w-0 text-xs font-semibold text-muted"
+              htmlFor={`word-label-${entry.option_id}`}
+            >
+              Bezeichnung bearbeiten
+              <input
+                className="mt-1.5 block min-h-10 w-full rounded-ui border-2 border-line bg-white px-3 py-1.5 text-sm font-normal text-ink focus:border-ink"
+                id={`word-label-${entry.option_id}`}
+                maxLength={64}
+                value={labelValue}
+                disabled={action.busy}
+                onChange={(event) => setLabelValue(event.target.value)}
+              />
+            </label>
+            <button
+              className="rounded-full bg-ink px-3.5 py-2 text-xs font-bold text-white hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+              type="button"
+              disabled={action.busy || !canSave}
+              onClick={() => void updateWord(normalizedLabel, entry.excluded, 'Begriff aktualisiert.')}
+            >
+              Umbenennen
+            </button>
+            <button
+              className="rounded-full border border-line px-3.5 py-2 text-xs font-bold text-ink hover:bg-pill disabled:opacity-40"
+              type="button"
               disabled={action.busy}
-              onChange={(event) => setLabelValue(event.target.value)}
-            />
-          </label>
-          <button
-            className="rounded-full bg-ink px-3.5 py-2 text-xs font-bold text-white hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
-            type="button"
-            disabled={action.busy || !canSave}
-            onClick={() => void updateWord(normalizedLabel, entry.excluded, 'Begriff aktualisiert.')}
-          >
-            Umbenennen
-          </button>
+              onClick={() =>
+                void updateWord(
+                  entry.label,
+                  !entry.excluded,
+                  entry.excluded ? 'Begriff wiederhergestellt.' : 'Begriff ausgeschlossen.',
+                )
+              }
+            >
+              {entry.excluded ? 'Wiederherstellen' : 'Ausschließen'}
+            </button>
+          </div>
+          {labelValue && !validLabel && (
+            <p className="mt-2 text-xs text-bad" role="alert">
+              Ein Begriff muss ein einzelnes Wort mit höchstens 64 Zeichen sein.
+            </p>
+          )}
         </div>
-      )}
-      {editable && labelValue && !validLabel && (
-        <p className="mt-2 text-xs text-bad" role="alert">
-          Ein Begriff muss ein einzelnes Wort mit höchstens 64 Zeichen sein.
-        </p>
       )}
       {action.feedback}
     </li>
