@@ -728,10 +728,11 @@ describe('navigation by view', () => {
     expect(await within(main).findByRole('heading', { level: 1, name: 'Redaktion' })).toBeInTheDocument();
     if (role === 'admin') expect(within(main).getByRole('region', { name: 'Personen' })).toBeInTheDocument();
     else {
-      expect(await within(main).findByText('4 Beiträge gesammelt, 1 Wahl offen')).toBeInTheDocument();
-      expect(within(main).getByRole('link', { name: /Abimotto/ })).toHaveTextContent(/34\s*Stimmen/);
-      expect(within(main).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent(/3\s*Beiträge/);
-      expect(within(main).getByRole('link', { name: /Zitate/ })).toHaveTextContent(/1\s*Beitrag/);
+      expect(await within(main).findByRole('region', { name: 'Gesammelte Beiträge' })).toHaveTextContent('3');
+      expect(within(main).queryByRole('link', { name: /Abimotto/ })).toBeNull();
+      const tiles = within(within(main).getByRole('region', { name: 'Sammlungen' }));
+      expect(tiles.getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent(/3\s*Beiträge/);
+      expect(tiles.getByRole('link', { name: /Zitate/ })).toHaveTextContent(/0\s*Beiträge/);
     }
     expect(within(aside).getByRole('link', { name: /Abimotto/ })).toHaveTextContent('34 Stimmen');
     expect(within(aside).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('3 Beiträge');
@@ -970,6 +971,161 @@ describe('admin home', () => {
     expect(tile('Personenwahl')).toHaveTextContent('2 Sammlungen');
     expect(tile('Personenwahl')).toHaveTextContent('2 offen 0 beendet');
     expect(tile('Personenwahl')).toHaveAttribute('href', '/sammlungen?klasse=person');
+  });
+});
+
+describe('editor home', () => {
+  const polls = [
+    sammlung('closed', 'Abgeschlossene Wahl', 'person', { status: 'closed' }),
+    sammlung('draft', 'Geplante Wahl', 'proposal', { status: 'draft' }),
+    sammlung('open', 'Laufende Wahl', 'proposal', { participation: { voted: 2, eligible: 4 } }),
+    sammlung('open-2', 'Weitere Wahl', 'person'),
+    sammlung('open-3', 'Dritte Wahl', 'proposal'),
+  ];
+  const categories = [
+    category,
+    ...polls,
+    sammlung('other-poll', 'Fremde Wahl', 'proposal'),
+    sammlung('other-memory', 'Fremde Erinnerungen', 'memory'),
+  ];
+  const contribution = (id: string, category_id: string, day: number) => ({
+    id,
+    category_id,
+    author_id: 'other-author',
+    author_name: 'Andere Person',
+    title: `Geschichte ${id}`,
+    body: '',
+    context: '',
+    status: 'pending',
+    version: 1,
+    attachments: [],
+    created_at: new Date(Date.UTC(2026, 9, day)).toISOString(),
+    updated_at: new Date(Date.UTC(2026, 9, day)).toISOString(),
+  });
+  const submissions = [
+    contribution('old', 'memory', 1),
+    contribution('new', 'memory', 4),
+    contribution('middle', 'memory', 3),
+    contribution('earlier', 'memory', 2),
+    contribution('unassigned', 'other-memory', 5),
+  ];
+  function mountEditor(
+    grants = ['memory', ...polls.map((p) => p.id)],
+    state: { categories?: 'pending' | 'error'; submissions?: 'pending' | 'error'; view?: string } = {},
+  ) {
+    localStorage.clear();
+    if (state.view) localStorage.setItem('view', state.view);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input).replace('/api/v1', '');
+      if (path === '/me')
+        return Response.json({ user: { ...user, role: 'manager', category_ids: grants }, csrf_token: 'csrf' });
+      const endpoint = path === '/categories' ? 'categories' : path === '/submissions' ? 'submissions' : null;
+      if (endpoint) {
+        if (state[endpoint] === 'pending') return new Promise<Response>(() => {});
+        if (state[endpoint] === 'error')
+          return Response.json({ error: { message: 'Nicht verfügbar.' } }, { status: 503 });
+        return Response.json(endpoint === 'categories' ? categories : submissions);
+      }
+      return Response.json([]);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    return fetchMock;
+  }
+
+  it('shows every writable poll across lifecycle states and counts only assigned collections', async () => {
+    const fetchMock = mountEditor();
+    const assigned = await screen.findByRole('region', { name: 'Deine Sammlungen' });
+    await within(assigned).findByRole('link', { name: /Laufende Wahl/ });
+    const links = within(assigned)
+      .getAllByRole('link')
+      .filter((a) => a.getAttribute('href')?.startsWith('/sammlungen/'));
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      '/sammlungen/open',
+      '/sammlungen/open-2',
+      '/sammlungen/open-3',
+      '/sammlungen/draft',
+      '/sammlungen/closed',
+    ]);
+    expect(within(assigned).queryByText('Fremde Wahl')).toBeNull();
+    expect(within(assigned).queryByText('Erinnerungen')).toBeNull();
+    expect(within(assigned).getByRole('progressbar', { name: 'Wahlbeteiligung: Laufende Wahl' })).toHaveAttribute(
+      'aria-valuenow',
+      '50',
+    );
+    const tiles = within(screen.getByRole('region', { name: 'Sammlungen' }));
+    expect(tiles.getAllByRole('listitem')).toHaveLength(6);
+    expect(tiles.getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('1 Sammlung');
+    expect(tiles.getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('4 Beiträge');
+    expect(tiles.getByRole('link', { name: /Vorschlagswahl/ })).toHaveTextContent('3 Sammlungen');
+    const collected = screen.getByRole('region', { name: 'Gesammelte Beiträge' });
+    await waitFor(() => expect(within(collected).getAllByRole('listitem')).toHaveLength(3));
+    const stories = within(collected)
+      .getAllByRole('link')
+      .filter((a) => a.getAttribute('href')?.startsWith('/redaktion/beitraege/'));
+    expect(stories.map((a) => a.getAttribute('href'))).toEqual([
+      '/redaktion/beitraege/new',
+      '/redaktion/beitraege/middle',
+      '/redaktion/beitraege/earlier',
+    ]);
+    expect(within(collected).queryByText('Geschichte unassigned')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Personen' })).toBeNull();
+    expect(document.querySelector('a[href^="/verwaltung/"]')).toBeNull();
+    expect(fetchMock.mock.calls.some(([path]) => String(path).includes('/admin/'))).toBe(false);
+  });
+
+  it('shows assignment empty states while keeping all readable collections accessible', async () => {
+    mountEditor([]);
+    const assigned = await screen.findByRole('region', { name: 'Deine Sammlungen' });
+    await waitFor(() => expect(within(assigned).queryByRole('list')).toBeNull());
+    expect(await within(assigned).findByRole('link', { name: /Neue Sammlung/ })).toHaveAttribute(
+      'href',
+      '/sammlungen?neu',
+    );
+    expect(within(assigned).queryByRole('progressbar')).toBeNull();
+    const collected = screen.getByRole('region', { name: 'Gesammelte Beiträge' });
+    expect(within(collected).queryByRole('list')).toBeNull();
+    const tiles = screen.getByRole('region', { name: 'Sammlungen' });
+    for (const tile of within(tiles).getAllByRole('listitem')) expect(tile).toHaveTextContent('0 Sammlungen');
+    expect(within(screen.getByRole('complementary')).getByRole('link', { name: 'Alle Sammlungen' })).toHaveAttribute(
+      'href',
+      '/sammlungen',
+    );
+  });
+
+  it.each(['categories', 'submissions'] as const)(
+    'keeps %s failures visible instead of showing a collected total of zero',
+    async (endpoint) => {
+      mountEditor(undefined, { [endpoint]: 'error' });
+      const collected = await screen.findByRole('region', { name: 'Gesammelte Beiträge' });
+      expect(await within(collected).findByRole('alert')).toHaveTextContent('Nicht verfügbar.');
+      expect(within(collected).queryByText('0')).toBeNull();
+    },
+  );
+
+  it.each(['categories', 'submissions'] as const)(
+    'waits for %s before showing collected contribution totals',
+    async (endpoint) => {
+      mountEditor(undefined, { [endpoint]: 'pending' });
+      const collected = await screen.findByRole('region', { name: 'Gesammelte Beiträge' });
+      expect(within(collected).queryByRole('list')).toBeNull();
+      expect(within(collected).queryByText('0')).toBeNull();
+    },
+  );
+
+  it('keeps the personal student dashboard when a manager selects Schüler mode', async () => {
+    const fetchMock = mountEditor(undefined, { view: 'schueler' });
+    await screen.findByRole('heading', { level: 1, name: /Hey Mia/ });
+    expect(screen.queryByRole('region', { name: 'Deine Sammlungen' })).toBeNull();
+    expect(screen.getByRole('region', { name: 'Jetzt dran' })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([path]) => String(path).includes('/admin/'))).toBe(false);
+    localStorage.clear();
   });
 });
 

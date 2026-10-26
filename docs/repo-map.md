@@ -105,7 +105,7 @@ route GET /auth/login, GET /auth/callback, POST /auth/logout :: outside /api/v1 
 
 ## Frontend (deployables/portal/web)
 
-file `deployables/portal/web/src/App.tsx` :: router, Layout, nav (StudentNav, EditorNav, AdminNav), StudentHome unanswered card queue (repeatable collections only before any own submission), EditorHome, AdminHome dashboard with one widget per class and latest-collection voting participation bars [routes, nav, dashboard, home, participation]
+file `deployables/portal/web/src/App.tsx` :: router, Layout, nav (StudentNav, EditorNav, AdminNav), StudentHome unanswered card queue (repeatable collections only before any own submission), shared EditorialHome dashboard with class widgets, admin admissions, manager writable polls and recent assigned contributions, voting participation bars [routes, nav, dashboard, home, participation, grants]
 file `deployables/portal/web/src/sammlungen.tsx` :: Shared Sammlungen workspace (Fortlaufend section, status groups, ?klasse filter), all-kind editor creation, grant-controlled definition edits and poll hiding, admin-confirmed poll deletion, admin manager assignments in SammlungForm, SammlungDetail, all-submission editorial collection reader, read-only ballot options/results and an inline student voting stack [sammlung, poll, vote, form]
 file `deployables/portal/web/src/PeoplePicker.tsx` :: shared candidate/choice voting with removable chips, selection limits, and search only for 10+ options [person, picker, chips]
 file `deployables/portal/web/src/pages.tsx` :: Contributions, NewContribution, author detail and read-only editorial reader with annotations, all-submissions list, NotFound [beitrag, redaktion, export]
@@ -123,7 +123,7 @@ file `deployables/portal/web/src/PollStack.css` :: responsive layered cards, dir
 test `deployables/portal/web/src/PollStack.test.tsx` :: inline save/advance, failed-save preservation, draft retention, bounded navigation and active-card removal/reorder [poll, stack, ui]
 file `deployables/portal/web/src/DevDebug.tsx` :: dev-only debug overlay [debug]
 test `deployables/portal/web/src/editorial.test.tsx` :: editorial readers, annotation grants, mode changes and collection defaults [test, redaktion, permissions]
-test `deployables/portal/web/src/App.test.tsx` :: component tests (vitest), unanswered poll and first-contribution queues, dashboard voting participation against admitted cohort members [test, ui, dashboard, participation]
+test `deployables/portal/web/src/App.test.tsx` :: component tests (vitest), unanswered poll and first-contribution queues, dashboard voting participation against admitted cohort members, manager assignment scoping and loading/error states [test, ui, dashboard, participation, grants]
 test `deployables/portal/web/src/PeoplePicker.test.tsx` :: search, chip placement/removal, limits and disabled candidates [person, picker]
 test `deployables/portal/web/src/sammlungen.test.tsx` :: poll defaults, candidate mode, count stepper, person/proposal multi-vote behavior, hide/delete permissions, saved-choice revisits and editorial isolation from the student stack [poll, ui]
 test `deployables/portal/web/e2e/portal.spec.ts` :: Playwright journeys against a running seeded app [e2e]
