@@ -163,6 +163,120 @@
 body:has([data-workspace='redaktion']) {
   background: #f4f5f6;
 }
+
+/* Quote submissions use the title as their attribution and keep the quotation itself in the foreground. */
+.quote-submission-form {
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+}
+.quote-fields {
+  display: grid;
+  gap: 1.25rem;
+}
+.quote-writing-label .quote-paper {
+  margin-top: 0.6rem;
+}
+.quote-paper {
+  position: relative;
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-line) 72%, white);
+  border-radius: 12px;
+  background: white;
+}
+.quote-textarea {
+  display: block;
+  width: 100%;
+  min-height: 18rem;
+  resize: vertical;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  padding: 3.25rem 3.75rem;
+  color: var(--color-ink);
+  font: 500 clamp(2rem, 4vw, 2.5rem) / 1.35 var(--font-sans);
+  letter-spacing: -0.035em;
+}
+.quote-textarea::placeholder {
+  color: var(--color-muted);
+  opacity: 1;
+}
+.quote-textarea:focus-visible {
+  outline: 3px solid var(--color-ink);
+  outline-offset: -4px;
+}
+.quote-mark {
+  position: absolute;
+  z-index: 1;
+  color: var(--color-ink);
+  font-family: Georgia, serif;
+  font-size: 6rem;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+.quote-mark-open {
+  bottom: 1.25rem;
+  left: 0.65rem;
+}
+.quote-mark-close {
+  top: 0.5rem;
+  right: 0.75rem;
+}
+.quote-attribution-label {
+  max-width: 38rem;
+}
+.quote-attribution {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  background: white;
+  padding: 0.65rem 0.8rem;
+  color: var(--color-ink);
+  font: 600 1.2rem / 1.4 var(--font-sans);
+}
+.quote-attribution:not(:placeholder-shown):not(:focus) {
+  border-color: transparent;
+  background: transparent;
+}
+.quote-attribution:focus-visible {
+  outline: 3px solid var(--color-ink);
+  outline-offset: 2px;
+}
+.quote-support {
+  padding: 1rem 1.25rem;
+}
+.quote-support h3 {
+  font-size: 1rem;
+}
+.quote-support hr,
+.quote-support small {
+  display: none;
+}
+
+@media (max-width: 650px) {
+  .quote-submission-form {
+    padding: 1rem;
+  }
+  .quote-textarea {
+    min-height: 16rem;
+    padding: 3.4rem 1.15rem;
+    font-size: clamp(1.625rem, 7vw, 1.875rem);
+  }
+  .quote-mark {
+    font-size: 4.75rem;
+  }
+  .quote-mark-open {
+    bottom: 1rem;
+    left: 0.35rem;
+  }
+  .quote-mark-close {
+    top: 0.4rem;
+    right: 0.45rem;
+  }
+}
+
 [data-workspace='redaktion'] .text-pop {
   color: var(--color-ink);
 }

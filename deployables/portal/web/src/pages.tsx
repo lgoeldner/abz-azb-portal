@@ -132,6 +132,7 @@ export function NewContribution() {
   const [images, setImages] = useState<SelectedImage[]>([]);
   const category = categories.data?.find((c) => c.id === params.get('kategorie') && submittable(c));
   const isPhoto = category?.kind === 'photo';
+  const isQuote = category?.kind === 'quote';
   const savedDestination = saved && isPhoto ? `/sammlungen/${saved.category_id}` : `/beitraege/${saved?.id}`;
   const backDestination = isPhoto ? `/sammlungen/${category.id}` : '/beitraege';
   const own = submissions.data?.filter((s) => s.author_id === user.id) ?? [];
@@ -238,8 +239,14 @@ export function NewContribution() {
       ) : !category ? (
         <Navigate to="/" replace />
       ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start">
-          <form key={category.id} className={`${panel} min-w-0 space-y-5`} onSubmit={submit}>
+        <div
+          className={`grid grid-cols-1 gap-6 ${isQuote ? '' : 'lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start'}`}
+        >
+          <form
+            key={category.id}
+            className={`${panel} min-w-0 space-y-5 ${isQuote ? 'quote-submission-form' : ''}`}
+            onSubmit={submit}
+          >
             <label className={label}>
               Sammlung
               <select
@@ -260,27 +267,65 @@ export function NewContribution() {
               </select>
             </label>
             {!isPhoto && (
-              <fieldset className="min-w-0 space-y-5" disabled={action.busy || !!saved}>
-                <label className={label}>
-                  Titel
-                  <input
-                    className={field}
-                    name="title"
-                    placeholder="Gib deinem Beitrag einen Namen"
-                    maxLength={200}
-                    required
-                  />
-                </label>
-                <label className={label}>
-                  Dein Beitrag
-                  <textarea
-                    className={field}
-                    name="body"
-                    rows={7}
-                    placeholder="Was soll die Redaktion dazu wissen?"
-                    maxLength={20000}
-                  />
-                </label>
+              <fieldset
+                className={`min-w-0 ${isQuote ? 'quote-fields' : 'space-y-5'}`}
+                disabled={action.busy || !!saved}
+              >
+                {isQuote ? (
+                  <>
+                    <label className={`${label} quote-writing-label`}>
+                      Dein Zitat
+                      <span className="quote-paper">
+                        <span className="quote-mark quote-mark-open" aria-hidden="true">
+                          „
+                        </span>
+                        <textarea
+                          className="quote-textarea"
+                          name="body"
+                          rows={4}
+                          placeholder="Dieser eine Satz …"
+                          maxLength={20000}
+                        />
+                        <span className="quote-mark quote-mark-close" aria-hidden="true">
+                          “
+                        </span>
+                      </span>
+                    </label>
+                    <label className={`${label} quote-attribution-label`}>
+                      Zitat von
+                      <input
+                        className="quote-attribution"
+                        name="title"
+                        placeholder="Name oder Quelle"
+                        maxLength={200}
+                        required
+                      />
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    <label className={label}>
+                      Titel
+                      <input
+                        className={field}
+                        name="title"
+                        placeholder="Gib deinem Beitrag einen Namen"
+                        maxLength={200}
+                        required
+                      />
+                    </label>
+                    <label className={label}>
+                      Dein Beitrag
+                      <textarea
+                        className={field}
+                        name="body"
+                        rows={7}
+                        placeholder="Was soll die Redaktion dazu wissen?"
+                        maxLength={20000}
+                      />
+                    </label>
+                  </>
+                )}
                 <label className={label}>
                   Kontext & Hinweise <small className="font-normal text-muted">optional</small>
                   <textarea
@@ -386,7 +431,7 @@ export function NewContribution() {
               </button>
             </div>
           </form>
-          <aside className="rounded-ui bg-chrome p-5 text-sm text-muted sm:p-6">
+          <aside className={`rounded-ui bg-chrome p-5 text-sm text-muted sm:p-6 ${isQuote ? 'quote-support' : ''}`}>
             <h3 className={heading}>
               Kleine Momente.
               <br />
