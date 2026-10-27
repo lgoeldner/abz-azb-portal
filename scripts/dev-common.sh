@@ -18,7 +18,8 @@ export SESSION_SECRET=development-only-secret-change-for-production
 
 start_dev_services() {
   local services=(db auth-mock portal frontend caddy)
-  local compose=(docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml)
+  # Shell env beats --env-file; drop the host-dev PUBLIC_URL so .env.dev reaches the containers.
+  local compose=(env -u PUBLIC_URL docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml)
   if [[ "${BACKUP_DEV:-false}" == true ]]; then
     services+=(backup)
   else
