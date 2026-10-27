@@ -102,6 +102,10 @@ function installApi(
     if (path === '/me') return Response.json({ user: student, csrf_token: 'csrf' });
     if (path === '/categories') return Response.json(collections);
     if (path === '/submissions' && method === 'GET') return Response.json(allSubmissions);
+    if (path === '/submissions' && method === 'POST') {
+      writes.push({ path, method, body: JSON.parse(String(init?.body)) });
+      return Response.json(item, { status: 201 });
+    }
     if (path === `/submissions/${item.id}`) return Response.json(item);
     if (path === `/submissions/${item.id}/revisions`) return Response.json([revision]);
     if (path === `/submissions/${item.id}/corrections` && method === 'GET') {
@@ -158,21 +162,20 @@ describe('submission collections independent of repeatability', () => {
     expect(await screen.findByRole('heading', { name: existing.title })).toBeInTheDocument();
   });
 
-  it('offers all submission kinds, omits occupied one-off targets, and excludes ballot kinds', async () => {
-    const oneoffMemory: Category = { ...category, repeatable: false };
-    const occupiedPhoto: Submission = {
-      ...submission,
-      id: 'occupied-photo',
-      category_id: photo.id,
-    };
-    installApi([], occupiedPhoto, [oneoffMemory, ideas, photo, person], [occupiedPhoto]);
-    renderPortal(`/beitraege/neu?kategorie=${oneoffMemory.id}`, student, 'schueler');
+  it.each([true, false])('locks new submissions to the linked collection (repeatable: %s)', async (repeatable) => {
+    const selected: Category = { ...category, repeatable };
+    const { writes } = installApi([], submission, [ideas, selected, photo, person], []);
+    renderPortal(`/beitraege/neu?kategorie=${selected.id}`, student, 'schueler');
 
-    const select = await screen.findByLabelText('Sammlung');
-    expect(Array.from((select as HTMLSelectElement).options).map((option) => option.textContent)).toEqual([
-      'Erinnerungen',
-      'Ideen',
-    ]);
+    const title = await screen.findByLabelText('Titel');
+    expect(screen.getByRole('heading', { name: `Beitrag für „${selected.name}“` })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Sammlung')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    fireEvent.change(title, { target: { value: 'Unser Ausflug' } });
+    fireEvent.submit(title.closest('form')!);
+
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toMatchObject({ path: '/submissions', method: 'POST', body: { category_id: selected.id } });
   });
 
   it('keeps the current one-off category and offers only unfilled submission targets while editing', async () => {

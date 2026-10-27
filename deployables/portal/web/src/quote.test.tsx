@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Category, Me, Submission } from './api';
@@ -135,7 +135,7 @@ describe('quote contribution form', () => {
     expect(calls[1].payload).toEqual(calls[0].payload);
   });
 
-  it('switches back to the generic contribution fields for non-quote collections', async () => {
+  it.each(['memories', 'photos'])('uses the linked non-quote collection: %s', async (id) => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
@@ -151,16 +151,15 @@ describe('quote contribution form', () => {
       }),
     );
 
-    renderNewContribution('/beitraege/neu?kategorie=quotes');
-    await screen.findByPlaceholderText('Name oder Quelle');
-    fireEvent.change(screen.getByLabelText('Sammlung'), { target: { value: 'memories' } });
-
-    expect(await screen.findByLabelText('Titel')).toBeInTheDocument();
-    expect(screen.getByLabelText('Dein Beitrag')).toBeInTheDocument();
-    expect(screen.getByLabelText(/Kontext & Hinweise/)).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByPlaceholderText('Name oder Quelle')).not.toBeInTheDocument());
-    fireEvent.change(screen.getByLabelText('Sammlung'), { target: { value: 'photos' } });
-    expect(await screen.findByLabelText(/Mindestens ein Foto/)).toBeInTheDocument();
+    renderNewContribution(`/beitraege/neu?kategorie=${id}`);
+    if (id === 'memories') {
+      expect(await screen.findByLabelText('Titel')).toBeInTheDocument();
+      expect(screen.getByLabelText('Dein Beitrag')).toBeInTheDocument();
+      expect(screen.getByLabelText(/Kontext & Hinweise/)).toBeInTheDocument();
+    } else {
+      expect(await screen.findByLabelText(/Mindestens ein Foto/)).toBeInTheDocument();
+    }
+    expect(screen.queryByLabelText('Sammlung')).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText('Name oder Quelle')).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Dein Zitat/)).not.toBeInTheDocument();
   });

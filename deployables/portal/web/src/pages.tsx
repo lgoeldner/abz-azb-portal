@@ -124,7 +124,7 @@ export function NewContribution() {
   const { user } = useSession();
   const categories = useData<Category[]>('/categories');
   const submissions = useData<Submission[]>('/submissions');
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const navigate = useNavigate();
   const action = useAction();
   const key = useRef(crypto.randomUUID());
@@ -138,15 +138,10 @@ export function NewContribution() {
   const own = submissions.data?.filter((s) => s.author_id === user.id) ?? [];
   const existing =
     !saved && category && !category.repeatable ? own.find((s) => s.category_id === category.id) : undefined;
-  const choices = (categories.data ?? []).filter(
-    (c) =>
-      c.status === 'open' &&
-      submittable(c) &&
-      (c.id === category?.id || c.repeatable || !own.some((s) => s.category_id === c.id)),
-  );
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!category) return;
     const data = new FormData(e.currentTarget);
     await action.run(async () => {
       const files = images.map((image) => image.file);
@@ -163,7 +158,7 @@ export function NewContribution() {
         const first = remaining.shift();
         if (!first) throw new Error('Bitte wähle mindestens ein Foto aus.');
         const create = new FormData();
-        create.set('category_id', String(data.get('category_id') ?? category!.id));
+        create.set('category_id', category.id);
         create.set('idempotency_key', key.current);
         create.set('file', first.file);
         if (first.caption.trim()) create.set('caption', first.caption);
@@ -175,7 +170,7 @@ export function NewContribution() {
           '/submissions',
           json('POST', {
             idempotency_key: key.current,
-            category_id: data.get('category_id'),
+            category_id: category.id,
             title: data.get('title'),
             body: data.get('body'),
             context: data.get('context'),
@@ -247,25 +242,6 @@ export function NewContribution() {
             className={`${panel} min-w-0 space-y-5 ${isQuote ? 'quote-submission-form' : ''}`}
             onSubmit={submit}
           >
-            <label className={label}>
-              Sammlung
-              <select
-                className={field}
-                name="category_id"
-                value={category.id}
-                disabled={action.busy || !!saved}
-                onChange={(e) => {
-                  setImages([]);
-                  setParams({ kategorie: e.target.value });
-                }}
-              >
-                {choices.map((choice) => (
-                  <option key={choice.id} value={choice.id}>
-                    {choice.name}
-                  </option>
-                ))}
-              </select>
-            </label>
             {!isPhoto && (
               <fieldset
                 className={`min-w-0 ${isQuote ? 'quote-fields' : 'space-y-5'}`}

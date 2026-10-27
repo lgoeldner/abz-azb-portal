@@ -193,6 +193,7 @@ describe('photo contributions', () => {
       </Routes>,
     );
     const input = await screen.findByLabelText(/Mindestens ein Foto/);
+    expect(screen.queryByLabelText('Sammlung')).not.toBeInTheDocument();
     fireEvent.change(input, { target: { files: [firstFile, secondFile] } });
     const captions = screen.getAllByLabelText('Bildtext optional');
     fireEvent.change(captions[0], { target: { value: 'Im Hof nach der sechsten Stunde' } });
@@ -205,6 +206,7 @@ describe('photo contributions', () => {
     expect(createCall.body).toBeInstanceOf(FormData);
     const createBody = createCall.body as FormData;
     expect((createBody.get('file') as File).name).toBe(firstFile.name);
+    expect(createBody.get('category_id')).toBe('photos');
     expect(createBody.get('caption')).toBe('Im Hof nach der sechsten Stunde');
     expect(createBody.get('title')).toBeNull();
     expect(createBody.get('body')).toBeNull();
