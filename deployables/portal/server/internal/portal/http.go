@@ -221,6 +221,7 @@ func (a *App) routes() {
 		jsonOut(w, 200, map[string]any{"user": u.User, "csrf_token": u.CSRF})
 		return nil
 	})
+	bind("GET /api/v1/me/ballots", a.myBallots)
 	bind("GET /api/v1/categories", a.listCategories)
 	bind("POST /api/v1/categories", a.writeCategory)
 	bind("PATCH /api/v1/categories/{id}", a.writeCategory)

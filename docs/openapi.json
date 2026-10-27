@@ -39,6 +39,37 @@
         }
       }
     },
+    "/api/v1/me/ballots": {
+      "get": {
+        "summary": "Current viewer’s own poll submissions, one per current ballot entry including repeatable and hidden collections; never named history or other voters",
+        "operationId": "getMeBallots",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MyBallot"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/categories": {
       "get": {
         "summary": "List collections (students: no drafts; ballot_count and participation editors only)",
@@ -1783,6 +1814,52 @@
           }
         },
         "required": ["user", "csrf_token"],
+        "additionalProperties": false
+      },
+      "MyBallot": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Ballot entry key, grouped across all selected options or words."
+          },
+          "category_id": {
+            "type": "string"
+          },
+          "category_name": {
+            "type": "string"
+          },
+          "category_kind": {
+            "type": "string",
+            "enum": [
+              "person",
+              "proposal",
+              "words"
+            ]
+          },
+          "category_status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "open",
+              "closed"
+            ],
+            "description": "Effective collection status; draft entries are displayed without a collection link."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Latest timestamp of this current ballot entry."
+          }
+        },
+        "required": [
+          "id",
+          "category_id",
+          "category_name",
+          "category_kind",
+          "category_status",
+          "created_at"
+        ],
         "additionalProperties": false
       },
       "Category": {

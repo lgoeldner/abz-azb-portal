@@ -10,6 +10,7 @@ import {
   statusLabels,
   type Category,
   type Correction,
+  type MyBallot,
   type Revision,
   type Submission,
 } from './api';
@@ -61,27 +62,35 @@ export function Contributions() {
   const { user } = useSession();
   const categories = useData<Category[]>('/categories');
   const submissions = useData<Submission[]>('/submissions');
+  const ballots = useData<MyBallot[]>('/me/ballots');
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
+  const needle = search.toLowerCase();
   const own =
     submissions.data?.filter(
       (s) =>
         s.author_id === user.id &&
-        (!status || s.status === status) &&
+        (!status || (status !== 'voted' && s.status === status)) &&
         `${s.title} ${s.body} ${categories.data?.find((c) => c.id === s.category_id)?.name ?? ''} ${s.attachments.map((a) => `${a.filename} ${a.caption}`).join(' ')}`
           .toLowerCase()
-          .includes(search.toLowerCase()),
+          .includes(needle),
+    ) ?? [];
+  const ownBallots =
+    ballots.data?.filter(
+      (ballot) => (status === '' || status === 'voted') && ballot.category_name.toLowerCase().includes(needle),
     ) ?? [];
   return (
     <>
-      <PageHead title="Meine Beiträge">Deine Beiträge in den Sammlungen des Jahrgangs.</PageHead>
+      <PageHead title="Meine Beiträge">
+        Deine Beiträge und abgegebenen Stimmen in den Sammlungen des Jahrgangs.
+      </PageHead>
       <div className="mb-6 flex flex-wrap items-end gap-3">
         <label className={`${label} min-w-0 w-full sm:flex-1`}>
           Suchen
           <input
             type="search"
             className={field}
-            placeholder="Geschichte finden …"
+            placeholder="Beitrag oder Sammlung finden …"
             maxLength={200}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -91,6 +100,7 @@ export function Contributions() {
           Status
           <select className={field} value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="">Alle Status</option>
+            <option value="voted">Abgestimmt</option>
             {(['pending', 'accepted', 'rejected', 'withdrawn'] as const).map((s) => (
               <option key={s} value={s}>
                 {statusLabels[s]}
@@ -99,18 +109,19 @@ export function Contributions() {
           </select>
         </label>
       </div>
-      {submissions.isPending || categories.isPending ? (
+      {submissions.isPending || categories.isPending || ballots.isPending ? (
         <Loading />
-      ) : submissions.error || categories.error ? (
+      ) : submissions.error || categories.error || ballots.error ? (
         <Failure
-          error={(submissions.error ?? categories.error)!}
+          error={(submissions.error ?? categories.error ?? ballots.error)!}
           retry={() => {
             submissions.refetch();
             categories.refetch();
+            ballots.refetch();
           }}
         />
-      ) : own.length ? (
-        <SubmissionList items={own} categories={categories.data ?? []} />
+      ) : own.length || ownBallots.length ? (
+        <SubmissionList items={own} categories={categories.data ?? []} ballots={ownBallots} />
       ) : (
         <Empty>
           Noch keine Beiträge. <Link to="/">Wähle auf der Startseite eine Sammlung aus.</Link>

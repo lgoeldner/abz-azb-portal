@@ -59,6 +59,8 @@ file `deployables/portal/server/internal/portal/http.go` :: App, router (all `bi
 file `deployables/portal/server/internal/portal/types.go` :: JSON types: User, Category, Submission, Revision, Correction, PollOption, PollResult, BallotAudit, AuditEvent [types, json]
 file `deployables/portal/server/internal/portal/categories.go` :: Category = Sammlung: kinds, repeatable vs single-answer, list/create/patch/status, hide with preserved ballots, admin poll deletion and grant cleanup, ballot fill and editor-only eligible voting participation [sammlung, category, poll, lifecycle, draft, participation]
 file `deployables/portal/server/internal/portal/words.go` :: normalized word ballots helpers, editorial anonymous moderation, distinct merged counts and formula-safe CSV export [words, moderation, cloud, export]
+file `deployables/portal/server/internal/portal/my_ballots.go` :: private own poll-entry summaries grouped by ballot key across option/word choices, including hidden and closed collections [ballot, submissions, privacy]
+test `deployables/portal/server/internal/portal/my_ballots_test.go` :: own-entry isolation across roles, grouping, repeatable entries/retries, replacements and lifecycle states [ballot, invariant, privacy]
 file `deployables/portal/server/internal/portal/polls.go` :: vote (row lock, atomic bounded multi-selection), results, grouped ballot audit, roster [ballot, vote, results, roster]
 file `deployables/portal/server/internal/portal/submissions.go` :: author-owned submission CRUD, author search, status transitions, revisions, editorial annotations/correction requests [beitrag, submission, revision, correction]
 file `deployables/portal/server/internal/portal/files.go` :: uploads, previews, downloads, ZIP export, disk usage [attachment, upload, export, zip]
@@ -93,6 +95,7 @@ file `deployables/auth-mock/users.yaml` :: dev identities; fixture slugs alex_ad
 ## API routes (prefix /api/v1, handlers in internal/portal)
 
 route GET /me :: session user + csrf_token (http.go)
+route GET /me/ballots :: current viewer’s own current poll entries only; repeatable entries separate, selections grouped, no named history (my_ballots.go) [ballot, submissions, privacy]
 route GET|POST /categories, PATCH /categories/{id} :: list/create/edit Sammlungen (categories.go) [sammlung]
 route POST /categories/{id}/status :: granted-editor open/close/hide, draft->open->closed and open/closed->draft with votes preserved (categories.go) [lifecycle, hidden]
 route DELETE /categories/{id} :: admin-only versioned poll deletion, including ballots/history/options and manager grants (categories.go) [poll, delete, admin]
@@ -113,12 +116,12 @@ route GET /auth/login, GET /auth/callback, POST /auth/logout :: outside /api/v1 
 ## Frontend (deployables/portal/web)
 file `deployables/portal/web/vite.config.ts` :: Vite dev server allows OrbStack proxy host; localhost at 5173 with free-port fallback [frontend, dev, port]
 
-file `deployables/portal/web/src/App.tsx` :: router, Layout, nav (StudentNav, EditorNav, AdminNav), StudentHome unanswered voting stack and separate repeatable card section (only before any own submission), shared EditorialHome dashboard with class widgets, admin admissions, manager writable polls and recent assigned contributions, voting participation bars [routes, nav, dashboard, home, participation, grants]
+file `deployables/portal/web/src/App.tsx` :: router, Layout, nav (StudentNav, EditorNav, AdminNav), StudentHome unanswered voting stack and separate repeatable card section (only before any own submission), unified own contribution/poll list capped at ten rows with full-list link, shared EditorialHome dashboard with class widgets, admin admissions, manager writable polls and recent assigned contributions, voting participation bars [routes, nav, dashboard, home, participation, grants]
 file `deployables/portal/web/src/sammlungen.tsx` :: Shared Sammlungen workspace (Fortlaufend section, status groups, ?klasse filter), editor creation with independent Wiederholbar/Fortlaufend switches and required bounded end date with German calendar/time picker and 1d/1w/4w shortcuts, editable published ballot deadlines, proposal option chips and person-only self-vote switch, grant-controlled definition edits and poll hiding, admin-confirmed poll deletion, admin manager assignments in SammlungForm, SammlungDetail, all-submission editorial collection reader, unified private photo gallery with in-place captions and detail/history links, read-only ballot options/results with word cloud/CSV and anonymous word moderation with chip context menus, and an inline student voting stack [sammlung, poll, vote, form]
 file `deployables/portal/web/src/PeoplePicker.tsx` :: shared candidate/choice voting with removable chips, selection limits, and search only for 10+ options [person, picker, chips]
-file `deployables/portal/web/src/pages.tsx` :: Contributions, NewContribution locked to the linked collection without a picker, with paper-style quote composer, inline attribution and optional context, photo-first multi-image creation and one-time collection appends with per-image captions and collection return, author detail photo album and caption editing, read-only editorial reader with annotations, all-submissions list, NotFound [beitrag, redaktion, export]
+file `deployables/portal/web/src/pages.tsx` :: Contributions unified own text/photo/poll list with search and status filters, NewContribution locked to the linked collection without a picker, with paper-style quote composer, inline attribution and optional context, photo-first multi-image creation and one-time collection appends with per-image captions and collection return, author detail photo album and caption editing, read-only editorial reader with annotations, all-submissions list, NotFound [beitrag, redaktion, export]
 file `deployables/portal/web/src/admin.tsx` :: Verwaltung: People, ActivityLog, audit action labels [verwaltung, admin, personen, protokoll]
-file `deployables/portal/web/src/ui.tsx` :: shared workspace view context, editorial/author submission links, author photo grouping with counts before row limits, and UI: kindIcon/kindLabel (seven classes), Badge, PageHead, Failure, Loading, Empty, SubmissionList, plural, newestOpened [components, icons]
+file `deployables/portal/web/src/ui.tsx` :: shared workspace view context, editorial/author submission links, author photo grouping with counts before row limits, own poll-entry rows merged by date before row limits, and UI: kindIcon/kindLabel (seven classes), Badge, PageHead, Failure, Loading, Empty, SubmissionList, plural, newestOpened [components, icons]
 file `deployables/portal/web/src/styles.css` :: student brand tokens, responsive quote paper and attribution field states, and cobalt-accented Redaktion reading-desk theme including Verwaltung, rounded list hover surfaces and distinct chip hover states [styles, theme, redaktion]
 file `deployables/portal/web/public/favicon.svg` :: tab icon, the sidebar Mark with fixed colors; fonts are self-hosted via @fontsource-variable (imported in main.tsx), never Google Fonts [favicon, fonts, gdpr]
 file `deployables/portal/web/src/api.ts` :: fetch wrapper, CSRF header, shared user PATCH payload [api, fetch, grants]
@@ -131,6 +134,7 @@ file `deployables/portal/web/src/PollStack.css` :: responsive layered cards, dir
 test `deployables/portal/web/src/PollStack.test.tsx` :: inline save/advance, failed-save preservation, draft retention, bounded navigation and active-card removal/reorder [poll, stack, ui]
 file `deployables/portal/web/src/DevDebug.tsx` :: dev-only debug overlay [debug]
 test `deployables/portal/web/src/editorial.test.tsx` :: editorial readers, annotation grants, mode changes and collection-locked submission creation [test, redaktion, permissions]
+test `deployables/portal/web/src/own-contributions.test.tsx` :: unified student text/photo/poll lists, newest-ten dashboard limit, unlimited full list, own-entry filtering, search/status and ballot load failures [test, ui, ballot, contributions]
 test `deployables/portal/web/src/App.test.tsx` :: component tests (vitest), unanswered poll and first-contribution queues, dashboard voting participation against admitted cohort members, manager assignment scoping and loading/error states [test, ui, dashboard, participation, grants]
 test `deployables/portal/web/src/PeoplePicker.test.tsx` :: search, chip placement/removal, limits and disabled candidates [person, picker]
 test `deployables/portal/web/src/sammlungen.test.tsx` :: poll defaults, independent repeatability switches, proposal option authoring chips, candidate mode, count stepper, person/proposal multi-vote behavior, hide/delete permissions, saved-choice revisits, word-chip context menus and editorial isolation from the student stack [poll, ui]
@@ -142,7 +146,7 @@ test `deployables/portal/web/e2e/responsive.spec.ts` :: phone-width layout check
 
 page / :: Overview (StudentHome/EditorHome/AdminHome by role and view) [home]
 page /sammlungen, /sammlungen/:id :: Sammlungen list and detail; ?klasse=<kind>, ?neu [sammlung]
-page /beitraege, /beitraege/neu, /beitraege/:id :: own submissions [beitrag]
+page /beitraege, /beitraege/neu, /beitraege/:id :: own submissions; /beitraege combines all own text/photo/poll entries [beitrag, ballot]
 page /redaktion, /redaktion/beitraege/:id :: all collected submissions, ?sammlung= filter [redaktion]
 page /verwaltung/personen, /verwaltung/protokoll :: admin-only within Redaktion; direct bookmarks activate editorial mode and theme [verwaltung]
 page /abstimmungen[/:id], /verwaltung/sammlungen, /verwaltung/rubriken, /admin :: redirects to the new routes [redirect, legacy]

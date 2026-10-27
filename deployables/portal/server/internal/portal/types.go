@@ -105,6 +105,14 @@ type BallotAudit struct {
 	OptionLabel string    `json:"option_label"`
 	CreatedAt   time.Time `json:"created_at"`
 }
+type MyBallot struct {
+	ID             string    `json:"id"`
+	CategoryID     string    `json:"category_id"`
+	CategoryName   string    `json:"category_name"`
+	CategoryKind   string    `json:"category_kind"`
+	CategoryStatus string    `json:"category_status"`
+	CreatedAt      time.Time `json:"created_at"`
+}
 type AuditEvent struct {
 	ID        string    `json:"id"`
 	ActorName string    `json:"actor_name"`

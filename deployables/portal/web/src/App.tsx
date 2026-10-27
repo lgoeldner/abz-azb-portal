@@ -27,6 +27,7 @@ import {
   setCsrf,
   type Category,
   type Me,
+  type MyBallot,
   type Submission,
   type User,
 } from './api';
@@ -740,13 +741,12 @@ function StudentHome() {
   const { user } = useSession();
   const categories = useData<Category[]>('/categories');
   const submissions = useData<Submission[]>('/submissions');
+  const myBallots = useData<MyBallot[]>('/me/ballots');
   const first = user.name.split(' ')[0];
   const ballots = (categories.data ?? []).filter((c) => isBallot(c.kind));
   const todoBallots = ballots.filter((c) => c.status === 'open' && (!hasVoted(c) || c.repeatable)).sort(newestOpened);
-  const done = ballots
-    .filter((c) => c.status === 'closed' || (c.status === 'open' && hasVoted(c) && !c.repeatable))
-    .sort(newestOpened);
   const own = (submissions.data ?? []).filter((s) => s.author_id === user.id);
+  const ownBallots = myBallots.data ?? [];
   const firstContributions =
     submissions.data && !submissions.error
       ? (categories.data ?? []).filter(
@@ -841,45 +841,31 @@ function StudentHome() {
           <h2 id="home-beitraege" className={heading}>
             Deine Beiträge
           </h2>
-          {own.length > 0 && (
+          {(own.length > 0 || ownBallots.length > 0) && (
             <Link to="/beitraege" className={btn.text}>
               Alle ansehen <Arrow />
             </Link>
           )}
         </div>
         <div className="mt-4">
-          {submissions.isPending ? (
+          {submissions.isPending || categories.isPending || myBallots.isPending ? (
             <Loading />
-          ) : submissions.error ? (
-            <Failure error={submissions.error} retry={() => submissions.refetch()} />
-          ) : own.length ? (
-            <SubmissionList items={own} categories={categories.data ?? []} limit={5} />
+          ) : submissions.error || categories.error || myBallots.error ? (
+            <Failure
+              error={(submissions.error ?? categories.error ?? myBallots.error)!}
+              retry={() => {
+                submissions.refetch();
+                categories.refetch();
+                myBallots.refetch();
+              }}
+            />
+          ) : own.length || ownBallots.length ? (
+            <SubmissionList items={own} categories={categories.data ?? []} ballots={ownBallots} limit={10} />
           ) : (
             <Empty>Die erste Geschichte wartet auf dich. Such dir oben eine Sammlung aus.</Empty>
           )}
         </div>
       </section>
-
-      {done.length > 0 && (
-        <details className="mt-10 rounded-ui bg-white">
-          <summary className="cursor-pointer px-5 py-4 text-[15px] font-semibold">
-            Erledigte Sammlungen ({done.length})
-          </summary>
-          <ul className="divide-y divide-line border-t border-line">
-            {done.map((p) => (
-              <li key={p.id}>
-                <Link
-                  to={`/sammlungen/${p.id}`}
-                  className="flex items-center justify-between gap-4 px-5 py-3 text-[15px] hover:bg-pop/30"
-                >
-                  <span className="min-w-0">{p.name}</span>
-                  <span className="flex-none text-[13px] text-muted">{hasVoted(p) ? 'abgestimmt' : 'beendet'}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
 
       <p className={`${notice} mt-10 text-muted`}>
         <strong className="font-semibold text-ink">Unsere Erinnerungen bleiben im Jahrgang.</strong> Nur du und

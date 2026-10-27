@@ -20,6 +20,7 @@ import {
   statusLabels,
   type Category,
   type Me,
+  type MyBallot,
   type Submission,
   type User,
 } from './api';
@@ -211,12 +212,14 @@ export function PageHead({ title, children, action }: { title: string; children?
 export function SubmissionList({
   items,
   categories,
+  ballots = [],
   showAuthor = false,
   editorialView = false,
   limit,
 }: {
   items: Submission[];
   categories: Category[];
+  ballots?: MyBallot[];
   showAuthor?: boolean;
   editorialView?: boolean;
   limit?: number;
@@ -227,29 +230,45 @@ export function SubmissionList({
       .filter((category) => !editorialView && category.kind === 'photo')
       .map((category) => [category.id, category]),
   );
-  const rows = items.filter(
-    (item, index) =>
-      !photoCollections.has(item.category_id) ||
-      items.findIndex((other) => other.category_id === item.category_id) === index,
-  );
+  type Row =
+    | { type: 'submission'; item: Submission; sortAt: number }
+    | { type: 'photo'; category: Category; count: number; sortAt: number }
+    | { type: 'ballot'; item: MyBallot; sortAt: number };
+  const rows: Row[] = [];
+  const photoGroups = new Map<string, Submission[]>();
+  for (const item of items) {
+    const collection = photoCollections.get(item.category_id);
+    if (collection) {
+      const photos = photoGroups.get(collection.id) ?? [];
+      photos.push(item);
+      photoGroups.set(collection.id, photos);
+    } else rows.push({ type: 'submission', item, sortAt: new Date(item.updated_at).getTime() });
+  }
+  for (const [categoryId, photos] of photoGroups) {
+    const category = photoCollections.get(categoryId)!;
+    rows.push({
+      type: 'photo',
+      category,
+      count: photos.reduce((total, item) => total + item.attachments.length, 0),
+      sortAt: Math.max(...photos.map((item) => new Date(item.updated_at).getTime())),
+    });
+  }
+  for (const item of ballots) rows.push({ type: 'ballot', item, sortAt: new Date(item.created_at).getTime() });
+  if (!editorialView) rows.sort((a, b) => b.sortAt - a.sortAt);
   return (
     <ul className="divide-y divide-line overflow-hidden rounded-ui border-2 border-line bg-white">
-      {rows.slice(0, limit).map((s) => {
-        const collection = photoCollections.get(s.category_id);
-        if (collection) {
-          const count = items
-            .filter((item) => item.category_id === collection.id)
-            .reduce((total, item) => total + item.attachments.length, 0);
+      {rows.slice(0, limit).map((row) => {
+        if (row.type === 'photo') {
           return (
-            <li className="min-w-0" key={collection.id}>
+            <li className="min-w-0" key={`photo:${row.category.id}`}>
               <Link
                 className="flex items-center justify-between gap-4 rounded-ui px-4 py-3.5 hover:bg-pop/30"
-                to={`/sammlungen/${collection.id}`}
+                to={`/sammlungen/${row.category.id}`}
               >
                 <span className="min-w-0">
-                  <strong className="block break-words text-[15px] font-semibold">{collection.name}</strong>
+                  <strong className="block break-words text-[15px] font-semibold">{row.category.name}</strong>
                   <small className="text-muted">
-                    {count} {count === 1 ? 'Foto' : 'Fotos'}
+                    {row.count} {row.count === 1 ? 'Foto' : 'Fotos'}
                   </small>
                 </span>
                 <Arrow />
@@ -257,8 +276,41 @@ export function SubmissionList({
             </li>
           );
         }
+        if (row.type === 'ballot') {
+          const content = (
+            <span className="flex items-center justify-between gap-4 rounded-ui px-4 py-3.5">
+              <span className="min-w-0 flex-1">
+                <strong className="block truncate text-[15px] font-semibold">{row.item.category_name}</strong>
+                <small className="mt-0.5 block text-[13px] text-muted">
+                  <span className="flex flex-wrap gap-x-2">
+                    <span>{kindLabel[row.item.category_kind]}</span>
+                    <span>{date(row.item.created_at)}</span>
+                  </span>
+                </small>
+              </span>
+              <span className="inline-flex flex-none items-center gap-1.5 whitespace-nowrap rounded-full bg-ok-tint px-2.5 py-1 text-xs font-bold text-ok">
+                Abgestimmt
+              </span>
+            </span>
+          );
+          return (
+            <li className="min-w-0" key={`ballot:${row.item.category_id}:${row.item.id}`}>
+              {row.item.category_status === 'draft' ? (
+                content
+              ) : (
+                <Link
+                  className="block rounded-ui transition-colors hover:bg-pop/30"
+                  to={`/sammlungen/${row.item.category_id}`}
+                >
+                  {content}
+                </Link>
+              )}
+            </li>
+          );
+        }
+        const s = row.item;
         return (
-          <li className="min-w-0" key={s.id}>
+          <li className="min-w-0" key={`submission:${s.id}`}>
             <Link
               to={editorialView ? `/redaktion/beitraege/${s.id}` : `/beitraege/${s.id}`}
               data-editorial-row={editorialView || undefined}

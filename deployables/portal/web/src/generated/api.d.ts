@@ -16,6 +16,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/ballots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current viewer’s own poll submissions, one per current ballot entry including repeatable and hidden collections; never named history or other voters */
+        get: operations["getMeBallots"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/categories": {
         parameters: {
             query?: never;
@@ -467,6 +484,24 @@ export interface components {
             user: components["schemas"]["User"];
             csrf_token: string;
         };
+        MyBallot: {
+            /** @description Ballot entry key, grouped across all selected options or words. */
+            id: string;
+            category_id: string;
+            category_name: string;
+            /** @enum {string} */
+            category_kind: "person" | "proposal" | "words";
+            /**
+             * @description Effective collection status; draft entries are displayed without a collection link.
+             * @enum {string}
+             */
+            category_status: "draft" | "open" | "closed";
+            /**
+             * Format: date-time
+             * @description Latest timestamp of this current ballot entry.
+             */
+            created_at: string;
+        };
         Category: {
             id: string;
             name: string;
@@ -729,6 +764,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Me"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getMeBallots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyBallot"][];
                 };
             };
             /** @description Error */
