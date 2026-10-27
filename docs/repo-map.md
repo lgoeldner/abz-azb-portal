@@ -22,7 +22,7 @@ file `deployables/caddy/Caddyfile.dev` :: development proxy: pages/HMR to Vite, 
 file `compose.dev.yaml` :: dev overrides: auth-mock, detached Vite hot reload, local ports, dev bind mounts; runtime services recover with unless-stopped [dev, docker, restart]
 file `Makefile` :: dev, check, lint, audit, backup, restore, migrate targets [make, ci]
 file `.github/workflows/ci.yaml` :: CI: lint, audit, Go/web tests, e2e [ci, github]
-file `.githooks/pre-commit` :: prettier and gofmt on staged files [hook, format]
+file `.githooks/pre-commit` :: prettier/gofmt on staged files, tests for touched deployables [hook, format, test]
 file `docs/implementation-contract.md` :: binding API/permission contract, lead-owned [contract, permissions, types]
 file `docs/poll-implementation-plans.md` :: nine proposed poll formats and the implemented configurable word portrait with implementation steps and invariant tests [poll, plan, voting]
 file `docs/openapi.json` :: OpenAPI spec; source of generated TS types [openapi, schema]

@@ -1,8 +1,13 @@
 #!/bin/sh
-# Formats staged files only, then re-stages them. Install: make hooks
+# Formats staged files and tests affected areas. Install: make hooks
 set -e
 cd "$(git rev-parse --show-toplevel)"
 ts=$(git diff --cached --name-only --diff-filter=ACM -- 'deployables/portal/web/src/*.ts' 'deployables/portal/web/src/*.tsx' 'deployables/portal/web/e2e/*.ts' | grep -v 'generated/' || true)
 go=$(git diff --cached --name-only --diff-filter=ACM -- '*.go' || true)
 if [ -n "$ts" ]; then (cd deployables/portal/web && echo "$ts" | sed 's#^deployables/portal/web/##' | xargs npx --no-install prettier --write) && echo "$ts" | xargs git add; fi
 if [ -n "$go" ]; then echo "$go" | xargs gofmt -w && echo "$go" | xargs git add; fi
+# Tests only for areas with staged changes. Skip once: git commit --no-verify
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+if echo "$staged" | grep -q '^deployables/portal/server/'; then (cd deployables/portal/server && go test ./...); fi
+if echo "$staged" | grep -q '^deployables/auth-mock/'; then (cd deployables/auth-mock && go test ./...); fi
+if echo "$staged" | grep -q '^deployables/portal/web/'; then (cd deployables/portal/web && npm run typecheck && npm test); fi
