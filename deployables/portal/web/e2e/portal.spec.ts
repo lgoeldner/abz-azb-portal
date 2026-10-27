@@ -130,7 +130,7 @@ test('old bookmarks under /abstimmungen land on the Sammlungen pages', async ({ 
   await page.goto('/abstimmungen');
   await expect(page).toHaveURL(/\/sammlungen$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Sammlungen' })).toBeVisible();
-  await expect(page.getByRole('heading', { level: 2, name: 'Fortlaufend' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Wiederholbar' })).toBeVisible();
 });
 
 test('admin dashboard shows one widget per class and links to the filtered list', async ({ page }) => {

@@ -944,3 +944,88 @@ describe('Sammlungen person polls', () => {
       expect(screen.queryByRole('button', { name: /Stimme speichern/ })).not.toBeInTheDocument();
   });
 });
+
+describe('all collections overview', () => {
+  it.each(['schueler', 'redaktion'] as const)(
+    'groups by repeatability, orders one-off deadlines and collapses ended polls in %s mode',
+    async (view) => {
+      const categories = [
+        personPoll({ id: 'late', name: 'Späte Wahl', ongoing: false, closes_at: '2027-05-10T12:00:00Z' }),
+        personPoll({ id: 'no-deadline', name: 'Ohne Enddatum', ongoing: true }),
+        personPoll({
+          id: 'early',
+          name: 'Frühe Wahl',
+          ongoing: false,
+          closes_at: '2027-02-10T12:00:00Z',
+          my_option_ids: ['alice'],
+        }),
+        personPoll({ id: 'quote', name: 'Zitate', kind: 'quote', repeatable: true, ongoing: true }),
+        personPoll({
+          id: 'repeated-ballot',
+          name: 'Wiederholbare Wahl',
+          repeatable: true,
+          ongoing: false,
+          closes_at: '2027-01-10T12:00:00Z',
+        }),
+        personPoll({
+          id: 'photo',
+          name: 'Einmalige Fotos',
+          kind: 'photo',
+          ongoing: false,
+          closes_at: '2027-06-10T12:00:00Z',
+          status: 'closed',
+        }),
+        personPoll({
+          id: 'expired',
+          name: 'Abgelaufene Wahl',
+          status: 'closed',
+          ongoing: false,
+          closes_at: '2026-01-10T12:00:00Z',
+        }),
+        personPoll({ id: 'ended-repeatable', name: 'Beendete wiederholbare Wahl', status: 'closed', repeatable: true }),
+      ];
+      installApi(categories);
+      renderPortal('/sammlungen', view === 'schueler' ? student : admin, [], view);
+
+      const once = await screen.findByRole('region', { name: 'Einmalig' });
+      const repeated = screen.getByRole('region', { name: 'Wiederholbar' });
+      const ids = (element: HTMLElement) =>
+        within(element)
+          .getAllByRole('link')
+          .map((link) => link.getAttribute('href'));
+      expect(ids(once)).toEqual([
+        '/sammlungen/early',
+        '/sammlungen/late',
+        '/sammlungen/photo',
+        '/sammlungen/no-deadline',
+      ]);
+      expect(ids(repeated)).toEqual(['/sammlungen/quote', '/sammlungen/repeated-ballot']);
+      expect(once.compareDocumentPosition(repeated) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(within(once).getByText('Bis 10.2.2027')).toBeInTheDocument();
+      expect(within(once).getByText('Beendet · Bis 10.6.2027')).toBeInTheDocument();
+      expect(within(repeated).getByText('Bis 10.1.2027')).toBeInTheDocument();
+      const summary = screen.getByText('Beendete Abstimmungen (2)');
+      const ended = summary.closest('details')!;
+      expect(ended).not.toHaveAttribute('open');
+      expect(repeated.compareDocumentPosition(ended) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      fireEvent.click(summary);
+      expect(
+        within(ended)
+          .getAllByRole('link', { hidden: true })
+          .map((link) => link.getAttribute('href')),
+      ).toEqual(['/sammlungen/expired', '/sammlungen/ended-repeatable']);
+      const own = screen.getByRole('link', { name: 'Meine Beiträge' });
+      expect(own).toHaveAttribute('href', '/beitraege');
+      expect(ended.compareDocumentPosition(own) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    },
+  );
+
+  it('keeps class filtering and the own submissions link available', async () => {
+    installApi([personPoll(), personPoll({ id: 'quote', name: 'Zitate', kind: 'quote', repeatable: true })]);
+    renderPortal('/sammlungen?klasse=quote', student);
+    const repeated = await screen.findByRole('region', { name: 'Wiederholbar' });
+    expect(within(repeated).getAllByRole('link')).toHaveLength(1);
+    expect(screen.queryByRole('region', { name: 'Einmalig' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Meine Beiträge' })).toHaveAttribute('href', '/beitraege');
+  });
+});

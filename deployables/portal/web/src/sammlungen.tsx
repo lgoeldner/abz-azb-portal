@@ -9,6 +9,7 @@ import {
   editorial,
   json,
   patchUser,
+  statusLabels,
   type User,
   type BallotAudit,
   type Category,
@@ -79,13 +80,13 @@ export function Sammlungen() {
   const creating = editorial(user) && params.has('neu');
   const setCreating = (open: boolean) => setParams(open ? { neu: '' } : {}, { replace: true });
   const shown = (categories.data ?? []).filter((c) => !klasse || c.kind === klasse);
-  const fortlaufend = shown.filter((c) => c.ongoing);
-  const ballots = shown.filter((c) => !c.ongoing);
-  const groups: [Category['status'], string, string][] = [
-    ['open', 'Offen', 'Jetzt mitmachen'],
-    ['draft', 'Verborgen', 'Nur für die Redaktion sichtbar'],
-    ['closed', 'Beendet', 'Die Sammlung ist abgeschlossen'],
-  ];
+  const endedPoll = (c: Category) => singleKinds.includes(c.kind) && c.status === 'closed';
+  const byDeadline = (a: Category, b: Category) =>
+    (a.closes_at ? new Date(a.closes_at).getTime() : Infinity) -
+      (b.closes_at ? new Date(b.closes_at).getTime() : Infinity) || a.name.localeCompare(b.name, 'de');
+  const once = shown.filter((c) => !c.repeatable && !endedPoll(c)).sort(byDeadline);
+  const repeatable = shown.filter((c) => c.repeatable && !endedPoll(c));
+  const ended = shown.filter(endedPoll).sort(byDeadline);
   const chip = (active: boolean) =>
     `inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
       active ? 'bg-ink text-white hover:bg-accent' : 'bg-pill hover:bg-pop'
@@ -140,45 +141,69 @@ export function Sammlungen() {
         </Empty>
       ) : (
         <div className="space-y-10">
-          {fortlaufend.length > 0 && (
-            <section aria-labelledby="sammlungen-fortlaufend">
-              <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-                <h2 id="sammlungen-fortlaufend" className={heading}>
-                  Fortlaufend
-                </h2>
-                <span className="text-sm text-muted">Ohne festes Enddatum</span>
-              </div>
-              <Cards items={fortlaufend} />
-            </section>
-          )}
-          {ballots.some((c) => singleKinds.includes(c.kind)) && (
+          {shown.some((c) => singleKinds.includes(c.kind)) && (
             <div className={`${notice} space-y-1`}>
               <strong className="block">Transparent abgestimmt.</strong>
               <p>
                 Deine Stimme wird deinem Namen zugeordnet. Die Administration kann Stimmen und Änderungen
                 nachvollziehen. Die Redaktion sieht nur Gesamtergebnisse. Als Schüler:in siehst du keine Ergebnisse. Du
-                kannst deine Stimme ändern, solange die Sammlung offen ist.
+                kannst während der Öffnung mitmachen; wiederholbare Abstimmungen erlauben mehrere Abgaben.
               </p>
             </div>
           )}
-          {groups.map(([status, name, hint]) => {
-            const items = ballots.filter((c) => c.status === status).sort(newestOpened);
-            if (!items.length || (status === 'draft' && !editorial(user))) return null;
-            return (
-              <section key={status} aria-labelledby={`sammlungen-${status}`}>
-                <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-                  <h2 id={`sammlungen-${status}`} className={heading}>
-                    {name}
-                  </h2>
-                  <span className="text-sm text-muted">{hint}</span>
-                </div>
-                <Cards items={items} />
-              </section>
-            );
-          })}
+          {once.length > 0 && (
+            <section aria-labelledby="sammlungen-einmalig">
+              <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+                <h2 id="sammlungen-einmalig" className={heading}>
+                  Einmalig
+                </h2>
+                <span className="text-sm text-muted">Nach Enddatum sortiert</span>
+              </div>
+              <Cards items={once} />
+            </section>
+          )}
+          {repeatable.length > 0 && (
+            <section aria-labelledby="sammlungen-wiederholbar">
+              <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+                <h2 id="sammlungen-wiederholbar" className={heading}>
+                  Wiederholbar
+                </h2>
+                <span className="text-sm text-muted">Mehrfach mitmachen</span>
+              </div>
+              <Cards items={repeatable} />
+            </section>
+          )}
+          {ended.length > 0 && (
+            <details className="rounded-ui bg-white">
+              <summary className="cursor-pointer px-5 py-4 text-[15px] font-semibold">
+                Beendete Abstimmungen ({ended.length})
+              </summary>
+              <div className="border-t border-line p-4">
+                <Cards items={ended} />
+              </div>
+            </details>
+          )}
         </div>
       )}
+      <Link to="/beitraege" className={`${btn.text} mt-8 inline-flex items-center gap-1`}>
+        Meine Beiträge <Arrow />
+      </Link>
     </>
+  );
+}
+
+function CollectionBadge({ collection: c }: { collection: Category }) {
+  return (
+    <span title={c.closes_at ? `Ende: ${date(c.closes_at)}` : undefined}>
+      <Badge
+        status={c.status}
+        label={
+          c.closes_at
+            ? `${c.status !== 'open' ? `${badgeLabel(c) ?? statusLabels[c.status]} · ` : ''}Bis ${new Intl.DateTimeFormat('de-DE').format(new Date(c.closes_at))}`
+            : badgeLabel(c)
+        }
+      />
+    </span>
   );
 }
 
@@ -198,7 +223,7 @@ function Cards({ items }: { items: Category[] }) {
                 <strong className="block text-[15px] font-semibold">{c.name}</strong>
                 <span className="block text-sm text-muted">{c.description || kindLabel[c.kind]}</span>
               </span>
-              <Badge status={c.status} label={badgeLabel(c)} />
+              <CollectionBadge collection={c} />
               <span className="hidden text-sm text-muted sm:block">
                 {repeatableKinds.includes(c.kind) ? 'Beiträge lesen' : 'Ergebnisse ansehen'}
               </span>
@@ -216,13 +241,13 @@ function Cards({ items }: { items: Category[] }) {
             className="flex min-w-0 flex-1 flex-col gap-3 rounded-ui bg-white p-5 transition-colors hover:border-muted"
             to={`/sammlungen/${c.id}`}
           >
-            <div className="flex items-start justify-between gap-3">
-              <h3 className={`${heading} min-w-0`}>{c.name}</h3>
-              <Badge status={c.status} label={badgeLabel(c)} />
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <h3 className={`${heading} min-w-0 flex-1 basis-40`}>{c.name}</h3>
+              <CollectionBadge collection={c} />
             </div>
             <p className="text-sm text-muted">{c.description}</p>
             <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line pt-3 text-sm text-muted">
-              <span className="flex min-w-0 flex-1 items-start gap-1.5">
+              <span className="flex min-w-0 flex-1 basis-40 items-start gap-1.5">
                 <KindIcon icon={kindIcon[c.kind]} className="mt-[3px] size-4" />
                 <span>
                   {kindLabel[c.kind]}
@@ -231,7 +256,7 @@ function Cards({ items }: { items: Category[] }) {
                 </span>
               </span>
               <span className="inline-flex flex-none items-center gap-1 whitespace-nowrap font-semibold text-ink">
-                {repeatableKinds.includes(c.kind) ? 'Beitragen' : c.status === 'open' ? 'Abstimmen' : 'Ansehen'}{' '}
+                {c.status !== 'open' ? 'Ansehen' : repeatableKinds.includes(c.kind) ? 'Beitragen' : 'Abstimmen'}{' '}
                 <Arrow />
               </span>
             </div>
