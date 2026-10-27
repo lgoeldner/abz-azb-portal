@@ -673,7 +673,7 @@ describe('navigation by view', () => {
     return urls;
   }
 
-  it('shows ballots first and only never-submitted submission collections, while keeping finished ballots accessible', async () => {
+  it('shows ballots first, keeps repeatable collections available, and keeps finished ballots accessible', async () => {
     const urls = mount(user, {
       polls: [
         poll('p-open', 'Abimotto', { opened_at: iso(3) }),
@@ -698,7 +698,9 @@ describe('navigation by view', () => {
     expect(links[0]).toHaveAttribute('href', '/sammlungen/p-newer');
 
     const submissions = within(aside).getByRole('group', { name: 'Beiträge' });
-    expect(within(submissions).queryByRole('link', { name: /Erinnerungen/ })).toBeNull();
+    const memories = within(submissions).getByRole('link', { name: /Erinnerungen/ });
+    expect(memories).toHaveAttribute('href', '/sammlungen/memory');
+    expect(memories).toHaveTextContent('2 eigene Einreichungen');
     const category = within(submissions).getByRole('link', { name: /Zitate/ });
     expect(category).toHaveAttribute('href', '/sammlungen/quotes');
     expect(within(submissions).queryByRole('link', { name: /Abimotto/ })).toBeNull();
@@ -719,16 +721,17 @@ describe('navigation by view', () => {
     expect(within(aside).queryByText('Geheimer Entwurf')).toBeNull();
     expect(within(aside).getByText(/Erledigt \(2\)/)).toBeInTheDocument();
 
-    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Hey Mia. 3 Sammlungen warten.');
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Hey Mia. 4 Sammlungen warten.');
     const main = screen.getByRole('main');
     const voting = within(main).getByRole('region', { name: 'Jetzt dran' });
-    const submissionQueue = within(main).getByRole('region', { name: 'Fortlaufend' });
+    const submissionQueue = within(main).getByRole('region', { name: 'Wiederholbar' });
     expect(voting.compareDocumentPosition(submissionQueue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(submissionQueue).getByRole('link', { name: /Zitate/ })).toHaveAttribute(
+    expect(within(submissionQueue).getByRole('link', { name: /Zitate/ })).toHaveAttribute('href', '/sammlungen/quotes');
+    expect(within(submissionQueue).getByRole('link', { name: /Erinnerungen/ })).toHaveAttribute(
       'href',
-      '/beitraege/neu?kategorie=quotes',
+      '/sammlungen/memory',
     );
-    expect(within(submissionQueue).queryByRole('heading', { name: 'Erinnerungen' })).toBeNull();
+    expect(within(submissionQueue).getByText('2 eigene Einreichungen')).toBeInTheDocument();
     expect(within(voting).queryByRole('link', { name: /Beitragen/ })).toBeNull();
     fireEvent.click(within(voting).getByRole('button', { name: 'Nächste Sammlung' }));
     expect(within(voting).getByRole('heading', { name: 'Abimotto' })).toBeInTheDocument();
@@ -740,7 +743,7 @@ describe('navigation by view', () => {
   });
 
   it.each(['pending', 'accepted', 'rejected', 'withdrawn'])(
-    'hides a repeatable collection after any own submission (%s), but ignores other authors',
+    'keeps repeatable collections available in the sidebar and home section after submission (%s)',
     async (status) => {
       mount(user, {
         polls: [],
@@ -748,10 +751,13 @@ describe('navigation by view', () => {
       });
       await screen.findByRole('heading', { name: 'Zitate' });
       const main = screen.getByRole('main');
-      expect(within(main).queryByRole('heading', { name: 'Erinnerungen' })).toBeNull();
-      expect(within(main).getByRole('link', { name: /Beitragen/ })).toHaveAttribute(
+      expect(within(main).getByRole('region', { name: 'Wiederholbar' })).toBeInTheDocument();
+      const memoryLink = within(screen.getByRole('complementary')).getByRole('group', { name: 'Beiträge' });
+      expect(within(memoryLink).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('1 eigene Einreichung');
+      const repeatable = within(main).getByRole('region', { name: 'Wiederholbar' });
+      expect(within(repeatable).getByRole('link', { name: /Erinnerungen/ })).toHaveAttribute(
         'href',
-        '/beitraege/neu?kategorie=quotes',
+        '/sammlungen/memory',
       );
       expect(within(main).getByText('Beitrag own')).toBeInTheDocument();
       expect(within(screen.getByRole('complementary')).getByRole('link', { name: 'Alle Sammlungen' })).toHaveAttribute(
@@ -761,17 +767,61 @@ describe('navigation by view', () => {
     },
   );
 
+  it('keeps repeatable quote and photo collections and one-off photo collections linked after own submissions', async () => {
+    const repeatablePhoto = sammlung('photo-repeat', 'Fotowünsche', 'photo', { repeatable: true });
+    const oneOffPhoto = sammlung('photo-once', 'Einmalfoto', 'photo', { repeatable: false });
+    mount(user, {
+      polls: [repeatablePhoto, oneOffPhoto],
+      submissions: [
+        submission('quote-own', 'quotes', user.id),
+        submission('photo-own', 'photo-repeat', user.id),
+        submission('photo-once-own', 'photo-once', user.id),
+        submission('quote-other', 'memory', 'someone-else'),
+      ],
+    });
+
+    const nav = within(await screen.findByRole('group', { name: 'Beiträge' }));
+    await nav.findByRole('link', { name: /Zitate/ });
+    expect(nav.getByRole('link', { name: /Zitate/ })).toHaveAttribute('href', '/sammlungen/quotes');
+    expect(nav.getByRole('link', { name: /Zitate/ })).toHaveTextContent('1 eigene Einreichung');
+    expect(nav.getByRole('link', { name: /Fotowünsche/ })).toHaveAttribute('href', '/sammlungen/photo-repeat');
+    expect(nav.getByRole('link', { name: /Fotowünsche/ })).toHaveTextContent('1 eigene Einreichung');
+    expect(nav.getByRole('link', { name: /Einmalfoto/ })).toHaveAttribute('href', '/sammlungen/photo-once');
+    expect(nav.getByRole('link', { name: /Einmalfoto/ })).toHaveTextContent('1 eigene Einreichung');
+    expect(nav.getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('Noch nichts eingereicht');
+  });
+
   it.each(['error', 'pending'] as const)(
-    'does not offer repeatable cards when submission history is %s',
+    'keeps repeatable collections on the home page when submission history is %s',
     async (state) => {
       mount(user, { polls: [], submissions: state });
       await screen.findByRole('heading', { name: 'Jetzt dran' });
       const main = screen.getByRole('main');
       expect(within(main).queryByRole('link', { name: /Beitragen/ })).toBeNull();
+      const repeatable = within(main).getByRole('region', { name: 'Wiederholbar' });
+      expect(await within(repeatable).findByRole('link', { name: /Erinnerungen/ })).toHaveAttribute(
+        'href',
+        '/sammlungen/memory',
+      );
+      expect(within(repeatable).getAllByText('Beiträge ansehen').length).toBeGreaterThan(0);
       if (state === 'error') await within(main).findAllByRole('alert');
       else expect(within(main).getAllByRole('status').length).toBeGreaterThan(0);
     },
   );
+
+  it('removes a one-off contribution task from home after the student submits', async () => {
+    const oneOffPhoto = sammlung('photo-once', 'Einmalfoto', 'photo', { repeatable: false });
+    mount(user, {
+      polls: [oneOffPhoto],
+      submissions: [submission('photo-own', 'photo-once', user.id)],
+    });
+
+    await screen.findByRole('heading', { name: 'Jetzt dran' });
+    const main = within(screen.getByRole('main'));
+    expect(await main.findByRole('region', { name: 'Wiederholbar' })).toBeInTheDocument();
+    const todo = main.getByRole('region', { name: 'Jetzt dran' });
+    expect(within(todo).queryByText('Einmalfoto')).toBeNull();
+  });
 
   it('queues ballots and a one-off photo in their kind-based workflows', async () => {
     mount(user, {
@@ -1373,21 +1423,23 @@ describe('sammlungen', () => {
     return calls;
   }
 
-  it('lists repeatable Sammlungen in their own section and single-answer ones grouped by status', async () => {
+  it('lists repeatable and one-off Sammlungen in their own sections', async () => {
     mount('/sammlungen');
     await screen.findByRole('heading', { level: 1, name: 'Sammlungen' });
     const main = screen.getByRole('main');
     expect(await within(main).findByRole('heading', { level: 1, name: 'Sammlungen' })).toBeInTheDocument();
-    const section = (name: string) => within(main).getByRole('region', { name });
-    const fortlaufend = await waitFor(() => section('Fortlaufend'));
-    expect(within(fortlaufend).getByRole('link', { name: /Erinnerungen/ })).toHaveAttribute(
+    const repeatableSection = await waitFor(() =>
+      within(main).getByRole('heading', { name: 'Wiederholbar' }).closest('section')!,
+    );
+    expect(within(repeatableSection).getByRole('link', { name: /Erinnerungen/ })).toHaveAttribute(
       'href',
       '/sammlungen/memory',
     );
-    expect(within(fortlaufend).getByRole('link', { name: /Zitate/ })).toHaveTextContent('Beitragen');
-    expect(within(fortlaufend).queryByText('Abimotto')).toBeNull();
-    expect(within(section('Offen')).getByRole('link', { name: /Abimotto/ })).toHaveTextContent('Abstimmen');
-    expect(within(section('Beendet')).getByRole('link', { name: /Altlast/ })).toHaveTextContent('Ansehen');
+    expect(within(repeatableSection).getByRole('link', { name: /Zitate/ })).toHaveTextContent('Beitragen');
+    expect(within(repeatableSection).queryByText('Abimotto')).toBeNull();
+    const oneOffSection = within(main).getByRole('heading', { name: 'Einmalig' }).closest('section')!;
+    expect(within(oneOffSection).getByRole('link', { name: /Abimotto/ })).toHaveTextContent('Abstimmen');
+    expect(within(main).getByText('Beendete Abstimmungen (1)')).toBeInTheDocument();
     expect(within(main).queryByRole('region', { name: 'Verborgen' })).toBeNull();
     expect(within(main).queryByText('Geheimer Entwurf')).toBeNull();
     expect(within(main).queryByRole('button', { name: /Neue Sammlung/ })).toBeNull();
@@ -1397,7 +1449,7 @@ describe('sammlungen', () => {
     mount('/sammlungen', manager);
     await screen.findByRole('heading', { level: 1, name: 'Sammlungen' });
     const main = screen.getByRole('main');
-    expect(await within(main).findByRole('region', { name: 'Verborgen' })).toHaveTextContent('Geheimer Entwurf');
+    expect(await within(main).findByRole('link', { name: /Geheimer Entwurf/ })).toBeInTheDocument();
     expect(within(main).getByRole('button', { name: /Neue Sammlung/ })).toBeInTheDocument();
   });
 
@@ -1407,7 +1459,7 @@ describe('sammlungen', () => {
     const main = screen.getByRole('main');
     expect(await within(main).findByRole('link', { name: /Zitate/ })).toBeInTheDocument();
     expect(within(main).queryByText('Abimotto')).toBeNull();
-    expect(within(main).queryByRole('region', { name: 'Offen' })).toBeNull();
+    expect(within(main).queryByRole('heading', { name: 'Einmalig' })).toBeNull();
     expect(within(main).getByRole('link', { name: 'Zitate' })).toHaveAttribute('aria-current', 'true');
   });
 
@@ -1418,9 +1470,11 @@ describe('sammlungen', () => {
       await screen.findByRole('heading', { level: 1, name: 'Sammlungen' });
       const main = screen.getByRole('main');
       expect(await within(main).findByRole('heading', { level: 1, name: 'Sammlungen' })).toBeInTheDocument();
-      expect(
-        await within(main).findByRole('region', { name: path.includes('klasse') ? 'Beendet' : 'Offen' }),
-      ).toBeInTheDocument();
+      if (path.includes('klasse')) {
+        expect(within(main).getByText('Beendete Abstimmungen (1)')).toBeInTheDocument();
+      } else {
+        expect(await within(main).findByRole('heading', { name: 'Wiederholbar' })).toBeInTheDocument();
+      }
     },
   );
 
