@@ -709,13 +709,12 @@ describe('Sammlungen person polls', () => {
     expect(screen.getByRole('button', { name: 'Sonnengelb entfernen' })).toBeInTheDocument();
   });
 
-  it('adds trimmed proposal chips by button or Enter, blocks blanks and duplicates, removes chips, and saves the self-vote switch', async () => {
+  it('adds trimmed proposal chips by button or Enter, blocks blanks and duplicates, and removes chips', async () => {
     const { writes } = installApi();
     renderPortal('/sammlungen', admin);
     await openPersonForm('proposal');
 
-    const selfVote = screen.getByRole('switch', { name: 'Stimme für die eigene Person erlauben' });
-    expect(selfVote).not.toBeChecked();
+    expect(screen.queryByRole('switch', { name: 'Stimme für die eigene Person erlauben' })).not.toBeInTheDocument();
     addProposalOption('  A  ');
     addProposalOption('B', true);
     addProposalOption('a');
@@ -731,16 +730,45 @@ describe('Sammlungen person polls', () => {
 
     addProposalOption('C');
     fireEvent.click(screen.getByRole('button', { name: 'C entfernen' }));
-    fireEvent.click(selfVote);
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Abimotto' } });
     fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
 
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0].body).toMatchObject({
       kind: 'proposal',
-      allow_self_vote: true,
+      allow_self_vote: false,
       options: [{ label: 'A' }, { label: 'B' }],
     });
+  });
+
+  it('allows self-voting for person polls', async () => {
+    const { writes } = installApi();
+    renderPortal('/sammlungen', admin);
+    await openPersonForm();
+
+    const selfVote = screen.getByRole('switch', { name: 'Stimme für die eigene Person erlauben' });
+    fireEvent.click(selfVote);
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Personenwahl' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0].body).toMatchObject({ kind: 'person', allow_self_vote: true });
+  });
+
+  it.each(['proposal', 'words'] as const)('hides and clears self-voting after switching to %s', async (kind) => {
+    const { writes } = installApi();
+    renderPortal('/sammlungen', admin);
+    await openPersonForm();
+    fireEvent.click(screen.getByRole('switch', { name: 'Stimme für die eigene Person erlauben' }));
+    fireEvent.change(screen.getByLabelText('Klasse'), { target: { value: kind } });
+    expect(screen.queryByRole('switch', { name: 'Stimme für die eigene Person erlauben' })).not.toBeInTheDocument();
+    if (kind === 'proposal') {
+      addProposalOption('A');
+      addProposalOption('B');
+    }
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: `Sammlung ${kind}` } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0].body).toMatchObject({ kind, allow_self_vote: false });
   });
 
   it('includes a valid pending proposal option when saving without adding it first', async () => {

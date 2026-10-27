@@ -350,7 +350,7 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
               repeatable,
               ongoing,
               closes_at: deadline,
-              allow_self_vote: single && kind !== 'words' && allowSelfVote,
+              allow_self_vote: kind === 'person' && allowSelfVote,
               all_people: kind === 'person' && allPeople,
               max_choices: single ? maxChoices : 1,
               options: choices,
@@ -591,7 +591,7 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
                   </button>
                 </div>
               </div>
-              {kind !== 'words' && (
+              {kind === 'person' && (
                 <label className="flex cursor-pointer items-center justify-between gap-4 text-[15px]">
                   <span>Stimme für die eigene Person erlauben</span>
                   <input
