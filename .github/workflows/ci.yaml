@@ -1,10 +1,11 @@
 name: CI
 
 on:
-  push: # every branch
+  # dont reenable without perms
+  #push: # every branch
   pull_request:
-  schedule:
-    - cron: '17 5 * * 1' # weekly, so new advisories surface without a push
+  #schedule:
+  #  - cron: '17 5 * * 1' # weekly, so new advisories surface without a push
   workflow_dispatch:
 
 permissions:
@@ -28,7 +29,7 @@ jobs:
             deployables/auth-mock/go.sum
       - uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version: "24"
           cache: npm
           cache-dependency-path: deployables/portal/web/package-lock.json
       - name: Go lint
@@ -65,7 +66,7 @@ jobs:
             deployables/auth-mock/go.sum
       - uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version: "24"
       - name: Go vulnerabilities reachable from our code (incl. standard library)
         run: |
           cd deployables/portal/server && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
@@ -100,7 +101,7 @@ jobs:
             deployables/auth-mock/go.sum
       - uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version: "24"
           cache: npm
           cache-dependency-path: deployables/portal/web/package-lock.json
       - name: Go tests and vet
@@ -156,7 +157,7 @@ jobs:
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:8080
           PLAYWRIGHT_CHANNEL: chrome
-          DEBUG_EXPECT_PRODUCTION: '1'
+          DEBUG_EXPECT_PRODUCTION: "1"
         run: cd deployables/portal/web && npm run test:e2e
       - name: Playwright traces
         if: failure()
