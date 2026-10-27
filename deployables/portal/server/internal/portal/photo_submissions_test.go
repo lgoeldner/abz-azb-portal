@@ -210,19 +210,67 @@ func TestPhotoCaptionOwnershipHistoryExportAndLastImage(t *testing.T) {
 func TestPhotoMovesAndLegacyEmptySubmission(t *testing.T) {
 	app, pool := timelineApp(t)
 	category := createPhotoCategory(t, app, pool, nil)
-	sub := decodeSubmission(t, createContribution(t, app, pool, MiaID, categoryID(1), "photo-move-plain-0001", "Idea"))
-	edit := fmt.Sprintf(`{"version":%d,"category_id":%q,"title":"Photo","body":"","context":""}`, sub.Version, category.ID)
-	if res := authenticatedRequest(t, app, pool, MiaID, http.MethodPatch, "/api/v1/submissions/"+sub.ID, edit); res.Code != 400 {
+	textOnly := decodeSubmission(t, createContribution(t, app, pool, MiaID, categoryID(1), "text-move-plain-0001", "Idea"))
+	move := fmt.Sprintf(`{"version":%d,"category_id":%q,"title":"Photo","body":"","context":""}`, textOnly.Version, category.ID)
+	if res := authenticatedRequest(t, app, pool, MiaID, http.MethodPatch, "/api/v1/submissions/"+textOnly.ID, move); res.Code != 400 {
 		t.Fatalf("text-only move to photo: %d %s", res.Code, res.Body)
 	}
-	sub = decodeSubmission(t, authenticatedFileUpload(t, app, pool, MiaID, "/api/v1/submissions/"+sub.ID+"/attachments", sub.Version, "pic.jpg", testJPEG(t)))
-	edit = fmt.Sprintf(`{"version":%d,"category_id":%q,"title":"Photo","body":"","context":""}`, sub.Version, category.ID)
-	sub = decodeSubmission(t, authenticatedRequest(t, app, pool, MiaID, http.MethodPatch, "/api/v1/submissions/"+sub.ID, edit))
-	edit = fmt.Sprintf(`{"version":%d,"category_id":%q,"title":"Photo","body":"Text","context":""}`, sub.Version, category.ID)
+
+	photoTarget := createPhotoCategory(t, app, pool, nil)
+	sub := decodeSubmission(t, photoRequest(t, app, pool, MiaID, "/api/v1/submissions", map[string]string{"category_id": category.ID, "idempotency_key": "photo-move-image-0001"}, "pic.jpg", testJPEG(t)))
+	move = fmt.Sprintf(`{"version":%d,"category_id":%q,"title":"Photo","body":"","context":""}`, sub.Version, photoTarget.ID)
+	sub = decodeSubmission(t, authenticatedRequest(t, app, pool, MiaID, http.MethodPatch, "/api/v1/submissions/"+sub.ID, move))
+	if sub.CategoryID != photoTarget.ID || sub.Version != 2 {
+		t.Fatalf("photo-to-photo move: %+v", sub)
+	}
+	move = fmt.Sprintf(`{"version":%d,"category_id":%q,"title":"Photo","body":"","context":""}`, sub.Version, categoryID(1))
+	if res := authenticatedRequest(t, app, pool, MiaID, http.MethodPatch, "/api/v1/submissions/"+sub.ID, move); res.Code != 400 {
+		t.Fatalf("photo with active image moved to nonphoto category: %d %s", res.Code, res.Body)
+	}
+	edit := fmt.Sprintf(`{"version":%d,"category_id":%q,"title":"Photo","body":"Text","context":""}`, sub.Version, photoTarget.ID)
 	if res := authenticatedRequest(t, app, pool, MiaID, http.MethodPatch, "/api/v1/submissions/"+sub.ID, edit); res.Code != 400 {
 		t.Fatalf("photo edited into prose: %d %s", res.Code, res.Body)
 	}
-	// Legacy records remain readable and can receive their first photo.
+
+	// Legacy nonphoto attachments remain readable, editable and removable, while
+	// a same-category text edit is still allowed and new uploads are rejected.
+	legacyPhoto := decodeSubmission(t, photoRequest(t, app, pool, LeonID, "/api/v1/submissions", map[string]string{"category_id": category.ID, "idempotency_key": "legacy-photo-file-0001"}, "legacy.jpg", testJPEG(t)))
+	if _, err := pool.Exec(context.Background(), "UPDATE submissions SET category_id=$2 WHERE id=$1", legacyPhoto.ID, categoryID(1)); err != nil {
+		t.Fatal(err)
+	}
+	edit = fmt.Sprintf(`{"version":%d,"category_id":%q,"title":"Legacy text","body":"Kept prose","context":""}`, legacyPhoto.Version, categoryID(1))
+	legacyPhoto = decodeSubmission(t, authenticatedRequest(t, app, pool, LeonID, http.MethodPatch, "/api/v1/submissions/"+legacyPhoto.ID, edit))
+	captionPath := "/api/v1/submissions/" + legacyPhoto.ID + "/attachments/" + legacyPhoto.Attachments[0].ID
+	legacyPhoto = decodeSubmission(t, authenticatedRequest(t, app, pool, LeonID, http.MethodPatch, captionPath, fmt.Sprintf(`{"version":%d,"caption":"Altes Bild"}`, legacyPhoto.Version)))
+	if legacyPhoto.Attachments[0].Caption != "Altes Bild" {
+		t.Fatalf("legacy caption edit: %+v", legacyPhoto.Attachments[0])
+	}
+	if res := authenticatedRequest(t, app, pool, LeonID, http.MethodGet, legacyPhoto.Attachments[0].URL, ""); res.Code != 200 {
+		t.Fatalf("legacy original read: %d %s", res.Code, res.Body)
+	}
+	if res := authenticatedFileUpload(t, app, pool, LeonID, "/api/v1/submissions/"+legacyPhoto.ID+"/attachments", legacyPhoto.Version, "new.jpg", testJPEG(t)); res.Code != 400 {
+		t.Fatalf("legacy nonphoto upload: %d %s", res.Code, res.Body)
+	}
+	var attachmentCount, revisionCount, version int
+	if err := pool.QueryRow(context.Background(), "SELECT count(*) FROM attachments WHERE submission_id=$1 AND NOT deleted", legacyPhoto.ID).Scan(&attachmentCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(context.Background(), "SELECT count(*) FROM revisions WHERE submission_id=$1", legacyPhoto.ID).Scan(&revisionCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(context.Background(), "SELECT version FROM submissions WHERE id=$1", legacyPhoto.ID).Scan(&version); err != nil || attachmentCount != 1 || revisionCount != 3 || version != legacyPhoto.Version {
+		t.Fatalf("rejected legacy upload changed rows: attachments=%d revisions=%d version=%d want version=%d err=%v", attachmentCount, revisionCount, version, legacyPhoto.Version, err)
+	}
+	files, err := os.ReadDir(app.Config.UploadDir)
+	if err != nil || len(files) != 4 {
+		t.Fatalf("rejected legacy upload wrote files: count=%d err=%v", len(files), err)
+	}
+	legacyPhoto = decodeSubmission(t, authenticatedRequest(t, app, pool, LeonID, http.MethodDelete, captionPath, fmt.Sprintf(`{"version":%d}`, legacyPhoto.Version)))
+	if len(legacyPhoto.Attachments) != 0 {
+		t.Fatalf("legacy attachment removal: %+v", legacyPhoto.Attachments)
+	}
+
+	// Legacy image-less photo records remain readable and can receive their first image.
 	legacy := "20000000-0000-4000-8000-000000000004"
 	if res := authenticatedRequest(t, app, pool, LeonID, http.MethodGet, "/api/v1/submissions/"+legacy, ""); res.Code != 200 {
 		t.Fatalf("legacy photo read: %d %s", res.Code, res.Body)
@@ -230,6 +278,57 @@ func TestPhotoMovesAndLegacyEmptySubmission(t *testing.T) {
 	uploaded := decodeSubmission(t, authenticatedFileUpload(t, app, pool, LeonID, "/api/v1/submissions/"+legacy+"/attachments", 1, "legacy.jpg", testJPEG(t)))
 	if len(uploaded.Attachments) != 1 || uploaded.Attachments[0].Caption != "" {
 		t.Fatalf("legacy upload: %+v", uploaded)
+	}
+}
+
+func TestAttachmentsOnlyUploadToPhotoCollections(t *testing.T) {
+	app, pool := timelineApp(t)
+	for i, collectionID := range []string{categoryID(1), categoryID(2), categoryID(3)} {
+		nonphoto := decodeSubmission(t, createContribution(t, app, pool, MiaID, collectionID, fmt.Sprintf("no-photo-upload-%04d", i), "Idea"))
+		if res := authenticatedFileUpload(t, app, pool, MiaID, "/api/v1/submissions/"+nonphoto.ID+"/attachments", nonphoto.Version, "rejected.jpg", testJPEG(t)); res.Code != 400 {
+			t.Fatalf("nonphoto attachment upload for category %s: %d %s", collectionID, res.Code, res.Body)
+		}
+		var attachments, revisions, auditEvents, version int
+		if err := pool.QueryRow(context.Background(), "SELECT count(*) FROM attachments WHERE submission_id=$1", nonphoto.ID).Scan(&attachments); err != nil {
+			t.Fatal(err)
+		}
+		if err := pool.QueryRow(context.Background(), "SELECT count(*) FROM revisions WHERE submission_id=$1", nonphoto.ID).Scan(&revisions); err != nil {
+			t.Fatal(err)
+		}
+		if err := pool.QueryRow(context.Background(), "SELECT count(*) FROM audit_events WHERE entity_id=$1", nonphoto.ID).Scan(&auditEvents); err != nil {
+			t.Fatal(err)
+		}
+		if err := pool.QueryRow(context.Background(), "SELECT version FROM submissions WHERE id=$1", nonphoto.ID).Scan(&version); err != nil || attachments != 0 || revisions != 1 || auditEvents != 1 || version != nonphoto.Version {
+			t.Fatalf("rejected upload changed database state for category %s: attachments=%d revisions=%d audit=%d version=%d err=%v", collectionID, attachments, revisions, auditEvents, version, err)
+		}
+		files, err := os.ReadDir(app.Config.UploadDir)
+		if err != nil || len(files) != 0 {
+			t.Fatalf("rejected upload wrote files for category %s: count=%d err=%v", collectionID, len(files), err)
+		}
+	}
+
+	photoCategory := createPhotoCategory(t, app, pool, nil)
+	photo := decodeSubmission(t, photoRequest(t, app, pool, MiaID, "/api/v1/submissions", map[string]string{"category_id": photoCategory.ID, "idempotency_key": "allowed-photo-upload-0001"}, "first.jpg", testJPEG(t)))
+	added := authenticatedFileUpload(t, app, pool, MiaID, "/api/v1/submissions/"+photo.ID+"/attachments", photo.Version, "second.jpg", testJPEG(t))
+	if added.Code != 200 || len(decodeSubmission(t, added).Attachments) != 2 {
+		t.Fatalf("photo attachment upload: %d %s", added.Code, added.Body)
+	}
+}
+
+func TestPopulatedPhotoCollectionCannotChangeToNonphoto(t *testing.T) {
+	app, pool := timelineApp(t)
+	category := createPhotoCategory(t, app, pool, nil)
+	if created := photoRequest(t, app, pool, MiaID, "/api/v1/submissions", map[string]string{"category_id": category.ID, "idempotency_key": "kind-change-photo-0001"}, "pic.jpg", testJPEG(t)); created.Code != 201 {
+		t.Fatalf("create photo contribution: %d %s", created.Code, created.Body)
+	}
+	change := fmt.Sprintf(`{"name":"Changed","description":"","kind":"idea","version":%d,"options":[]}`, category.Version)
+	if res := authenticatedRequest(t, app, pool, AdminID, http.MethodPatch, "/api/v1/categories/"+category.ID, change); res.Code != 400 {
+		t.Fatalf("populated photo category changed kind: %d %s", res.Code, res.Body)
+	}
+	var kind string
+	var version int
+	if err := pool.QueryRow(context.Background(), "SELECT kind,version FROM categories WHERE id=$1", category.ID).Scan(&kind, &version); err != nil || kind != "photo" || version != category.Version {
+		t.Fatalf("rejected kind change persisted: kind=%s version=%d err=%v", kind, version, err)
 	}
 }
 

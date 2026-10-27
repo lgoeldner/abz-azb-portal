@@ -211,6 +211,13 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) error {
 	if s.Version != version {
 		return conflict()
 	}
+	var kind string
+	if e = tx.QueryRow(r.Context(), "SELECT kind FROM categories WHERE id=$1 FOR SHARE", s.CategoryID).Scan(&kind); e != nil {
+		return e
+	}
+	if kind != "photo" {
+		return bad("Bilder können nur in Fotosammlungen hochgeladen werden.")
+	}
 	if len(s.Attachments) >= 10 {
 		return bad("Maximal 10 Bilder je Beitrag.")
 	}

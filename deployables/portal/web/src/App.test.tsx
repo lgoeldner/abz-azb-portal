@@ -114,40 +114,37 @@ describe('contribution submission', () => {
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
   });
 
-  it('rejects an unsupported file before creating a contribution and preserves the form', async () => {
+  it('rejects an unsupported photo before creating a contribution', async () => {
+    const photos = sammlung('photos', 'Fotos', 'photo');
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith('/api/v1/me')) return Response.json({ user, csrf_token: 'csrf' });
-      if (url.endsWith('/api/v1/categories')) return Response.json([category]);
+      if (url.endsWith('/api/v1/categories')) return Response.json([photos]);
       return Response.json([]);
     });
     vi.stubGlobal('fetch', fetchMock);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/beitraege/neu?kategorie=memory']}>
+        <MemoryRouter initialEntries={['/beitraege/neu?kategorie=photos']}>
           <App />
         </MemoryRouter>
       </QueryClientProvider>,
     );
 
-    const title = await screen.findByPlaceholderText('Gib deinem Beitrag einen Namen');
-    fireEvent.change(title, { target: { value: 'Die letzte Freistunde' } });
-    fireEvent.change(screen.getByLabelText(/höchstens 10 Bilder/), {
+    fireEvent.change(await screen.findByLabelText(/Mindestens ein Foto/), {
       target: { files: [new File(['PDF test'], 'notizen.pdf', { type: 'application/pdf' })] },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Beitrag einreichen/i }));
-
+    fireEvent.click(screen.getByRole('button', { name: /Fotos einreichen/i }));
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent('Bitte wähle nur JPEG-, PNG- oder WebP-Bilder aus.'),
     );
     expect(
       fetchMock.mock.calls.some(([url, init]) => String(url) === '/api/v1/submissions' && init?.method === 'POST'),
     ).toBe(false);
-    expect(title).toHaveValue('Die letzte Freistunde');
   });
 
-  it('lets a student replace a rejected photo and retry without creating another contribution', async () => {
+  it('lets a student replace a rejected first photo without creating a duplicate contribution', async () => {
     const submission = {
       id: 'new-submission',
       category_id: 'photo',
@@ -162,31 +159,47 @@ describe('contribution submission', () => {
       updated_at: '2026-10-23T12:00:00Z',
       attachments: [],
     };
-    const photoCategory = sammlung('photo', 'Fotos', 'memory', {
+    const photoCategory = sammlung('photo', 'Fotos', 'photo', {
       repeatable: false,
       ongoing: false,
       closes_at: '2027-01-01T00:00:00Z',
     });
     let created = false;
-    let uploadCount = 0;
+    let successfulCreations = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith('/api/v1/me')) return Response.json({ user, csrf_token: 'csrf' });
       if (url.endsWith('/api/v1/categories')) return Response.json([photoCategory]);
       if (url === '/api/v1/submissions' && init?.method === 'POST') {
-        created = true;
-        return Response.json(submission, { status: 201 });
-      }
-      if (url === '/api/v1/submissions') return Response.json(created ? [submission] : []);
-      if (url === '/api/v1/submissions/new-submission/attachments' && init?.method === 'POST') {
-        uploadCount += 1;
-        if (uploadCount === 1)
+        const form = init.body as FormData;
+        if (!created) {
+          created = true;
           return Response.json(
             { error: { code: 'invalid_image', message: 'Das Foto ist ungültig.' } },
             { status: 400 },
           );
-        return Response.json({ ...submission, version: 2 });
+        }
+        successfulCreations += 1;
+        return Response.json(
+          {
+            ...submission,
+            title: (form.get('file') as File).name,
+            attachments: [
+              {
+                id: 'photo-1',
+                filename: (form.get('file') as File).name,
+                caption: '',
+                mime_type: 'image/jpeg',
+                size_bytes: 10,
+                url: '/api/v1/attachments/photo-1',
+                preview_url: '/api/v1/attachments/photo-1/preview',
+              },
+            ],
+          },
+          { status: 201 },
+        );
       }
+      if (url === '/api/v1/submissions') return Response.json(created ? [{ ...submission, attachments: [] }] : []);
       if (url === '/api/v1/submissions/new-submission') return Response.json({ ...submission, version: 2 });
       if (url.endsWith('/revisions') || url.endsWith('/corrections')) return Response.json([]);
       return Response.json([]);
@@ -201,29 +214,29 @@ describe('contribution submission', () => {
       </QueryClientProvider>,
     );
 
-    const title = await screen.findByPlaceholderText('Gib deinem Beitrag einen Namen');
-    fireEvent.change(title, { target: { value: submission.title } });
-    fireEvent.change(screen.getByPlaceholderText('Was soll die Redaktion dazu wissen?'), {
-      target: { value: submission.body },
-    });
-    const photoPicker = screen.getByLabelText(/höchstens 10 Bilder/);
+    const photoPicker = await screen.findByLabelText(/Mindestens ein Foto/);
     fireEvent.change(photoPicker, { target: { files: [new File(['bad'], 'bad.jpg', { type: 'image/jpeg' })] } });
-    fireEvent.click(screen.getByRole('button', { name: /Beitrag einreichen/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Fotos einreichen/i }));
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Das Foto ist ungültig.'));
-    expect(screen.getByRole('button', { name: 'Ohne weitere Fotos fortfahren' })).toBeInTheDocument();
     expect(photoPicker).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'Entfernen' }));
     fireEvent.change(photoPicker, {
       target: { files: [new File(['replacement'], 'replacement.jpg', { type: 'image/jpeg' })] },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Fotos erneut hochladen/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Fotos einreichen/ }));
 
-    await screen.findByRole('heading', { name: submission.title });
+    await waitFor(() => expect(successfulCreations).toBe(1));
+    const createCalls = fetchMock.mock.calls.filter(
+      ([url, init]) => String(url) === '/api/v1/submissions' && init?.method === 'POST',
+    );
+    expect(createCalls).toHaveLength(2);
+    expect((createCalls[0][1]?.body as FormData).get('idempotency_key')).toBe(
+      (createCalls[1][1]?.body as FormData).get('idempotency_key'),
+    );
     expect(
-      fetchMock.mock.calls.filter(([url, init]) => String(url) === '/api/v1/submissions' && init?.method === 'POST'),
-    ).toHaveLength(1);
-    expect(uploadCount).toBe(2);
+      fetchMock.mock.calls.filter(([url, init]) => String(url).endsWith('/attachments') && init?.method === 'POST'),
+    ).toHaveLength(0);
   });
 });
 

@@ -272,7 +272,8 @@ func TestOneOffContributionCapSerializesConcurrentCreatesAndMoves(t *testing.T) 
 	if first.Code != http.StatusCreated {
 		t.Fatalf("create one-off move slot: %d %s", first.Code, first.Body)
 	}
-	second := createContribution(t, app, pool, MiaID, categoryID(1), "idea-move-0001", "Idea to move")
+	source := createPhotoCategory(t, app, pool, nil)
+	second := createContribution(t, app, pool, MiaID, source.ID, "idea-move-0001", "Idea to move")
 	if second.Code != http.StatusCreated {
 		t.Fatalf("create repeatable source contribution: %d %s", second.Code, second.Body)
 	}
@@ -295,13 +296,15 @@ func TestOneOffContributionCapSerializesConcurrentCreatesAndMoves(t *testing.T) 
 	}
 
 	moveTarget := createPhotoCategory(t, app, pool, boolPtr(false))
-	otherSource := createContribution(t, app, pool, MiaID, categoryID(1), "photo-race-move-0001", "Second source")
+	sourceCategory := createPhotoCategory(t, app, pool, nil)
+	otherSource := createContribution(t, app, pool, MiaID, sourceCategory.ID, "photo-race-move-0001", "Second source")
 	if otherSource.Code != http.StatusCreated {
 		t.Fatalf("create second move source: %d %s", otherSource.Code, otherSource.Body)
 	}
 	secondSource := decodeSubmission(t, otherSource)
 	secondSource = decodeSubmission(t, authenticatedFileUpload(t, app, pool, MiaID, "/api/v1/submissions/"+secondSource.ID+"/attachments", secondSource.Version, "move.jpg", testJPEG(t)))
-	seedSource := decodeSubmission(t, authenticatedFileUpload(t, app, pool, MiaID, "/api/v1/submissions/20000000-0000-4000-8000-000000000001/attachments", 1, "move.jpg", testJPEG(t)))
+	seedSourceResponse := createContribution(t, app, pool, MiaID, sourceCategory.ID, "photo-race-move-0002", "Seed source")
+	seedSource := decodeSubmission(t, seedSourceResponse)
 	var moves sync.WaitGroup
 	moveResults := make(chan *httptest.ResponseRecorder, 2)
 	for _, item := range []Submission{seedSource, secondSource} {

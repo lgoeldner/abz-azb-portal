@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Category, Me, Submission } from './api';
 import { NewContribution } from './pages';
@@ -40,7 +40,7 @@ function category(id: string, kind: Category['kind'], name: string): Category {
   };
 }
 
-function renderNewContribution(path: string) {
+function renderNewContribution(path: string, withNavigation = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const me: Me = { user: student, csrf_token: 'csrf' };
   const workspaceView: [View, (next: View) => void] = ['schueler', vi.fn()];
@@ -50,7 +50,19 @@ function renderNewContribution(path: string) {
         <WorkspaceView.Provider value={workspaceView}>
           <MemoryRouter initialEntries={[path]}>
             <Routes>
-              <Route path="/beitraege/neu" element={<NewContribution />} />
+              <Route
+                path="/beitraege/neu"
+                element={
+                  withNavigation ? (
+                    <>
+                      <Link to="/beitraege/neu?kategorie=memories">Zur Textsammlung</Link>
+                      <NewContribution />
+                    </>
+                  ) : (
+                    <NewContribution />
+                  )
+                }
+              />
               <Route path="/beitraege/:id" element={<p>Beitrag gespeichert</p>} />
             </Routes>
           </MemoryRouter>
@@ -135,7 +147,10 @@ describe('quote contribution form', () => {
     expect(calls[1].payload).toEqual(calls[0].payload);
   });
 
-  it.each(['memories', 'photos'])('uses the linked non-quote collection: %s', async (id) => {
+  it.each([
+    ['memories', false],
+    ['photos', true],
+  ] as const)('uses the linked collection without offering unrelated controls: %s', async (id, photo) => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
@@ -152,15 +167,78 @@ describe('quote contribution form', () => {
     );
 
     renderNewContribution(`/beitraege/neu?kategorie=${id}`);
-    if (id === 'memories') {
+    if (!photo) {
       expect(await screen.findByLabelText('Titel')).toBeInTheDocument();
       expect(screen.getByLabelText('Dein Beitrag')).toBeInTheDocument();
       expect(screen.getByLabelText(/Kontext & Hinweise/)).toBeInTheDocument();
+      expect(screen.queryByLabelText(/Fotos hinzufügen/)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/Bildtext/)).not.toBeInTheDocument();
     } else {
       expect(await screen.findByLabelText(/Mindestens ein Foto/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Mindestens ein Foto/)).toBeInTheDocument();
     }
     expect(screen.queryByLabelText('Sammlung')).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText('Name oder Quelle')).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Dein Zitat/)).not.toBeInTheDocument();
+  });
+
+  it.each(['idea', 'quote', 'memory'] as const)('hides photo controls for %s collections', async (kind) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), window.location.origin);
+        if (url.pathname.endsWith('/categories')) return Response.json([category(kind, kind, kind)]);
+        if (url.pathname.endsWith('/submissions')) return Response.json([]);
+        return Response.json([]);
+      }),
+    );
+    renderNewContribution(`/beitraege/neu?kategorie=${kind}`);
+    await screen.findByRole('button', { name: /Beitrag einreichen/ });
+    expect(screen.queryByLabelText(/Fotos hinzufügen/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Bildtext/)).not.toBeInTheDocument();
+  });
+
+  it('does not upload a stale selected photo after navigating to a text collection', async () => {
+    const calls: string[] = [];
+    const saved: Submission = {
+      id: 'saved-memory',
+      category_id: 'memories',
+      author_id: student.id,
+      author_name: student.name,
+      title: 'Ein schöner Tag',
+      body: '',
+      context: '',
+      status: 'pending',
+      version: 1,
+      created_at: '2026-10-20T10:00:00Z',
+      updated_at: '2026-10-20T10:00:00Z',
+      attachments: [],
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), window.location.origin);
+        const path = url.pathname.replace('/api/v1', '');
+        calls.push(`${path}:${init?.method ?? 'GET'}`);
+        if (path === '/categories')
+          return Response.json([category('photos', 'photo', 'Fotos'), category('memories', 'memory', 'Erinnerungen')]);
+        if (path === '/submissions' && (init?.method ?? 'GET') === 'GET') return Response.json([]);
+        if (path === '/submissions' && init?.method === 'POST') return Response.json(saved, { status: 201 });
+        return Response.json([]);
+      }),
+    );
+
+    const result = renderNewContribution('/beitraege/neu?kategorie=photos', true);
+    const chooser = await screen.findByLabelText(/Mindestens ein Foto/);
+    fireEvent.change(chooser, {
+      target: { files: [new File(['image'], 'moment.jpg', { type: 'image/jpeg' })] },
+    });
+    fireEvent.click(screen.getByRole('link', { name: 'Zur Textsammlung' }));
+    fireEvent.change(await screen.findByLabelText('Titel'), { target: { value: saved.title } });
+    fireEvent.submit(result.container.querySelector('form')!);
+
+    await screen.findByText('Beitrag gespeichert');
+    expect(calls).toContain('/submissions:POST');
+    expect(calls.some((call) => call.endsWith('/attachments:POST'))).toBe(false);
   });
 });

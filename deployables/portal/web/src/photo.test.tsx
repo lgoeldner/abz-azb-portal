@@ -400,6 +400,104 @@ describe('photo contributions', () => {
     expect(screen.queryByRole('button', { name: 'Foto entfernen' })).toBeNull();
   });
 
+  it('keeps legacy photos visible and editable on text contributions without offering uploads', async () => {
+    const memory = photoCategory({ id: 'memories', name: 'Erinnerungen', kind: 'memory' });
+    const legacy = submission({
+      id: 'legacy-memory',
+      category_id: memory.id,
+      attachments: [attachment('legacy-photo', 'Altes Foto')],
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), window.location.origin);
+        const path = url.pathname.replace('/api/v1', '');
+        if (path === '/categories') return Response.json([memory]);
+        if (path === '/submissions') return Response.json([legacy]);
+        if (path === `/submissions/${legacy.id}`) return Response.json(legacy);
+        if (path === `/submissions/${legacy.id}/revisions`) return Response.json([]);
+        if (path === `/submissions/${legacy.id}/corrections`) return Response.json([]);
+        return Response.json([]);
+      }),
+    );
+    renderRoutes(
+      `/beitraege/${legacy.id}`,
+      student,
+      'schueler',
+      <Routes>
+        <Route path="/beitraege/:id" element={<ContributionDetail />} />
+      </Routes>,
+    );
+    expect(await screen.findByText('Altes Foto')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Foto entfernen' })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Foto hinzufügen/)).not.toBeInTheDocument();
+  });
+
+  it.each(['idea', 'quote', 'memory'] as const)('hides the empty photo section on %s details', async (kind) => {
+    const textCategory = photoCategory({ id: kind, name: kind, kind });
+    const textSubmission = submission({
+      id: `empty-${kind}`,
+      category_id: kind,
+      attachments: [],
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), window.location.origin);
+        const path = url.pathname.replace('/api/v1', '');
+        if (path === '/categories') return Response.json([textCategory]);
+        if (path === '/submissions') return Response.json([textSubmission]);
+        if (path === `/submissions/${textSubmission.id}`) return Response.json(textSubmission);
+        if (path === `/submissions/${textSubmission.id}/revisions`) return Response.json([]);
+        if (path === `/submissions/${textSubmission.id}/corrections`) return Response.json([]);
+        return Response.json([]);
+      }),
+    );
+    renderRoutes(
+      `/beitraege/${textSubmission.id}`,
+      student,
+      'schueler',
+      <Routes>
+        <Route path="/beitraege/:id" element={<ContributionDetail />} />
+      </Routes>,
+    );
+    expect(await screen.findByRole('heading', { name: textSubmission.title })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /^Fotos/ })).not.toBeInTheDocument();
+  });
+
+  it('limits an attached text contribution move to its current category and photo collections', async () => {
+    const currentCategory = photoCategory({ id: 'memories', name: 'Erinnerungen', kind: 'memory' });
+    const otherTextCategory = photoCategory({ id: 'quotes', name: 'Zitate', kind: 'quote' });
+    const photo = photoCategory();
+    const legacy = submission({ id: 'attached-text', category_id: 'memories' });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), window.location.origin);
+        const path = url.pathname.replace('/api/v1', '');
+        if (path === '/categories') return Response.json([currentCategory, otherTextCategory, photo]);
+        if (path === '/submissions') return Response.json([legacy]);
+        if (path === `/submissions/${legacy.id}`) return Response.json(legacy);
+        if (path === `/submissions/${legacy.id}/revisions`) return Response.json([]);
+        if (path === `/submissions/${legacy.id}/corrections`) return Response.json([]);
+        return Response.json([]);
+      }),
+    );
+    renderRoutes(
+      `/beitraege/${legacy.id}`,
+      student,
+      'schueler',
+      <Routes>
+        <Route path="/beitraege/:id" element={<ContributionDetail />} />
+      </Routes>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /Bearbeiten/ }));
+    const options = within(screen.getByLabelText('Sammlung'))
+      .getAllByRole('option')
+      .map((option) => option.textContent);
+    expect(options).toEqual(['Erinnerungen', 'Jahrgangsmomente']);
+  });
+
   it('edits a pending photo through its own batch and refreshed version, while protecting accepted and final photos', async () => {
     const photo = photoCategory();
     const firstBatch = submission({

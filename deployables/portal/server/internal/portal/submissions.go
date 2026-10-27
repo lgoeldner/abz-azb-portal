@@ -288,8 +288,11 @@ func (a *App) editSubmission(w http.ResponseWriter, r *http.Request) error {
 		return forbidden()
 	}
 	var kind string
-	if e = tx.QueryRow(r.Context(), "SELECT kind FROM categories WHERE id=$1", in.CategoryID).Scan(&kind); e != nil {
+	if e = tx.QueryRow(r.Context(), "SELECT kind FROM categories WHERE id=$1 FOR SHARE", in.CategoryID).Scan(&kind); e != nil {
 		return e
+	}
+	if in.CategoryID != s.CategoryID && len(s.Attachments) > 0 && kind != "photo" {
+		return bad("Beiträge mit Bildern können nur in Fotosammlungen verschoben werden.")
 	}
 	if kind == "photo" && (in.Body != "" || in.CategoryID != s.CategoryID && len(s.Attachments) == 0) {
 		return bad("Fotobeiträge benötigen ein Bild und dürfen keinen Beitragstext enthalten.")
