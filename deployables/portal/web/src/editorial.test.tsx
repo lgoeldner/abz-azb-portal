@@ -185,7 +185,8 @@ describe('submission collections independent of repeatability', () => {
       id: 'occupied-photo',
       category_id: photo.id,
     };
-    installApi([], submission, [current, ideas, photo, person], [submission, occupiedPhoto]);
+    const textSubmission = { ...submission, attachments: [] };
+    installApi([], textSubmission, [current, ideas, photo, person], [textSubmission, occupiedPhoto]);
     renderPortal(`/beitraege/${submission.id}`, student, 'schueler');
 
     fireEvent.click(await screen.findByRole('button', { name: /Bearbeiten/ }));
@@ -200,8 +201,9 @@ describe('submission collections independent of repeatability', () => {
     const closedCurrent: Category = { ...category, status: 'closed' };
     const openTarget: Category = { ...ideas, status: 'open' };
     const closedTarget: Category = { ...ideas, id: 'closed-ideas', name: 'Beendete Ideen', status: 'closed' };
-    installApi([], submission, [closedCurrent, openTarget, closedTarget]);
-    renderPortal(`/beitraege/${submission.id}`, student, 'schueler');
+    const textSubmission = { ...submission, attachments: [] };
+    installApi([], textSubmission, [closedCurrent, openTarget, closedTarget], [textSubmission]);
+    renderPortal(`/beitraege/${textSubmission.id}`, student, 'schueler');
 
     fireEvent.click(await screen.findByRole('button', { name: /Bearbeiten/ }));
     const select = await screen.findByLabelText('Sammlung');
@@ -209,7 +211,7 @@ describe('submission collections independent of repeatability', () => {
       'Erinnerungen',
       'Ideen',
     ]);
-    expect(screen.getByLabelText(/Foto hinzufügen/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Foto hinzufügen/)).not.toBeInTheDocument();
   });
 
   it('includes one-off photos in the editorial contribution reader', async () => {
@@ -341,7 +343,8 @@ describe('Redaktion contribution reading', () => {
 
     expect(await screen.findByText(note.body)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Bearbeiten/ })).toBeInTheDocument();
-    expect(screen.getByLabelText(/Foto hinzufügen/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Foto hinzufügen/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Foto entfernen' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Beitrag zurückziehen' })).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /annehmen|ablehnen|erneut zur prüfung öffnen/i }),

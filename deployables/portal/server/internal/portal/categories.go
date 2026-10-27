@@ -391,6 +391,15 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 				return bad("Eine Fotosammlung darf nur Beiträge mit Bild und ohne Beitragstext enthalten.")
 			}
 		}
+		if old.Kind == "photo" && in.Kind != "photo" {
+			var hasPhotos bool
+			if e = tx.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM submissions s JOIN attachments a ON a.submission_id=s.id WHERE s.category_id=$1 AND NOT a.deleted)", id).Scan(&hasPhotos); e != nil {
+				return e
+			}
+			if hasPhotos {
+				return bad("Eine Fotosammlung mit Bildern kann nicht in eine andere Sammlungsart geändert werden.")
+			}
+		}
 		if *in.Repeatable != old.Repeatable {
 			return bad("Die Häufigkeit der Beiträge kann nach dem Anlegen nicht geändert werden.")
 		}

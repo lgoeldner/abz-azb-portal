@@ -118,7 +118,7 @@
     },
     "/api/v1/categories/{id}": {
       "patch": {
-        "summary": "Update collection (admin or granted manager); ballot definitions lock after first opening, bounded poll deadlines remain editable with version and closes_at only; repeatable and ongoing fixed after creation",
+        "summary": "Update collection (admin or granted manager); ballot definitions lock after first opening, bounded poll deadlines remain editable with version and closes_at only; repeatable and ongoing fixed after creation; photo collections with active images cannot change to a non-photo kind",
         "operationId": "patchCategoriesId",
         "responses": {
           "200": {
@@ -283,7 +283,7 @@
         ]
       },
       "post": {
-        "summary": "Create idempotent contribution; photo collections require multipart image and create atomically",
+        "summary": "Create idempotent contribution; multipart images only for photo collections and create atomically",
         "operationId": "postSubmissions",
         "responses": {
           "201": {
@@ -405,7 +405,7 @@
         ]
       },
       "patch": {
-        "summary": "Edit own pending contribution with optimistic concurrency; editorial roles cannot change another author’s original",
+        "summary": "Edit own pending contribution with optimistic concurrency; active images cannot move to a non-photo collection; editorial roles cannot change another author’s original",
         "operationId": "patchSubmissionsId",
         "responses": {
           "200": {
@@ -558,7 +558,7 @@
     },
     "/api/v1/submissions/{id}/attachments": {
       "post": {
-        "summary": "Attach image to own pending contribution; original content stays author-owned",
+        "summary": "Attach image to own pending contribution in a photo collection only; other collection types return 400",
         "operationId": "postSubmissionsIdAttachments",
         "responses": {
           "200": {

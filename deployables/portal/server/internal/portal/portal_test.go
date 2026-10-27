@@ -276,7 +276,7 @@ func TestPostgresAuthorizationLifecycleAndBallots(t *testing.T) {
 	}
 
 	// Private originals and previews are bound to the submission's read permission.
-	photo, photoErr := pool.Exec(ctx, "INSERT INTO submissions(id,category_id,author_id,title,body,context,idempotency_key,request_hash) VALUES($1,$2,$3,'Photo','', '', 'photo-key-0001','photo')", "50000000-0000-4000-8000-000000000001", categoryID(1), MiaID)
+	photo, photoErr := pool.Exec(ctx, "INSERT INTO submissions(id,category_id,author_id,title,body,context,idempotency_key,request_hash) VALUES($1,$2,$3,'Photo','', '', 'photo-key-0001','photo')", "50000000-0000-4000-8000-000000000001", categoryID(4), MiaID)
 	if photoErr != nil || photo.RowsAffected() != 1 {
 		t.Fatalf("create photo contribution: %v", photoErr)
 	}

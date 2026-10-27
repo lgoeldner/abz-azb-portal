@@ -144,7 +144,10 @@ export function NewContribution() {
     if (!category) return;
     const data = new FormData(e.currentTarget);
     await action.run(async () => {
-      const files = images.map((image) => image.file);
+      // The form can survive a collection query change. Never let stale image
+      // selections turn a text submission into attachment uploads.
+      const selectedImages = isPhoto ? images : [];
+      const files = selectedImages.map((image) => image.file);
       const invalidFiles = photoValidationError(
         files,
         saved?.attachments.length ?? (isPhoto ? existing?.attachments.length : 0) ?? 0,
@@ -153,7 +156,7 @@ export function NewContribution() {
       if (isPhoto && !saved && !images.length) throw new Error('Bitte wähle mindestens ein Foto aus.');
 
       let current = saved ?? (isPhoto ? (existing ?? null) : null);
-      let remaining = [...images];
+      let remaining = [...selectedImages];
       if (!current && isPhoto) {
         const first = remaining.shift();
         if (!first) throw new Error('Bitte wähle mindestens ein Foto aus.');
@@ -314,27 +317,29 @@ export function NewContribution() {
                 </label>
               </fieldset>
             )}
-            <label className={label}>
-              {isPhoto ? 'Fotos' : 'Fotos hinzufügen'}{' '}
-              <small className="block font-normal text-muted">
-                {isPhoto ? 'Mindestens ein Foto. ' : ''}JPEG, PNG oder WebP, höchstens 10 Bilder, je 20 MiB und
-                höchstens 24 Megapixel. Pro Bild passt ein Bildtext.
-              </small>
-              <input
-                className="mt-2 block w-full text-sm text-muted file:mr-3 file:rounded-ui file:border file:border-line file:bg-white file:px-3 file:py-2 file:text-sm file:font-semibold file:text-ink hover:file:bg-soft"
-                type="file"
-                multiple
-                accept="image/jpeg,image/png,image/webp"
-                disabled={action.busy}
-                required={Boolean(isPhoto && !saved && images.length === 0)}
-                onChange={(e) => {
-                  const selected = Array.from(e.target.files ?? []).map((file) => ({ file, caption: '' }));
-                  setImages((current) => [...current, ...selected]);
-                  e.currentTarget.value = '';
-                }}
-              />
-            </label>
-            {!!images.length && (
+            {isPhoto && (
+              <label className={label}>
+                Fotos{' '}
+                <small className="block font-normal text-muted">
+                  Mindestens ein Foto. JPEG, PNG oder WebP, höchstens 10 Bilder, je 20 MiB und höchstens 24 Megapixel.
+                  Pro Bild passt ein Bildtext.
+                </small>
+                <input
+                  className="mt-2 block w-full text-sm text-muted file:mr-3 file:rounded-ui file:border file:border-line file:bg-white file:px-3 file:py-2 file:text-sm file:font-semibold file:text-ink hover:file:bg-soft"
+                  type="file"
+                  multiple
+                  accept="image/jpeg,image/png,image/webp"
+                  disabled={action.busy}
+                  required={Boolean(!saved && images.length === 0)}
+                  onChange={(e) => {
+                    const selected = Array.from(e.target.files ?? []).map((file) => ({ file, caption: '' }));
+                    setImages((current) => [...current, ...selected]);
+                    e.currentTarget.value = '';
+                  }}
+                />
+              </label>
+            )}
+            {isPhoto && !!images.length && (
               <ul className="space-y-3" aria-label="Ausgewählte Fotos">
                 {images.map((image, index) => (
                   <li
@@ -467,6 +472,7 @@ export function ContributionDetail() {
       c.id === s.category_id ||
       (c.status === 'open' &&
         submittable(c) &&
+        (!s.attachments.length || c.kind === 'photo') &&
         (c.kind !== 'photo' || (!s.body.trim() && s.attachments.length > 0)) &&
         (own || canEdit(user, c.id)) &&
         (c.repeatable || (!submissions.isPending && !submissions.error && !occupied.has(c.id)))),
@@ -736,78 +742,80 @@ export function ContributionDetail() {
               )}
             </article>
           )}
-          <section className={panel}>
-            <h2 className={heading}>
-              {isPhoto ? 'Deine Fotos' : 'Fotos'}{' '}
-              <small className="font-normal text-muted">({s.attachments?.length ?? 0})</small>
-            </h2>
-            {!!s.attachments?.length && (
-              <div className="mt-4">
-                <PhotoGallery
-                  photos={s.attachments}
-                  allowCaptionEdit={editable}
-                  busy={action.busy}
-                  onSaveCaption={async (attachmentId, value) => {
-                    try {
-                      await api<Submission>(
-                        `/submissions/${id}/attachments/${attachmentId}`,
-                        json('PATCH', { version: s.version, caption: value }),
-                      );
-                    } finally {
-                      await queryClient.invalidateQueries();
+          {(isPhoto || !!s.attachments?.length) && (
+            <section className={panel}>
+              <h2 className={heading}>
+                {isPhoto ? 'Deine Fotos' : 'Fotos'}{' '}
+                <small className="font-normal text-muted">({s.attachments?.length ?? 0})</small>
+              </h2>
+              {!!s.attachments?.length && (
+                <div className="mt-4">
+                  <PhotoGallery
+                    photos={s.attachments}
+                    allowCaptionEdit={editable}
+                    busy={action.busy}
+                    onSaveCaption={async (attachmentId, value) => {
+                      try {
+                        await api<Submission>(
+                          `/submissions/${id}/attachments/${attachmentId}`,
+                          json('PATCH', { version: s.version, caption: value }),
+                        );
+                      } finally {
+                        await queryClient.invalidateQueries();
+                      }
+                    }}
+                    canRemove={() =>
+                      editable && categoryKind !== undefined && (categoryKind !== 'photo' || s.attachments.length > 1)
                     }
-                  }}
-                  canRemove={() =>
-                    editable && categoryKind !== undefined && (categoryKind !== 'photo' || s.attachments.length > 1)
-                  }
-                  onRemove={(photo) =>
-                    action.run(
-                      () => api(`/submissions/${id}/attachments/${photo.id}`, json('DELETE', { version: s.version })),
-                      'Foto entfernt.',
-                    )
-                  }
-                />
-              </div>
-            )}
-            {editable && (
-              <form className="mt-5 flex flex-wrap items-end gap-3 border-t border-line pt-5" onSubmit={upload}>
-                <div className="min-w-0 flex-1 basis-64 space-y-3">
-                  <label className={`${label} block`}>
-                    Foto hinzufügen{' '}
-                    <small className="block font-normal text-muted">
-                      JPEG, PNG oder WebP, höchstens 10 Bilder, je 20 MiB und höchstens 24 Megapixel.
-                    </small>
-                    <input
-                      className="mt-2 block w-full text-sm text-muted file:mr-3 file:rounded-ui file:border file:border-line file:bg-white file:px-3 file:py-2 file:text-sm file:font-semibold file:text-ink hover:file:bg-soft"
-                      type="file"
-                      required
-                      accept="image/jpeg,image/png,image/webp"
-                      onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                    />
-                  </label>
-                  <label className={`${label} block`}>
-                    Bildtext <small className="font-normal text-muted">optional</small>
-                    <textarea
-                      className={field}
-                      rows={2}
-                      maxLength={2000}
-                      value={caption}
-                      onChange={(e) => setCaption(e.target.value)}
-                    />
-                  </label>
+                    onRemove={(photo) =>
+                      action.run(
+                        () => api(`/submissions/${id}/attachments/${photo.id}`, json('DELETE', { version: s.version })),
+                        'Foto entfernt.',
+                      )
+                    }
+                  />
                 </div>
-                <button className={btn.secondary} disabled={action.busy || !file}>
-                  Hochladen ↑
-                </button>
-              </form>
-            )}
-            {!s.attachments?.length && isPhoto && editable && (
-              <p className="mt-3 text-sm text-muted">
-                Dieser ältere Eintrag hat noch kein Foto. Du kannst es hier ergänzen.
-              </p>
-            )}
-            {!s.attachments?.length && !editable && <p className="mt-3 text-sm text-muted">Keine Fotos vorhanden.</p>}
-          </section>
+              )}
+              {editable && isPhoto && (
+                <form className="mt-5 flex flex-wrap items-end gap-3 border-t border-line pt-5" onSubmit={upload}>
+                  <div className="min-w-0 flex-1 basis-64 space-y-3">
+                    <label className={`${label} block`}>
+                      Foto hinzufügen{' '}
+                      <small className="block font-normal text-muted">
+                        JPEG, PNG oder WebP, höchstens 10 Bilder, je 20 MiB und höchstens 24 Megapixel.
+                      </small>
+                      <input
+                        className="mt-2 block w-full text-sm text-muted file:mr-3 file:rounded-ui file:border file:border-line file:bg-white file:px-3 file:py-2 file:text-sm file:font-semibold file:text-ink hover:file:bg-soft"
+                        type="file"
+                        required
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                      />
+                    </label>
+                    <label className={`${label} block`}>
+                      Bildtext <small className="font-normal text-muted">optional</small>
+                      <textarea
+                        className={field}
+                        rows={2}
+                        maxLength={2000}
+                        value={caption}
+                        onChange={(e) => setCaption(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <button className={btn.secondary} disabled={action.busy || !file}>
+                    Hochladen ↑
+                  </button>
+                </form>
+              )}
+              {!s.attachments?.length && isPhoto && editable && (
+                <p className="mt-3 text-sm text-muted">
+                  Dieser ältere Eintrag hat noch kein Foto. Du kannst es hier ergänzen.
+                </p>
+              )}
+              {!s.attachments?.length && !editable && <p className="mt-3 text-sm text-muted">Keine Fotos vorhanden.</p>}
+            </section>
+          )}
           {!isRedaktion && annotationPanel}
         </div>
         <aside className="min-w-0 space-y-6">

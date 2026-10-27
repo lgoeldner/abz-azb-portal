@@ -48,7 +48,7 @@ export interface paths {
         delete: operations["deleteCategoriesId"];
         options?: never;
         head?: never;
-        /** Update collection (admin or granted manager); ballot definitions lock after first opening, bounded poll deadlines remain editable with version and closes_at only; repeatable and ongoing fixed after creation */
+        /** Update collection (admin or granted manager); ballot definitions lock after first opening, bounded poll deadlines remain editable with version and closes_at only; repeatable and ongoing fixed after creation; photo collections with active images cannot change to a non-photo kind */
         patch: operations["patchCategoriesId"];
         trace?: never;
     };
@@ -62,7 +62,7 @@ export interface paths {
         /** List authorized submissions */
         get: operations["getSubmissions"];
         put?: never;
-        /** Create idempotent contribution; photo collections require multipart image and create atomically */
+        /** Create idempotent contribution; multipart images only for photo collections and create atomically */
         post: operations["postSubmissions"];
         delete?: never;
         options?: never;
@@ -84,7 +84,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Edit own pending contribution with optimistic concurrency; editorial roles cannot change another author’s original */
+        /** Edit own pending contribution with optimistic concurrency; active images cannot move to a non-photo collection; editorial roles cannot change another author’s original */
         patch: operations["patchSubmissionsId"];
         trace?: never;
     };
@@ -131,7 +131,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Attach image to own pending contribution; original content stays author-owned */
+        /** Attach image to own pending contribution in a photo collection only; other collection types return 400 */
         post: operations["postSubmissionsIdAttachments"];
         delete?: never;
         options?: never;
