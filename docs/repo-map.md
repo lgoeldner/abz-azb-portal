@@ -34,7 +34,7 @@ file `ops/README.md` :: operations, backup, restore, tidy caveat [ops, restore, 
 
 ## Scripts
 
-cmd `scripts/dev.sh` :: `make dev`: build/start containers, wait for readiness, print OrbStack URL and exit [dev, start]
+cmd `scripts/dev.sh` :: `make dev`: build/start containers, wait for readiness, print `PUBLIC_URL` and exit [dev, start]
 cmd `scripts/dev-common.sh` :: dev env vars (DATABASE_URL, UPLOAD_DIR), start_dev_services (detached Vite, fresh dependency volumes), prepare_dev_database (migrate+seed) [env, dev]
 cmd `scripts/dev-backend.sh` :: builds and runs the host Go API; SKIP_DEV_DB_SETUP=1 skips containers/migrate/seed [backend, dev]
 cmd `scripts/dev-frontend.sh` :: Vite dev server starts at 5173 and uses the next free port if occupied [frontend, dev, port]
@@ -114,7 +114,7 @@ route GET /admin/users, PATCH|DELETE /admin/users/{id}, GET /admin/audit, GET /a
 route GET /auth/login, GET /auth/callback, POST /auth/logout :: outside /api/v1 (auth.go) [auth]
 
 ## Frontend (deployables/portal/web)
-file `deployables/portal/web/vite.config.ts` :: Vite dev server allows OrbStack proxy host; localhost at 5173 with free-port fallback [frontend, dev, port]
+file `deployables/portal/web/vite.config.ts` :: Vite dev server allows `PUBLIC_HOST` proxy host; localhost at 5173 with free-port fallback [frontend, dev, port]
 
 file `deployables/portal/web/src/App.tsx` :: router, Layout, nav (StudentNav retains open contribution links after own submissions, EditorNav, AdminNav), StudentHome unanswered voting/one-off contribution stack and always-visible open repeatable contribution cards, unified own contribution/poll list capped at ten rows with full-list link, shared EditorialHome dashboard with class widgets, admin admissions, manager writable polls and recent assigned contributions, voting participation bars [routes, nav, dashboard, home, participation, grants]
 file `deployables/portal/web/src/sammlungen.tsx` :: Shared Sammlungen workspace (one-off collections by deadline, repeatable collections, collapsible ended polls, deadline chips, own-submissions footer link, ?klasse filter), editor creation with independent Wiederholbar/Fortlaufend switches and required bounded end date with German calendar/time picker and 1d/1w/4w shortcuts, editable published ballot deadlines, proposal option chips and person-only self-vote switch, grant-controlled definition edits and poll hiding, admin-confirmed poll deletion, admin manager assignments in SammlungForm, SammlungDetail, all-submission editorial collection reader, unified private photo gallery with in-place captions and detail/history links, read-only ballot options/results with word cloud/CSV and anonymous word moderation with chip context menus, and an inline student voting stack [sammlung, poll, vote, form]

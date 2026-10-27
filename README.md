@@ -37,9 +37,9 @@ make down     # stop all development containers (keeps data)
 `make env` creates missing `.env*` files from their `.dist` templates and never overwrites existing ones. Review the generated defaults.
 
 - Mock login provider: [localhost:9090](http://localhost:9090), development only. Its fake identities are listed in `deployables/auth-mock/users.yaml`.
-- Portal and API behind Caddy: [https://caddy.abizeitung-portal.orb.local](https://caddy.abizeitung-portal.orb.local) (internal CA, so the browser warns).
+- Portal and API behind Caddy: `PUBLIC_URL` from `.env.dev`, by default [https://localhost](https://localhost) (internal CA, so the browser warns). OrbStack users may set `PUBLIC_URL`/`PUBLIC_HOST` to `caddy.abizeitung-portal.orb.local`.
 
-For host development, run `make dev:backend` and `make dev:frontend` in separate terminals. These stay in the foreground: the API uses `localhost:8080`, and Vite starts at `localhost:5173` with automatic free-port fallback. The default container stack runs Vite with hot reload on the OrbStack domain after `make dev` exits. Source edits update the page automatically; rerun `make dev` after dependency or Go changes. The production image serves built frontend files from Go.
+For host development, run `make dev:backend` and `make dev:frontend` in separate terminals. These stay in the foreground: the API uses `localhost:8080`, and Vite starts at `localhost:5173` with automatic free-port fallback. The default container stack runs Vite with hot reload on that URL after `make dev` exits. Source edits update the page automatically; rerun `make dev` after dependency or Go changes. The production image serves built frontend files from Go.
 
 Never keep real data on a publicly reachable development host, and never run `down -v` on a database you need.
 

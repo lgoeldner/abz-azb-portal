@@ -48,7 +48,7 @@ wait_ready() {
   for ((attempt = 0; attempt < 90; attempt++)); do
     if [[ "$(docker inspect -f '{{.State.Health.Status}}' "$portal")" == healthy ]] &&
       [[ "$(docker inspect -f '{{.State.Health.Status}}' "$frontend")" == healthy ]] &&
-      docker exec "$caddy" wget -q -O - --header 'Host: caddy.abizeitung-portal.orb.local' http://frontend:5173/ | grep '/@vite/client' >/dev/null; then
+      docker exec "$caddy" wget -q -O - --header 'Host: localhost' http://frontend:5173/ | grep '/@vite/client' >/dev/null; then
       echo 'Portal and hot-reload frontend are ready'
       return
     fi

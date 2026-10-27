@@ -1,7 +1,7 @@
 # Incremental development builds
 
 `make dev` builds and starts the development containers in the background,
-waits for readiness, and exits. Open `https://caddy.abizeitung-portal.orb.local`; the
+waits for readiness, and exits. Open `PUBLIC_URL` from `.env.dev` (default `https://localhost`); the
 containers keep running after the command exits. Use `make down` to stop them.
 Compose checks every selected image and reuses cached build steps. Vite is
 refreshed on each invocation to load dependencies from its image; other
@@ -30,7 +30,7 @@ including atomic editor saves. Its Linux dependencies live in a separate anonymo
 volume, refreshed from the image on each `make dev`; host
 `node_modules` stays separate. Named data volumes are preserved.
 Caddy forwards pages and hot-reload WebSockets to Vite, and API/authentication
-requests to the Go portal. Hot reload keeps working on the OrbStack domain after
+requests to the Go portal. Hot reload keeps working on that URL after
 `make dev` exits. No host Vite process or published frontend port is needed.
 Rerun `make dev` after dependency or Go changes. Migration and seed commands run
 inside the development portal container at startup. Production still serves
