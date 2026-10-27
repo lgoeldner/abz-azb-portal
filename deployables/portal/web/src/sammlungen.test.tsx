@@ -441,6 +441,84 @@ describe('Sammlungen person polls', () => {
     expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
   });
 
+  it.each(['open', 'closed', 'draft'] as const)(
+    'lets assigned managers update a published %s poll deadline without sending definitions',
+    async (status) => {
+      const poll = personPoll({ status, ongoing: false, closes_at: '2099-06-01T10:00:42.123Z' });
+      const { writes } = installApi([poll]);
+      renderPortal(`/sammlungen/${poll.id}`, assignedManager);
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Enddatum bearbeiten' }));
+      expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Klasse')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: '1w' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+
+      const end = new Date();
+      const original = new Date(poll.closes_at!);
+      end.setDate(end.getDate() + 7);
+      end.setHours(original.getHours(), original.getMinutes(), 0, 0);
+      await waitFor(() =>
+        expect(writes).toEqual([
+          {
+            path: `/categories/${poll.id}`,
+            method: 'PATCH',
+            body: { version: poll.version, closes_at: end.toISOString() },
+          },
+        ]),
+      );
+    },
+  );
+
+  it('keeps deadline controls away from unassigned managers', async () => {
+    const poll = personPoll({ ongoing: false, closes_at: '2099-06-01T10:00:00Z' });
+    installApi([poll]);
+    renderPortal(`/sammlungen/${poll.id}`, unassignedManager);
+    await screen.findByRole('heading', { name: poll.name });
+    expect(screen.queryByRole('button', { name: 'Enddatum bearbeiten' })).not.toBeInTheDocument();
+  });
+
+  it('does not round or rewrite an unchanged published deadline', async () => {
+    const poll = personPoll({ ongoing: false, closes_at: '2099-06-01T10:00:42.123Z' });
+    const { writes } = installApi([poll]);
+    renderPortal(`/sammlungen/${poll.id}`, assignedManager);
+    fireEvent.click(await screen.findByRole('button', { name: 'Enddatum bearbeiten' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Sammlung speichern' })).not.toBeInTheDocument());
+    expect(writes).toEqual([]);
+  });
+
+  it('honors a changed deadline when retrying after a failed permission update', async () => {
+    const original = new Date();
+    original.setDate(original.getDate() + 1);
+    original.setHours(18, 30, 0, 0);
+    const poll = personPoll({ ongoing: false, closes_at: original.toISOString() });
+    const { writes, fetchMock } = installApi([poll]);
+    let permissionAttempts = 0;
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/api/v1/admin/users'))
+        return Response.json([{ ...assignedManager, name: 'Redaktion Test', category_ids: [] }]);
+      if (String(input).endsWith(`/api/v1/admin/users/${assignedManager.id}`)) {
+        permissionAttempts++;
+        if (permissionAttempts === 1)
+          return Response.json({ error: { message: 'Berechtigung fehlgeschlagen.' } }, { status: 500 });
+        return Response.json({ ...assignedManager, category_ids: [poll.id] });
+      }
+      return fetchMock(input, init);
+    });
+    renderPortal(`/sammlungen/${poll.id}`, admin);
+    fireEvent.click(await screen.findByRole('button', { name: 'Enddatum bearbeiten' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Redaktion Test' }));
+    fireEvent.click(screen.getByRole('button', { name: '1w' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    await screen.findByText('Berechtigung fehlgeschlagen.');
+    fireEvent.click(screen.getByRole('button', { name: '1d' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    await waitFor(() => expect(permissionAttempts).toBe(2));
+    expect(writes).toHaveLength(2);
+    expect(writes[1].body).toEqual({ version: poll.version + 1, closes_at: original.toISOString() });
+  });
+
   it('does not send a delete request when an admin cancels confirmation', async () => {
     const poll = personPoll({ status: 'closed' });
     const { writes } = installApi([poll]);
@@ -548,7 +626,8 @@ describe('Sammlungen person polls', () => {
     expect(kind).toHaveValue('photo');
     expect(kind.querySelectorAll('option')).toHaveLength(7);
     fireEvent.click(screen.getByRole('switch', { name: 'Fortlaufend' }));
-    fireEvent.change(screen.getByLabelText('Enddatum'), { target: { value: '2099-06-01T12:00' } });
+    fireEvent.click(screen.getByRole('button', { name: '1w' }));
+    fireEvent.change(screen.getByLabelText('Uhrzeit'), { target: { value: '12:00' } });
     expect(screen.queryByLabelText('Antwortoption hinzufügen')).toBeNull();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Ein Foto pro Person' } });
     fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
@@ -557,7 +636,12 @@ describe('Sammlungen person polls', () => {
       kind: 'photo',
       repeatable: false,
       ongoing: false,
-      closes_at: new Date('2099-06-01T12:00').toISOString(),
+      closes_at: (() => {
+        const end = new Date();
+        end.setDate(end.getDate() + 7);
+        end.setHours(12, 0, 0, 0);
+        return end.toISOString();
+      })(),
       options: [],
     });
   });

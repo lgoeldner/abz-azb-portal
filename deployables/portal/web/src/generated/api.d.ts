@@ -48,7 +48,7 @@ export interface paths {
         delete: operations["deleteCategoriesId"];
         options?: never;
         head?: never;
-        /** Update collection (admins or managers with grant; ballot definitions only before first opening); kind changes stay within content family, repeatable and schedule fixed after creation */
+        /** Update collection (admin or granted manager); ballot definitions lock after first opening, bounded poll deadlines remain editable with version and closes_at only; repeatable and ongoing fixed after creation */
         patch: operations["patchCategoriesId"];
         trace?: never;
     };
@@ -662,15 +662,15 @@ export interface components {
             category_ids: string[];
         };
         CategoryEdit: {
-            name: string;
-            description: string;
+            name?: string;
+            description?: string;
             /** @enum {string} */
-            kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal" | "words";
+            kind?: "idea" | "quote" | "memory" | "photo" | "person" | "proposal" | "words";
             /** @description No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability. */
             ongoing?: boolean;
             /**
              * Format: date-time
-             * @description Automatic closing instant for bounded collections; null when ongoing. Open collections are effectively closed at this instant.
+             * @description Future closing instant. For existing bounded polls, a sparse request containing only version and closes_at changes the deadline in any lifecycle state without changing definitions, votes, history or stored status. Omitted deadlines are preserved exactly; contribution deadlines remain fixed. Extending an expired stored-open poll makes it open again; manually closed or hidden polls stay closed or hidden.
              */
             closes_at?: string | null;
             /** @description Allow multiple contributions per person independently of kind. Omission defaults from kind on create and preserves the stored flag on edit. */
@@ -686,7 +686,7 @@ export interface components {
             all_people?: boolean;
             /** @description Maximum selections for person/proposal polls or words per voter for word portraits (1–500). Word portraits default to 3, other polls to 1; contribution kinds require 1. */
             max_choices?: number;
-        };
+        } & (unknown | unknown);
         /** @description Editorial anonymous original-word tally and reversible moderation; contains no voter identity. Equal effective labels merge, counting each current voter once in results. */
         WordEntry: {
             option_id: string;

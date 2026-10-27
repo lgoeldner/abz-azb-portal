@@ -1,7 +1,9 @@
 package portal
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -223,7 +225,25 @@ type categoryInput struct {
 		Label  string  `json:"label"`
 		UserID *string `json:"user_id,omitempty"`
 	} `json:"options"`
-	Version int `json:"version"`
+	Version      int `json:"version"`
+	deadlineOnly bool
+	hasClosesAt  bool
+}
+
+func (in *categoryInput) UnmarshalJSON(data []byte) error {
+	type input categoryInput
+	d := json.NewDecoder(bytes.NewReader(data))
+	d.DisallowUnknownFields()
+	if e := d.Decode((*input)(in)); e != nil {
+		return e
+	}
+	var fields map[string]json.RawMessage
+	if e := json.Unmarshal(data, &fields); e != nil {
+		return e
+	}
+	in.deadlineOnly = len(fields) == 2 && fields["version"] != nil && fields["closes_at"] != nil
+	in.hasClosesAt = fields["closes_at"] != nil
+	return nil
 }
 
 func validateCategory(in categoryInput) error {
@@ -306,6 +326,34 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 		if !canEdit(u, id) {
 			return forbidden()
 		}
+		if in.deadlineOnly {
+			if in.Version != old.Version {
+				return conflict()
+			}
+			if !ballotKind(old.Kind) || old.Ongoing {
+				return bad("Nur befristete Abstimmungen haben einen bearbeitbaren Endzeitpunkt.")
+			}
+			if in.ClosesAt == nil || !in.ClosesAt.After(time.Now()) {
+				return bad("Ein zukünftiger Endzeitpunkt ist erforderlich.")
+			}
+			// Updating only the deadline preserves definitions, candidate snapshots,
+			// ballots and stored status, including an automatically expired open poll.
+			if _, e = tx.Exec(r.Context(), "UPDATE categories SET closes_at=$2,version=version+1 WHERE id=$1", id, in.ClosesAt); e != nil {
+				return e
+			}
+			if e = audit(r.Context(), tx, u, "poll.saved", id); e != nil {
+				return e
+			}
+			c, e := loadCategory(r.Context(), tx, id, u, false)
+			if e != nil {
+				return e
+			}
+			if e = tx.Commit(r.Context()); e != nil {
+				return e
+			}
+			jsonOut(w, http.StatusOK, c)
+			return nil
+		}
 		if in.AllPeople == nil {
 			all := in.Kind == "person" && old.AllPeople
 			in.AllPeople = &all
@@ -356,8 +404,14 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 				return bad("Für eine nicht fortlaufende Sammlung ist ein Endzeitpunkt erforderlich.")
 			}
 			closesAt = old.ClosesAt
+			if ballotKind(old.Kind) && in.hasClosesAt && (in.ClosesAt == nil || !in.ClosesAt.Equal(*old.ClosesAt) && !in.ClosesAt.After(time.Now())) {
+				return bad("Ein zukünftiger Endzeitpunkt ist erforderlich.")
+			}
 			if in.ClosesAt != nil && !in.ClosesAt.Equal(*old.ClosesAt) {
-				return bad("Der Endzeitpunkt kann nach dem Anlegen nicht geändert werden.")
+				if !ballotKind(old.Kind) {
+					return bad("Der Endzeitpunkt kann nach dem Anlegen nicht geändert werden.")
+				}
+				closesAt = in.ClosesAt
 			}
 		}
 	} else {

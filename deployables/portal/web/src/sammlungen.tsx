@@ -45,6 +45,7 @@ import {
   type Kind,
 } from './ui';
 import { PeoplePicker } from './PeoplePicker';
+import { EndDatePicker } from './EndDatePicker';
 import { BallotForm, BallotPrivacyNotice } from './BallotForm';
 import { PollStack } from './PollStack';
 import { PhotoGallery, photosFromSubmissions } from './PhotoGallery';
@@ -244,6 +245,12 @@ function Cards({ items }: { items: Category[] }) {
 
 // ---------- create / edit ----------
 // Editors pick any class; an existing Sammlung may change class within its group.
+function localDeadline(value?: string | null) {
+  if (!value) return '';
+  const end = new Date(value);
+  return new Date(end.getTime() - end.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
 export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null; onSaved: () => void }) {
   const { user } = useSession();
   const action = useAction();
@@ -252,11 +259,7 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
   const [repeatable, setRepeatable] = useState(sammlung?.repeatable ?? true);
   const repeatabilityChosen = useRef(false);
   const [ongoing, setOngoing] = useState(sammlung?.ongoing ?? true);
-  const [closesAt, setClosesAt] = useState(() => {
-    if (!sammlung?.closes_at) return '';
-    const end = new Date(sammlung.closes_at);
-    return new Date(end.getTime() - end.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-  });
+  const [closesAt, setClosesAt] = useState(() => localDeadline(sammlung?.closes_at));
   const single = singleKinds.includes(kind);
   const definitionLocked =
     !!sammlung && singleKinds.includes(sammlung.kind) && (sammlung.status !== 'draft' || Boolean(sammlung.opened_at));
@@ -322,8 +325,21 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
         throw new Error('Die Zahl der auswählbaren Optionen muss zwischen 1 und 500 liegen.');
       // A retry after a failed follow-up step must update the Sammlung saved by the first attempt, not create another.
       const target = current.current;
+      const deadlineChanged = !ongoing && closesAt !== localDeadline(target?.closes_at);
+      if (!ongoing && (!target || deadlineChanged) && (!closesAt || new Date(closesAt).getTime() <= Date.now()))
+        throw new Error('Bitte ein Enddatum in der Zukunft auswählen.');
+      const deadline = ongoing
+        ? null
+        : deadlineChanged || !target
+          ? new Date(closesAt).toISOString()
+          : target.closes_at;
       const saved = definitionLocked
-        ? sammlung
+        ? deadlineChanged && target
+          ? await api<Category>(
+              `/categories/${target.id}`,
+              json('PATCH', { version: target.version, closes_at: deadline }),
+            )
+          : target!
         : await api<Category>(
             target ? `/categories/${target.id}` : '/categories',
             json(target ? 'PATCH' : 'POST', {
@@ -333,7 +349,7 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
               kind,
               repeatable,
               ongoing,
-              closes_at: ongoing ? null : (sammlung?.closes_at ?? new Date(closesAt).toISOString()),
+              closes_at: deadline,
               allow_self_vote: single && kind !== 'words' && allowSelfVote,
               all_people: kind === 'person' && allPeople,
               max_choices: single ? maxChoices : 1,
@@ -361,11 +377,13 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
   return (
     <form className={`${panel} mb-10 space-y-5`} onSubmit={save}>
       <h2 className={heading}>
-        {definitionLocked ? 'Berechtigungen bearbeiten' : sammlung ? 'Sammlung bearbeiten' : 'Neue Sammlung'}
+        {definitionLocked && ongoing ? 'Berechtigungen bearbeiten' : sammlung ? 'Sammlung bearbeiten' : 'Neue Sammlung'}
       </h2>
       {definitionLocked ? (
         <p className="text-sm text-muted">
-          Die Definition ist seit dem Öffnen gesperrt. Berechtigungen bleiben änderbar.
+          Die Definition ist seit dem Öffnen gesperrt.
+          {!ongoing && ' Das Enddatum bleibt änderbar.'}
+          {user.role === 'admin' && ' Berechtigungen bleiben änderbar.'}
         </p>
       ) : (
         <>
@@ -416,22 +434,8 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
               {ongoing ? 'Bleibt bis zum manuellen Schließen offen.' : 'Schließt automatisch zum Enddatum.'}
             </p>
           </div>
-          {!ongoing && (
-            <label className={label}>
-              Enddatum
-              <input
-                className={field}
-                type="datetime-local"
-                name="closes_at"
-                required
-                value={closesAt}
-                disabled={!!sammlung || action.busy}
-                onChange={(event) => setClosesAt(event.target.value)}
-              />
-            </label>
-          )}
           {sammlung && (
-            <p className="text-sm text-muted">Wiederholbarkeit und Zeitplan stehen nach dem Anlegen fest.</p>
+            <p className="text-sm text-muted">Wiederholbarkeit und Fortlaufend stehen nach dem Anlegen fest.</p>
           )}
           <label className={label}>
             Klasse
@@ -608,6 +612,9 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
           )}
         </>
       )}
+      {!ongoing && (
+        <EndDatePicker value={closesAt} onChange={setClosesAt} disabled={action.busy || (!!sammlung && !single)} />
+      )}
       {user.role === 'admin' && (
         <fieldset className="min-w-0 space-y-3" disabled={action.busy}>
           <legend className={label}>Wer darf bearbeiten</legend>
@@ -644,7 +651,7 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
           Abbrechen
         </button>
         <button className={btn.primary} disabled={action.busy}>
-          {definitionLocked ? 'Berechtigungen speichern' : 'Sammlung speichern'}
+          {definitionLocked && ongoing ? 'Berechtigungen speichern' : 'Sammlung speichern'}
         </button>
       </div>
     </form>
@@ -1152,9 +1159,9 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
                         </p>
                       </>
                     )}
-                    {user.role === 'admin' && (poll.status !== 'draft' || poll.opened_at) && (
+                    {(user.role === 'admin' || !poll.ongoing) && (poll.status !== 'draft' || poll.opened_at) && (
                       <button className={btn.secondary} onClick={() => setEditing(true)}>
-                        Berechtigungen bearbeiten
+                        {poll.ongoing ? 'Berechtigungen bearbeiten' : 'Enddatum bearbeiten'}
                       </button>
                     )}
                     {poll.status === 'open' && (

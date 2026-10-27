@@ -1,0 +1,152 @@
+.end-date {
+  min-width: 0;
+  max-width: 410px;
+  padding: 0;
+  border: 0;
+}
+.end-date__label {
+  margin-bottom: 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.end-date__shortcuts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.end-date__shortcuts > span {
+  margin-right: auto;
+  color: var(--color-muted);
+  font-size: 14px;
+}
+.end-date__shortcuts button {
+  min-width: 48px;
+  min-height: 44px;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: white;
+  font-weight: 600;
+}
+.end-date__shortcuts button:hover {
+  background: var(--color-pill);
+}
+.end-date__shortcuts button[aria-pressed='true'] {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: white;
+}
+.end-date__trigger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  padding: 12px 16px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-ui);
+  text-align: left;
+  font-size: 16px;
+  background: white;
+}
+.end-date__trigger span {
+  flex: 1;
+}
+.end-date__trigger svg {
+  flex-shrink: 0;
+  color: var(--color-accent);
+}
+.end-date__trigger:hover,
+.end-date__trigger[aria-expanded='true'] {
+  border-color: var(--color-accent);
+}
+.end-date__calendar {
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: var(--radius-ui);
+  background: var(--color-paper);
+}
+.end-date .rdp-root {
+  --rdp-accent-color: var(--color-accent);
+  --rdp-accent-background-color: var(--color-soft);
+  --rdp-day-height: 46px;
+  --rdp-day-width: 46px;
+  --rdp-day_button-height: 44px;
+  --rdp-day_button-width: 100%;
+  --rdp-day_button-border-radius: var(--radius-ui);
+  --rdp-nav_button-height: 44px;
+  --rdp-nav_button-width: 44px;
+  --rdp-today-color: var(--color-accent);
+  width: 100%;
+}
+.end-date .rdp-months,
+.end-date .rdp-month {
+  width: 100%;
+  max-width: none;
+}
+.end-date .rdp-month_grid {
+  width: 100%;
+  table-layout: fixed;
+}
+.end-date .rdp-day {
+  width: calc(100% / 7);
+  padding: 0;
+}
+.end-date .rdp-day_button {
+  font: inherit;
+  margin: auto;
+}
+.end-date .rdp-selected .rdp-day_button {
+  background: var(--color-accent);
+  color: white;
+  border-color: var(--color-accent);
+  font-weight: 600;
+}
+.end-date .rdp-day_button:hover:not(:disabled) {
+  background: var(--color-pill);
+  color: var(--color-ink);
+}
+.end-date .rdp-weekday {
+  font-size: 13px;
+  color: var(--color-muted);
+  font-weight: 400;
+}
+.end-date .rdp-caption_label {
+  font-size: 16px;
+  font-weight: 600;
+}
+.end-date .rdp-dropdown_root {
+  min-height: 44px;
+  align-content: center;
+}
+.end-date__time {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 12px;
+  font-size: 15px;
+}
+.end-date__time input {
+  min-height: 48px;
+  min-width: 140px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-ui);
+  background: white;
+  font: inherit;
+  font-size: 18px;
+}
+.end-date__hint {
+  margin-top: 8px;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+.end-date:disabled {
+  opacity: 0.6;
+}
+@media (max-width: 420px) {
+  .end-date__calendar {
+    padding: 8px 0;
+  }
+}
