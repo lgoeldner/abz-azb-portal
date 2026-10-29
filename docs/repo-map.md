@@ -28,6 +28,7 @@ file `docs/poll-implementation-plans.md` :: nine proposed poll formats and the i
 file `docs/openapi.json` :: OpenAPI spec; source of generated TS types [openapi, schema]
 file `docs/verification.md` :: how the system was verified [verification]
 file `docs/school-login.md` :: school OIDC integration notes [login, oidc, production]
+file `docs/auth-email-implementation-plan.md` :: proposed allowlisted magic-link auth, single-source CLI/SQL users and dev picker, email provider costs, deadline reminders, optional Google/passkeys, migration and acceptance plan [auth, email, notifications, plan]
 file `docs/dev-debug.md` :: DevDebug overlay and its browser checks [debug]
 file `docs/dev-build.md` :: detached make dev builds, Go caches, container reuse and optional host development [dev, docker, cache]
 file `ops/README.md` :: operations, backup, restore, tidy caveat [ops, restore, production]
