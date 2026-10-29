@@ -17,6 +17,3 @@ deployables/portal/server/portal
 deployables/portal/server/bin/
 .taste-skill/
 .claude/worktrees/
-
-.firebase/
-.firebaserc

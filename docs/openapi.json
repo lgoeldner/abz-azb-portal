@@ -8,9 +8,6 @@
   "security": [
     {
       "session": []
-    },
-    {
-      "firebaseSession": []
     }
   ],
   "paths": {
@@ -1761,14 +1758,7 @@
       "session": {
         "type": "apiKey",
         "in": "cookie",
-        "name": "portal_session",
-        "description": "Default deployment session cookie. Firebase Hosting mode uses firebaseSession instead."
-      },
-      "firebaseSession": {
-        "type": "apiKey",
-        "in": "cookie",
-        "name": "__session",
-        "description": "Opaque server-side session when FIREBASE_HOSTING=1; the signed transient OIDC login state never grants API access."
+        "name": "portal_session"
       }
     },
     "schemas": {

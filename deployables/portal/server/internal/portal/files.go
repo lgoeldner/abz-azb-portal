@@ -16,7 +16,6 @@ import (
 	_ "image/png"
 	"io"
 	"io/fs"
-	"log/slog"
 	"mime"
 	"net/http"
 	"os"
@@ -168,10 +167,10 @@ func readImageUpload(w http.ResponseWriter, r *http.Request, allowedFields ...st
 func (a *App) storeImage(ctx context.Context, tx pgx.Tx, submissionID string, upload imageUpload) error {
 	id := ID()
 	originalKey, previewKey := id+".original", id+".preview.jpg"
-	if e := a.writeUpload(ctx, originalKey, upload.Data); e != nil {
+	if e := immutableWrite(filepath.Join(a.Config.UploadDir, originalKey), upload.Data); e != nil {
 		return e
 	}
-	if e := a.writeUpload(ctx, previewKey, upload.Preview); e != nil {
+	if e := immutableWrite(filepath.Join(a.Config.UploadDir, previewKey), upload.Preview); e != nil {
 		return e
 	}
 	_, e := tx.Exec(ctx, "INSERT INTO attachments(id,submission_id,filename,mime_type,size_bytes,sha256,storage_key,preview_key,caption) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)", id, submissionID, upload.Filename, upload.MimeType, len(upload.Data), digest(string(upload.Data)), originalKey, previewKey, upload.Caption)
@@ -349,12 +348,6 @@ func (a *App) download(w http.ResponseWriter, r *http.Request) error {
 		filename = "preview.jpg"
 		disposition = "inline"
 	}
-	w.Header().Set("Content-Type", mimeType)
-	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": filename}))
-	w.Header().Set("Cache-Control", "private, no-store")
-	if a.bucket != nil {
-		return a.serveCloudUpload(w, r, key, filename)
-	}
 	f, e := os.Open(filepath.Join(a.Config.UploadDir, key))
 	if e != nil {
 		return e
@@ -364,6 +357,9 @@ func (a *App) download(w http.ResponseWriter, r *http.Request) error {
 	if e != nil {
 		return e
 	}
+	w.Header().Set("Content-Type", mimeType)
+	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": filename}))
+	w.Header().Set("Cache-Control", "private, no-store")
 	http.ServeContent(w, r, filename, st.ModTime(), f)
 	return nil
 }
@@ -420,33 +416,13 @@ func (a *App) exportCategory(w http.ResponseWriter, r *http.Request) error {
 	if e != nil {
 		return e
 	}
-	var archive io.Writer
-	var f *os.File
-	streamComplete := false
-	if a.bucket != nil {
-		// Cloud Run's writable filesystem is RAM-backed. Stream instead of
-		// spooling an unbounded photo archive into the instance's memory.
-		w.Header().Set("Content-Type", "application/zip")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"export-%s.zip\"", id))
-		archive = w
-		defer func() {
-			if !streamComplete {
-				slog.Warn("cloud export interrupted")
-				// A streaming failure must terminate the download. Appending a JSON
-				// error to a partially sent ZIP could present a corrupt export as OK.
-				panic(http.ErrAbortHandler)
-			}
-		}()
-	} else {
-		f, e = os.CreateTemp("", "portal-export-*.zip")
-		if e != nil {
-			return e
-		}
-		defer os.Remove(f.Name())
-		defer f.Close()
-		archive = f
+	f, e := os.CreateTemp("", "portal-export-*.zip")
+	if e != nil {
+		return e
 	}
-	zw := zip.NewWriter(archive)
+	defer os.Remove(f.Name())
+	defer f.Close()
+	zw := zip.NewWriter(f)
 	csvFile, e := zw.Create("submissions.csv")
 	if e != nil {
 		return e
@@ -494,7 +470,7 @@ func (a *App) exportCategory(w http.ResponseWriter, r *http.Request) error {
 			if e != nil {
 				return e
 			}
-			original, e := a.openUpload(r.Context(), key)
+			original, e := os.Open(filepath.Join(a.Config.UploadDir, key))
 			if e != nil {
 				return e
 			}
@@ -513,24 +489,14 @@ func (a *App) exportCategory(w http.ResponseWriter, r *http.Request) error {
 	if e = json.NewEncoder(manifest).Encode(map[string]any{"schema_version": 1, "exported_at": time.Now().UTC(), "category_id": id, "category_name": name, "status_filter": status, "submissions": submissions, "files": files}); e != nil {
 		return e
 	}
-	if a.bucket == nil {
-		if e = zw.Close(); e != nil {
-			return e
-		}
+	if e = zw.Close(); e != nil {
+		return e
 	}
 	if e = audit(r.Context(), tx, u, "category.exported", id); e != nil {
 		return e
 	}
 	if e = tx.Commit(r.Context()); e != nil {
 		return e
-	}
-	if a.bucket != nil {
-		// Emit the central directory only after the snapshot's audit commits.
-		if e = zw.Close(); e != nil {
-			return e
-		}
-		streamComplete = true
-		return nil
 	}
 	st, e := f.Stat()
 	if e != nil {

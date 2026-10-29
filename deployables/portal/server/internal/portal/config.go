@@ -7,12 +7,7 @@ import (
 	"strings"
 )
 
-type Config struct {
-	Env, Addr, DatabaseURL, PublicURL, UploadDir, StaticDir, AuthMode, Issuer, BackchannelURL, ClientID, ClientSecret, SessionSecret, BootstrapSubject, BackupStatusFile string
-
-	FirebaseHosting bool
-	UploadBucket    string
-}
+type Config struct{ Env, Addr, DatabaseURL, PublicURL, UploadDir, StaticDir, AuthMode, Issuer, BackchannelURL, ClientID, ClientSecret, SessionSecret, BootstrapSubject, BackupStatusFile string }
 
 func env(k, d string) string {
 	if v := os.Getenv(k); v != "" {
@@ -21,13 +16,7 @@ func env(k, d string) string {
 	return d
 }
 func LoadConfig() (Config, error) {
-	c := Config{Env: env("APP_ENV", "development"), Addr: env("ADDR", ":"+env("PORT", "8080")), DatabaseURL: os.Getenv("DATABASE_URL"), PublicURL: env("PUBLIC_URL", "http://localhost:8080"), UploadDir: env("UPLOAD_DIR", "./data/uploads"), StaticDir: env("STATIC_DIR", "../web/dist"), AuthMode: env("AUTH_MODE", "mock"), Issuer: os.Getenv("OIDC_ISSUER"), BackchannelURL: os.Getenv("OIDC_BACKCHANNEL_URL"), ClientID: os.Getenv("OIDC_CLIENT_ID"), ClientSecret: os.Getenv("OIDC_CLIENT_SECRET"), SessionSecret: os.Getenv("SESSION_SECRET"), BootstrapSubject: os.Getenv("BOOTSTRAP_ADMIN_SUBJECT"), BackupStatusFile: os.Getenv("BACKUP_STATUS_FILE"), FirebaseHosting: os.Getenv("FIREBASE_HOSTING") == "1", UploadBucket: os.Getenv("UPLOAD_BUCKET")}
-	if mode := os.Getenv("FIREBASE_HOSTING"); mode != "" && mode != "0" && mode != "1" {
-		return c, errors.New("FIREBASE_HOSTING must be 0 or 1")
-	}
-	if os.Getenv("K_SERVICE") != "" && c.UploadBucket == "" {
-		return c, errors.New("cloud run requires durable UPLOAD_BUCKET storage")
-	}
+	c := Config{Env: env("APP_ENV", "development"), Addr: env("ADDR", ":8080"), DatabaseURL: os.Getenv("DATABASE_URL"), PublicURL: env("PUBLIC_URL", "http://localhost:8080"), UploadDir: env("UPLOAD_DIR", "./data/uploads"), StaticDir: env("STATIC_DIR", "../web/dist"), AuthMode: env("AUTH_MODE", "mock"), Issuer: os.Getenv("OIDC_ISSUER"), BackchannelURL: os.Getenv("OIDC_BACKCHANNEL_URL"), ClientID: os.Getenv("OIDC_CLIENT_ID"), ClientSecret: os.Getenv("OIDC_CLIENT_SECRET"), SessionSecret: os.Getenv("SESSION_SECRET"), BootstrapSubject: os.Getenv("BOOTSTRAP_ADMIN_SUBJECT"), BackupStatusFile: os.Getenv("BACKUP_STATUS_FILE")}
 	if c.Env == "development" && c.AuthMode == "mock" {
 		c.Issuer = env("OIDC_ISSUER", "http://localhost:9090")
 		c.ClientID = env("OIDC_CLIENT_ID", "portal-dev")
@@ -41,9 +30,6 @@ func (c Config) Validate() error {
 	}
 	if c.DatabaseURL == "" {
 		return errors.New("DATABASE_URL is required")
-	}
-	if c.UploadBucket != "" && (len(c.UploadBucket) < 3 || len(c.UploadBucket) > 222 || strings.ContainsAny(c.UploadBucket, "/\\ :\t\r\n")) {
-		return errors.New("UPLOAD_BUCKET must be a bucket name, without gs:// or a path")
 	}
 	if c.AuthMode != "mock" && c.AuthMode != "oidc" {
 		return errors.New("AUTH_MODE must be mock or oidc")

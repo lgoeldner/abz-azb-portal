@@ -84,7 +84,6 @@ func run() error {
 	if e != nil {
 		return e
 	}
-	defer app.Close()
 	server := &http.Server{Addr: c.Addr, Handler: app, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 60 * time.Second, WriteTimeout: 120 * time.Second, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 1 << 20}
 	done := make(chan error, 1)
 	go func() {
