@@ -108,6 +108,10 @@ func TestExternalOIDCTrustAndEnrollment(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			loginCookies := res.Cookies()
+			if len(loginCookies) != 1 || loginCookies[0].Name != "portal_login" || res.Header.Get("Cache-Control") != "no-store" {
+				t.Fatalf("default login cookie/cache behavior changed: count=%d first_name=%q cache=%q", len(loginCookies), firstCookieName(loginCookies), res.Header.Get("Cache-Control"))
+			}
 			res.Body.Close()
 			authorization, err := url.Parse(res.Header.Get("Location"))
 			if err != nil {
@@ -160,6 +164,14 @@ func TestExternalOIDCTrustAndEnrollment(t *testing.T) {
 			if res.StatusCode != 302 || res.Header.Get("Location") != "/" {
 				t.Fatalf("callback: %d %s", res.StatusCode, body)
 			}
+			var hasLoginClear, hasSessionCookie bool
+			for _, cookie := range res.Cookies() {
+				hasLoginClear = hasLoginClear || cookie.Name == "portal_login" && cookie.MaxAge < 0
+				hasSessionCookie = hasSessionCookie || cookie.Name == "portal_session" && len(cookie.Value) == 43
+			}
+			if !hasLoginClear || !hasSessionCookie || res.Header.Get("Cache-Control") != "no-store" {
+				t.Fatalf("default callback cookie/cache behavior changed: count=%d cache=%q", len(res.Cookies()), res.Header.Get("Cache-Control"))
+			}
 			res, err = client.Get(server.URL + "/api/v1/me")
 			if err != nil {
 				t.Fatal(err)
@@ -202,7 +214,7 @@ func TestExternalOIDCTrustAndEnrollment(t *testing.T) {
 			req := httptest.NewRequest("GET", "/auth/callback?state=wrong", nil)
 			req.AddCookie(&http.Cookie{Name: "portal_login", Value: app.signState(loginState{State: "expected", Expires: time.Now().Add(time.Minute).Unix()})})
 			app.ServeHTTP(rec, req)
-			if rec.Code != 400 {
+			if rec.Code != 400 || len(rec.Header().Values("Set-Cookie")) != 0 || rec.Header().Get("Cache-Control") != "no-store" {
 				t.Fatal("invalid state accepted")
 			}
 			for _, path := range []string{"/auth/mock/users", "/dev/oidc/keys", "/dev/oidc/.well-known/openid-configuration"} {

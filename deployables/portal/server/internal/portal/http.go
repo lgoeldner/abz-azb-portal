@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"cloud.google.com/go/storage"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -20,11 +21,13 @@ import (
 )
 
 type App struct {
-	DB         *pgxpool.Pool
-	Config     Config
-	auth       *authState
-	handler    http.Handler
-	imageSlots chan struct{}
+	DB            *pgxpool.Pool
+	Config        Config
+	auth          *authState
+	handler       http.Handler
+	imageSlots    chan struct{}
+	bucket        *storage.BucketHandle
+	storageClient *storage.Client
 }
 type requestUser struct {
 	User User
@@ -139,11 +142,12 @@ func New(ctx context.Context, c Config, db *pgxpool.Pool) (*App, error) {
 	if e := c.Validate(); e != nil {
 		return nil, e
 	}
-	if e := os.MkdirAll(c.UploadDir, 0700); e != nil {
+	a := &App{DB: db, Config: c, imageSlots: make(chan struct{}, 2)}
+	if e := a.setupUploads(ctx); e != nil {
 		return nil, e
 	}
-	a := &App{DB: db, Config: c, imageSlots: make(chan struct{}, 2)}
 	if e := a.setupAuth(ctx); e != nil {
+		a.Close()
 		return nil, e
 	}
 	a.routes()
@@ -153,6 +157,9 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("Referrer-Policy", "same-origin")
+	if r.URL.Path == "/auth" || strings.HasPrefix(r.URL.Path, "/auth/") {
+		w.Header().Set("Cache-Control", "no-store")
+	}
 	w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 	if a.Config.Env == "production" {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000")
@@ -162,7 +169,7 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (a *App) protected(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
-		cookie, e := r.Cookie("portal_session")
+		cookie, e := r.Cookie(a.sessionCookieName())
 		if e != nil {
 			respondError(w, fail(401, "unauthenticated", "Bitte anmelden."))
 			return
