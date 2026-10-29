@@ -221,7 +221,7 @@ func (a *App) systemStatus(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 	}
-	size, e := diskBytes(a.Config.UploadDir)
+	size, e := a.uploadBytes(r.Context())
 	if e != nil {
 		return e
 	}

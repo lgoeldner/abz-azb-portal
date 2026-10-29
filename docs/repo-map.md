@@ -63,10 +63,10 @@ file `deployables/portal/server/internal/portal/my_ballots.go` :: private own po
 test `deployables/portal/server/internal/portal/my_ballots_test.go` :: own-entry isolation across roles, grouping, repeatable entries/retries, replacements and lifecycle states [ballot, invariant, privacy]
 file `deployables/portal/server/internal/portal/polls.go` :: vote (row lock, atomic bounded multi-selection), results, grouped ballot audit, roster [ballot, vote, results, roster]
 file `deployables/portal/server/internal/portal/submissions.go` :: author-owned submission CRUD, author search, status transitions, revisions, editorial annotations/correction requests [beitrag, submission, revision, correction]
-file `deployables/portal/server/internal/portal/files.go` :: photo-collection-only uploads, previews, downloads, ZIP export, disk usage [attachment, upload, export, zip]
+file `deployables/portal/server/internal/portal/files.go` :: photo-collection-only uploads, previews, downloads, local/streaming-cloud ZIP export, disk usage [attachment, upload, export, zip]
 file `deployables/portal/server/internal/portal/admin.go` :: user list/edit/delete, audit log, system status [admin, users, audit, backup status]
 file `deployables/portal/server/internal/portal/auth.go` :: OIDC login/callback/logout, sessions [auth, oidc, session, cookie]
-file `deployables/portal/server/internal/portal/config.go` :: env config and production validation [config, env]
+file `deployables/portal/server/internal/portal/config.go` :: env config, Cloud Run PORT/durable-storage and Firebase cookie mode, production validation [config, env, firebase]
 file `deployables/portal/server/internal/portal/db.go` :: DB interface, Migrate, IDs, audit and revision helpers [db, pgx]
 file `deployables/portal/server/internal/portal/seed.go` :: dev fixtures: users (fixtureSlugs), categories, single-answer Sammlungen [seed, fixtures]
 
@@ -183,3 +183,9 @@ file `deployables/portal/web/src/EndDatePicker.tsx` :: accessible German DayPick
 file `deployables/portal/web/src/EndDatePicker.css` :: responsive calendar grid and date/time controls using workspace tokens [date, mobile, ui]
 test `deployables/portal/web/src/EndDatePicker.test.tsx` :: calendar keyboard navigation, leap day, shortcuts across DST/year boundaries, local time and disabled controls [date, invariant, accessibility]
 test `deployables/portal/server/internal/portal/poll_deadline_test.go` :: grant/version/future-date checks, draft/open/expired/closed/hidden deadline edits with definition, candidates, votes and history preserved [poll, deadline, lifecycle, invariant]
+
+## Firebase runtime
+file `deployables/portal/server/internal/portal/storage.go` :: private ADC-backed GCS conditional object writes, durable finalize, authorized bounded downloads, exports and size; local disk default [gcs, storage, photo, persistence]
+test `deployables/portal/server/internal/portal/storage_test.go` :: SDK HTTP fixture validates immutability, cross-instance photo access, streaming ZIP export without a temp spool, interrupted-download failure, authorization and failed-finalize rollback [gcs, photo, invariant, privacy]
+test `deployables/portal/server/internal/portal/firebase_auth_test.go` :: Hosting cookie-stripping OIDC flow, transient-state isolation, CSRF, replay and logout [firebase, auth, privacy]
+test `deployables/portal/server/internal/portal/firebase_config_test.go` :: PORT/ADDR precedence, strict Firebase mode, bucket names and ephemeral Cloud Run rejection [firebase, config, persistence]

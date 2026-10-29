@@ -83,6 +83,18 @@ func (a *App) setupAuth(ctx context.Context) error {
 func (a *App) cookie(w http.ResponseWriter, name, value string, age int) {
 	http.SetCookie(w, &http.Cookie{Name: name, Value: value, Path: "/", HttpOnly: true, Secure: a.Config.Env == "production", SameSite: http.SameSiteLaxMode, MaxAge: age})
 }
+func (a *App) loginCookieName() string {
+	if a.Config.FirebaseHosting {
+		return "__session"
+	}
+	return "portal_login"
+}
+func (a *App) sessionCookieName() string {
+	if a.Config.FirebaseHosting {
+		return "__session"
+	}
+	return "portal_session"
+}
 func (a *App) signState(st loginState) string {
 	b, _ := json.Marshal(st)
 	p := base64.RawURLEncoding.EncodeToString(b)
@@ -118,21 +130,23 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) error {
 	st := loginState{randomToken(), randomToken(), oauth2.GenerateVerifier(), time.Now().Add(5 * time.Minute).Unix()}
 	opts := []oauth2.AuthCodeOption{oidc.Nonce(st.Nonce), oauth2.S256ChallengeOption(st.Verifier)}
 
-	a.cookie(w, "portal_login", a.signState(st), 300)
-	w.Header().Set("Cache-Control", "no-store")
+	a.cookie(w, a.loginCookieName(), a.signState(st), 300)
 	http.Redirect(w, r, a.auth.oauth.AuthCodeURL(st.State, opts...), http.StatusFound)
 	return nil
 }
 func (a *App) callback(w http.ResponseWriter, r *http.Request) error {
-	c, e := r.Cookie("portal_login")
+	c, e := r.Cookie(a.loginCookieName())
 	if e != nil {
 		return fail(400, "oauth_state", "Ungültiger Anmeldevorgang.")
 	}
 	st, e := a.parseState(c.Value)
-	a.cookie(w, "portal_login", "", -1)
 	if e != nil || !hmac.Equal([]byte(st.State), []byte(r.URL.Query().Get("state"))) {
 		return fail(400, "oauth_state", "Ungültiger Anmeldevorgang.")
 	}
+	// Consume the transient state only after it is verified. In Hosting mode
+	// this cookie may instead be an established opaque session; invalid
+	// callbacks must leave that shared cookie intact.
+	a.cookie(w, a.loginCookieName(), "", -1)
 	ctx, cancel := context.WithTimeout(oidc.ClientContext(r.Context(), a.auth.client), 15*time.Second)
 	defer cancel()
 	token, e := a.auth.oauth.Exchange(ctx, r.URL.Query().Get("code"), oauth2.VerifierOption(st.Verifier))
@@ -197,18 +211,18 @@ func (a *App) callback(w http.ResponseWriter, r *http.Request) error {
 	if e = tx.Commit(ctx); e != nil {
 		return e
 	}
-	a.cookie(w, "portal_session", session, 86400)
+	a.cookie(w, a.sessionCookieName(), session, 86400)
 	http.Redirect(w, r, "/", http.StatusFound)
 	return nil
 }
 func (a *App) logout(w http.ResponseWriter, r *http.Request) error {
-	c, e := r.Cookie("portal_session")
+	c, e := r.Cookie(a.sessionCookieName())
 	if e == nil {
 		if _, e = a.DB.Exec(r.Context(), "DELETE FROM sessions WHERE token_hash=$1", digest(c.Value)); e != nil {
 			return e
 		}
 	}
-	a.cookie(w, "portal_session", "", -1)
+	a.cookie(w, a.sessionCookieName(), "", -1)
 	jsonOut(w, 200, map[string]bool{"ok": true})
 	return nil
 }
