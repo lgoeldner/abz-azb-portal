@@ -59,7 +59,9 @@ bash scripts/test-recovery.sh   # backup/restore against throwaway containers
 
 ## Production
 
-Production uses configurable OIDC and refuses mock login. New accounts stay pending until an admin admits them. Nightly encrypted Restic backups cover the database and uploads. See [`ops/README.md`](ops/README.md) for operations and restore, and [`docs/school-login.md`](docs/school-login.md) for login integration.
+Production uses configurable OIDC and refuses mock login. New accounts stay pending until an admin admits them. The Compose deployment uses nightly encrypted Restic backups for the database and uploads. See [`ops/README.md`](ops/README.md) for operations and restore, and [`docs/school-login.md`](docs/school-login.md) for login integration.
+
+For Firebase Hosting with an EU Cloud Run API and private EU photo storage, see [`docs/firebase-deployment.md`](docs/firebase-deployment.md). This keeps Go and PostgreSQL and uses free compute quotas where possible; Blaze, external EU PostgreSQL, and paid EU object storage are required. It does not guarantee a €0 bill.
 
 ## Design
 use the taste skill direction in the repo to keep a consistent, user friendly UX
