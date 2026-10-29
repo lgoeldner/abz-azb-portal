@@ -184,8 +184,15 @@ file `deployables/portal/web/src/EndDatePicker.css` :: responsive calendar grid 
 test `deployables/portal/web/src/EndDatePicker.test.tsx` :: calendar keyboard navigation, leap day, shortcuts across DST/year boundaries, local time and disabled controls [date, invariant, accessibility]
 test `deployables/portal/server/internal/portal/poll_deadline_test.go` :: grant/version/future-date checks, draft/open/expired/closed/hidden deadline edits with definition, candidates, votes and history preserved [poll, deadline, lifecycle, invariant]
 
-## Firebase runtime
+## Firebase EU deployment
+file `firebase.json` :: Firebase Hosting static frontend, EU Cloud Run API/auth/health rewrites and CDN security/cache headers [firebase, hosting, eu]
+file `.firebaserc.example` :: explicit Firebase project placeholder; real local project selection is ignored [firebase, project]
+file `deploy/firebase/cloud-run.env.example` :: non-secret EU deployment inputs and Secret Manager reference names [firebase, deploy, env]
+cmd `scripts/firebase-deploy.sh` :: guarded explicit EU image build, migration job, scale-to-zero Cloud Run and Hosting deployment; no seed or resource provisioning [firebase, deploy, migrate]
+test `scripts/test-firebase-deploy.sh` :: mock-CLI deployment validation, private EU bucket prerequisites and rollout order [firebase, deploy, test]
+file `docs/firebase-deployment.md` :: EU deployment, billing/free-quota limits, OIDC/log privacy, persistent storage and recovery prerequisites [firebase, eu, ops, recovery]
 file `deployables/portal/server/internal/portal/storage.go` :: private ADC-backed GCS conditional object writes, durable finalize, authorized bounded downloads, exports and size; local disk default [gcs, storage, photo, persistence]
 test `deployables/portal/server/internal/portal/storage_test.go` :: SDK HTTP fixture validates immutability, cross-instance photo access, streaming ZIP export without a temp spool, interrupted-download failure, authorization and failed-finalize rollback [gcs, photo, invariant, privacy]
 test `deployables/portal/server/internal/portal/firebase_auth_test.go` :: Hosting cookie-stripping OIDC flow, transient-state isolation, CSRF, replay and logout [firebase, auth, privacy]
 test `deployables/portal/server/internal/portal/firebase_config_test.go` :: PORT/ADDR precedence, strict Firebase mode, bucket names and ephemeral Cloud Run rejection [firebase, config, persistence]
+rule Firebase mode keeps existing Go/PostgreSQL permissions and ballot transactions; only public frontend assets use global Hosting CDN. Blaze and EU object storage may incur costs; no guaranteed zero-cost deployment [firebase, eu, billing]

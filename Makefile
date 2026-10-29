@@ -27,6 +27,7 @@ check:
 	bash -n scripts/*.sh deployables/backup/*.sh
 	bash deployables/backup/test-backup-lock.sh
 	bash deployables/backup/test-restore-safety.sh
+	bash scripts/test-firebase-deploy.sh
 	cd deployables/portal/server && go test -race ./... && go vet ./...
 	cd deployables/auth-mock && go test -race ./... && go vet ./...
 	cd deployables/portal/web && npm ci && npm run typecheck && npm test -- --run && npm run build
