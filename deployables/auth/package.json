@@ -1,0 +1,18 @@
+{
+  "name": "abizeitbetrug-auth",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "start:mock": "node mock-server.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check policy.mjs && node --check auth-config.mjs && node --check server-core.mjs && node --check server.mjs && node --check mock-server.mjs && npm test"
+  },
+  "dependencies": {
+    "better-auth": "1.7.14",
+    "pg": "8.23.1"
+  }
+}

@@ -67,6 +67,12 @@ func SeedWithIssuer(ctx context.Context, pool *pgxpool.Pool, environment, issuer
 			return e
 		}
 	}
+	// Synthetic development mailbox addresses are derived once from the shared roster.
+	for id, slug := range fixtureSlugs {
+		if _, e = tx.Exec(ctx, "UPDATE users SET login_email=$2 WHERE id=$1 AND login_email IS NULL", id, slug+"@example.test"); e != nil {
+			return e
+		}
+	}
 	texts := []struct{ Author, Category, Title, Body, Context, Status string }{{MiaID, categoryID(1), "Eine Playlist für unseren Jahrgang", "Jede Person wählt einen Song, der an die Schulzeit erinnert.", "Idee für die letzte Seite", "pending"}, {LeonID, categoryID(2), "Das kommt nicht in der Klausur dran.", "… und natürlich kam es doch dran.", "Mathe, kurz vor den Ferien", "accepted"}, {MiaID, categoryID(3), "Die Nacht vor der Kursfahrt", "Niemand hatte gepackt. Im Gruppenchat wurde es trotzdem eine gute Nacht.", "Kursfahrt 2025", "accepted"}, {LeonID, categoryID(4), "Unser letzter Wandertag", "Die Fotos werden hier gesammelt.", "Gemeinsam unterwegs", "pending"}}
 	for i, t := range texts {
 		id := fmt.Sprintf("20000000-0000-4000-8000-%012d", i+1)

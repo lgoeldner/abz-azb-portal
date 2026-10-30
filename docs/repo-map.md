@@ -184,3 +184,19 @@ file `deployables/portal/web/src/EndDatePicker.tsx` :: accessible German DayPick
 file `deployables/portal/web/src/EndDatePicker.css` :: responsive calendar grid and date/time controls using workspace tokens [date, mobile, ui]
 test `deployables/portal/web/src/EndDatePicker.test.tsx` :: calendar keyboard navigation, leap day, shortcuts across DST/year boundaries, local time and disabled controls [date, invariant, accessibility]
 test `deployables/portal/server/internal/portal/poll_deadline_test.go` :: grant/version/future-date checks, draft/open/expired/closed/hidden deadline edits with definition, candidates, votes and history preserved [poll, deadline, lifecycle, invariant]
+
+## Authentication dependency and identity foundations
+
+dir `deployables/auth/` :: maintained Better Auth 1.7.14 service and dependency-backed synthetic development picker, complete image context [auth, node, mock]
+file `deployables/auth/auth-config.mjs` :: dependency user/credential mappings, closed signup, eligibility hooks, hashed magic links, fixed sessions [auth, schema, permissions]
+file `deployables/auth/server-core.mjs` :: same-origin endpoint allowlist, scanner-safe confirmation and private minimal session lookup, identity lock, persistent request limits [auth, routes, csrf, proxy]
+file `deployables/auth/server.mjs` :: production entrypoint with lazy schema initialization and dedicated identity-lock pool [auth, runtime]
+file `deployables/auth/mock-server.mjs` :: development-only UUID picker using dependency test helpers; excluded from production image [auth, mock]
+file `deployables/auth/policy.mjs` :: runtime mode, secrets, canonical origin and service bearer validation [auth, config]
+file `deployables/auth/email-handoff.mjs` :: bounded in-memory credential delivery handoff with current-identity recheck and no raw URL persistence [auth, email]
+test `deployables/auth/tests/auth.integration.test.mjs` :: disposable PostgreSQL real dependency session/verification, concurrent redemption, identity-change serialization, A/B reassignment and public/private boundary invariants [auth, security, migration]
+test `deployables/auth/tests/policy.test.mjs` :: production mock refusal, strict URLs, token-free handoff error handling [auth, config]
+file `deployables/portal/server/internal/portal/provisioning.go` :: transactional CSV dry-run/apply and SQL-backed user management, explicit elevated roles and generic errors [users, cli]
+test `deployables/portal/server/internal/portal/provisioning_test.go` :: stable UUIDs/content, rollback, idempotence, safe address reuse and last-admin guards [users, migration, invariant]
+file `deployables/portal/server/migrations/010_better_auth.sql` :: preserve UUID users; dependency session/account/verification/rate-limit tables [schema, auth]
+file `deployables/portal/server/migrations/012_user_provisioning.sql` :: supported operator functions, mode record, guarded identity changes/credential revocation and retired-email quarantine [schema, users, permissions]
