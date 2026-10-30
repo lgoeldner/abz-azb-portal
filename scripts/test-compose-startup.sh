@@ -80,4 +80,8 @@ start_before_database
 echo 'Compose restart: all services'
 "${compose[@]}" restart
 wait_ready
+echo 'Maintenance commands bypass server startup and preserve dry-run rollback'
+result=$("${compose[@]}" run --rm --no-deps portal users disable --id 00000000-0000-4000-8000-000000000003)
+printf '%s' "$result" | node -e 'const fs=require("node:fs"),assert=require("node:assert/strict");const value=JSON.parse(fs.readFileSync(0,"utf8"));assert.equal(value.applied,false);assert.equal(value.count,1)'
+[[ "$(docker exec "$db" psql -XAt -U portal -d portal -c "SELECT login_enabled FROM users WHERE id='00000000-0000-4000-8000-000000000003'")" == t ]]
 echo 'Compose startup and restart checks passed'

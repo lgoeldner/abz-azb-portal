@@ -28,9 +28,10 @@ RUN apk add --no-cache ca-certificates tzdata \
     && chown -R portal:portal /var/lib/portal \
     && chmod 0750 /var/lib/portal /var/lib/portal/uploads /var/lib/portal/status
 COPY --from=go-build /out/portal /usr/local/bin/portal
+COPY --chmod=0755 entrypoint.sh /usr/local/bin/portal-entrypoint
 COPY --from=web-build --chown=portal:portal /src/web/dist/ /app/static/
 USER portal
 ENV APP_ENV=production ADDR=:8080 UPLOAD_DIR=/var/lib/portal/uploads STATIC_DIR=/app/static
 EXPOSE 8080
-ENTRYPOINT ["/usr/local/bin/portal"]
+ENTRYPOINT ["/usr/local/bin/portal-entrypoint"]
 CMD ["serve"]

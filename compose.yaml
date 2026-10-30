@@ -22,8 +22,7 @@ services:
       context: ./deployables/portal
     image: abizeitung-portal:${APP_VERSION:-local}
     restart: unless-stopped
-    entrypoint: ["/bin/sh", "-c"]
-    command: ["portal migrate && exec portal serve"]
+    command: ["serve"]
     environment:
       APP_ENV: production
       ADDR: :8080

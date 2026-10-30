@@ -47,7 +47,7 @@ jobs:
           install-mode: goinstall
           working-directory: deployables/auth-mock
       - name: Shell lint
-        run: shellcheck -S warning scripts/*.sh deployables/backup/*.sh
+        run: shellcheck -S warning scripts/*.sh deployables/backup/*.sh deployables/portal/entrypoint.sh
       - name: Auth service checks
         run: cd deployables/auth && npm ci && npm run check
       - name: Frontend lint and types

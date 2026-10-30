@@ -24,7 +24,7 @@ down:
 	$(DEV_COMPOSE) --profile production down
 
 check:
-	bash -n scripts/*.sh deployables/backup/*.sh
+	bash -n scripts/*.sh deployables/backup/*.sh deployables/portal/entrypoint.sh
 	bash deployables/backup/test-backup-lock.sh
 	bash deployables/backup/test-restore-safety.sh
 	cd deployables/portal/server && go test -race ./... && go vet ./...
@@ -37,7 +37,7 @@ check:
 
 # The linter is built with go.mod's Go, matching CI.
 lint:
-	shellcheck -S warning scripts/*.sh deployables/backup/*.sh
+	shellcheck -S warning scripts/*.sh deployables/backup/*.sh deployables/portal/entrypoint.sh
 	cd deployables/portal/server && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...
 	cd deployables/auth-mock && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...
 	cd deployables/auth && npm run check

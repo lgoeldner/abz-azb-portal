@@ -11,6 +11,7 @@ Line format: `<kind> <path or name> :: <what it is> [keywords]`. Kinds: `dir`, `
 
 dir `deployables/` :: one folder per Docker image, each folder is the complete build context [docker, compose, build]
 dir `deployables/portal/` :: portal image: Go API + built frontend; web-dev image target for container hot reload [Dockerfile, .dockerignore]
+file `deployables/portal/entrypoint.sh` :: container server migration/dev-only seed and unchanged maintenance CLI argument dispatch [docker, runtime, users, cli]
 dir `deployables/portal/server/` :: Go module abizeitbetrug/server [backend, api, go]
 dir `deployables/portal/web/` :: React + TypeScript + Vite + Tailwind frontend [ui, frontend]
 dir `deployables/auth-mock/` :: legacy OIDC test fixture, own Go module abizeitbetrug/auth-mock [login, mock, oidc, identities]

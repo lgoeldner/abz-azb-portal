@@ -32,11 +32,11 @@ services:
   portal:
     build:
       context: ./deployables/portal
-    entrypoint: ["/bin/sh", "-c"]
-    command: ["portal migrate && portal seed && exec portal serve"]
+    command: ["serve"]
     environment:
       APP_ENV: development
       DATABASE_URL: postgres://portal:portal-dev@db:5432/portal?sslmode=disable
+      SEED_DEVELOPMENT: "true"
       AUTH_MODE: mock
       AUTH_INTERNAL_URL: http://auth:3000
       AUTH_SERVICE_SECRET: dev-only-service-secret-at-least-32-bytes
