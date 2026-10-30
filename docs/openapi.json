@@ -3,7 +3,7 @@
   "info": {
     "title": "AbiZeitBetrug Portal API",
     "version": "1.0.0",
-    "description": "Private LMGU 2027 editorial portal. External OIDC login establishes a server-side cookie session; JWTs stay on the backend. CSRF-protected mutations and all authorization enforced server-side. Authentication redirects and provider endpoints are outside this API."
+    "description": "Private LMGU 2027 portal. Better Auth cookie sessions are validated by the private auth service; Go enforces current local permissions and CSRF. Explicit legacy OIDC deployments remain supported. Auth-provider and private service endpoints are outside this API."
   },
   "security": [
     {
@@ -234,7 +234,9 @@
                     "type": "integer"
                   }
                 },
-                "required": ["version"],
+                "required": [
+                  "version"
+                ],
                 "additionalProperties": false
               }
             }
@@ -375,7 +377,9 @@
                   },
                   "body": {
                     "type": "string",
-                    "enum": [""]
+                    "enum": [
+                      ""
+                    ]
                   },
                   "context": {
                     "type": "string",
@@ -390,7 +394,11 @@
                     "maxLength": 2000
                   }
                 },
-                "required": ["category_id", "idempotency_key", "file"],
+                "required": [
+                  "category_id",
+                  "idempotency_key",
+                  "file"
+                ],
                 "additionalProperties": false
               }
             }
@@ -650,7 +658,10 @@
                     "maxLength": 2000
                   }
                 },
-                "required": ["file", "version"],
+                "required": [
+                  "file",
+                  "version"
+                ],
                 "additionalProperties": false
               }
             }
@@ -721,7 +732,9 @@
                     "type": "integer"
                   }
                 },
-                "required": ["version"],
+                "required": [
+                  "version"
+                ],
                 "additionalProperties": false
               }
             }
@@ -773,7 +786,10 @@
                     "maxLength": 2000
                   }
                 },
-                "required": ["version", "caption"],
+                "required": [
+                  "version",
+                  "caption"
+                ],
                 "additionalProperties": false
               }
             }
@@ -975,7 +991,9 @@
                     "type": "string"
                   }
                 },
-                "required": ["body"],
+                "required": [
+                  "body"
+                ],
                 "additionalProperties": false
               }
             }
@@ -1356,10 +1374,17 @@
                   },
                   "status": {
                     "type": "string",
-                    "enum": ["draft", "open", "closed"]
+                    "enum": [
+                      "draft",
+                      "open",
+                      "closed"
+                    ]
                   }
                 },
-                "required": ["version", "status"],
+                "required": [
+                  "version",
+                  "status"
+                ],
                 "additionalProperties": false
               }
             }
@@ -1400,7 +1425,10 @@
                       }
                     }
                   },
-                  "required": ["option_id", "option_ids"],
+                  "required": [
+                    "option_id",
+                    "option_ids"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -1475,40 +1503,58 @@
                 "additionalProperties": false,
                 "oneOf": [
                   {
-                    "required": ["option_id"],
+                    "required": [
+                      "option_id"
+                    ],
                     "not": {
                       "anyOf": [
                         {
-                          "required": ["option_ids"]
+                          "required": [
+                            "option_ids"
+                          ]
                         },
                         {
-                          "required": ["words"]
+                          "required": [
+                            "words"
+                          ]
                         }
                       ]
                     }
                   },
                   {
-                    "required": ["option_ids"],
+                    "required": [
+                      "option_ids"
+                    ],
                     "not": {
                       "anyOf": [
                         {
-                          "required": ["option_id"]
+                          "required": [
+                            "option_id"
+                          ]
                         },
                         {
-                          "required": ["words"]
+                          "required": [
+                            "words"
+                          ]
                         }
                       ]
                     }
                   },
                   {
-                    "required": ["words"],
+                    "required": [
+                      "words"
+                    ],
                     "not": {
                       "anyOf": [
                         {
-                          "required": ["option_id"]
+                          "required": [
+                            "option_id"
+                          ]
                         },
                         {
-                          "required": ["option_ids"]
+                          "required": [
+                            "option_ids"
+                          ]
                         }
                       ]
                     }
@@ -1751,6 +1797,316 @@
           }
         }
       }
+    },
+    "/api/v1/me/email-reminders": {
+      "get": {
+        "summary": "Current user reminder delivery preference",
+        "operationId": "getReminderPreference",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderPreference"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Change own reminder preference; does not affect login email",
+        "operationId": "setReminderPreference",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderPreference"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReminderPreference"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/email/status": {
+      "get": {
+        "summary": "Admin-only local quota, observed Brevo credits and worker health; never provider credentials",
+        "operationId": "getEmailStatus",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailStatus"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/email/settings": {
+      "patch": {
+        "summary": "Admin-only versioned mail budgets and pause controls within deployment ceilings",
+        "operationId": "updateEmailPolicy",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailStatus"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailPolicy"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/email/messages": {
+      "get": {
+        "summary": "Admin-only paginated masked delivery metadata; never message bodies or login links",
+        "operationId": "listEmailMessages",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailMessages"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "login",
+                "reminder"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/email/messages/{id}": {
+      "get": {
+        "summary": "Admin-only sanitized delivery attempt and event history",
+        "operationId": "getEmailMessage",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailMessageDetail"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/email/reconcile": {
+      "post": {
+        "summary": "Admin-only rate-limited refresh of provider status and delivery events",
+        "operationId": "reconcileEmail",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailStatus"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/email/reminders/preview": {
+      "post": {
+        "summary": "Admin-only aggregate currently eligible reminder count; never sends",
+        "operationId": "previewReminders",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderPreview"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1773,7 +2129,11 @@
           },
           "role": {
             "type": "string",
-            "enum": ["student", "manager", "admin"]
+            "enum": [
+              "student",
+              "manager",
+              "admin"
+            ]
           },
           "admitted": {
             "type": "boolean"
@@ -1813,7 +2173,10 @@
             "type": "string"
           }
         },
-        "required": ["user", "csrf_token"],
+        "required": [
+          "user",
+          "csrf_token"
+        ],
         "additionalProperties": false
       },
       "MyBallot": {
@@ -1891,7 +2254,10 @@
             "description": "No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability."
           },
           "closes_at": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "date-time",
             "description": "Automatic closing instant for bounded collections; null when ongoing. Open collections are effectively closed at this instant."
           },
@@ -1901,7 +2267,11 @@
           },
           "status": {
             "type": "string",
-            "enum": ["draft", "open", "closed"],
+            "enum": [
+              "draft",
+              "open",
+              "closed"
+            ],
             "description": "All kinds support draft, open and closed; the closing deadline also makes open collections effectively closed. Draft means hidden from students, including previously opened polls; opened_at distinguishes editable new drafts from locked hidden polls."
           },
           "allow_self_vote": {
@@ -1915,7 +2285,10 @@
             "description": "Empty for contribution kinds, word portraits, and all_people person poll input; otherwise explicit voting options. Word portrait responses never expose other voters’ words."
           },
           "my_option_id": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "First current selection in canonical ID order (legacy compatibility), or null."
           },
           "version": {
@@ -1926,16 +2299,25 @@
             "format": "date-time"
           },
           "opened_at": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "date-time",
             "description": "Set once when a single-answer category moves from draft to open; creation time for repeatable ones."
           },
           "ballot_count": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "description": "Number of distinct current voters. Editors only; null for students and contribution categories."
           },
           "participation": {
-            "type": ["object", "null"],
+            "type": [
+              "object",
+              "null"
+            ],
             "description": "Current voting participation among admitted cohort members, regardless of role. Both counts use the same population and database snapshot. Editors only; null for students and contribution categories. Preserved ballots from people no longer eligible are excluded here but remain in ballot_count.",
             "properties": {
               "voted": {
@@ -1949,7 +2331,10 @@
                 "description": "All currently admitted cohort members."
               }
             },
-            "required": ["voted", "eligible"],
+            "required": [
+              "voted",
+              "eligible"
+            ],
             "additionalProperties": false
           },
           "all_people": {
@@ -2063,7 +2448,12 @@
           },
           "status": {
             "type": "string",
-            "enum": ["pending", "accepted", "rejected", "withdrawn"]
+            "enum": [
+              "pending",
+              "accepted",
+              "rejected",
+              "withdrawn"
+            ]
           },
           "version": {
             "type": "integer"
@@ -2122,7 +2512,12 @@
           },
           "status": {
             "type": "string",
-            "enum": ["pending", "accepted", "rejected", "withdrawn"]
+            "enum": [
+              "pending",
+              "accepted",
+              "rejected",
+              "withdrawn"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -2194,7 +2589,10 @@
             "type": "string"
           }
         },
-        "required": ["id", "label"],
+        "required": [
+          "id",
+          "label"
+        ],
         "additionalProperties": false
       },
       "PollResult": {
@@ -2210,7 +2608,11 @@
             "type": "integer"
           }
         },
-        "required": ["option_id", "label", "count"],
+        "required": [
+          "option_id",
+          "label",
+          "count"
+        ],
         "additionalProperties": false
       },
       "BallotAudit": {
@@ -2233,7 +2635,10 @@
             "format": "date-time"
           },
           "ballot_id": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Groups the complete selection from one ballot change. Null for legacy single-choice history."
           }
         },
@@ -2267,14 +2672,23 @@
             "format": "date-time"
           }
         },
-        "required": ["id", "actor_name", "action", "entity_id", "created_at"],
+        "required": [
+          "id",
+          "actor_name",
+          "action",
+          "entity_id",
+          "created_at"
+        ],
         "additionalProperties": false
       },
       "SystemStatus": {
         "type": "object",
         "properties": {
           "backup_last_success": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "backup_stale": {
             "type": "boolean"
@@ -2283,7 +2697,11 @@
             "type": "integer"
           }
         },
-        "required": ["backup_last_success", "backup_stale", "upload_bytes"],
+        "required": [
+          "backup_last_success",
+          "backup_stale",
+          "upload_bytes"
+        ],
         "additionalProperties": false
       },
       "RosterEntry": {
@@ -2296,7 +2714,10 @@
             "type": "string"
           }
         },
-        "required": ["id", "name"],
+        "required": [
+          "id",
+          "name"
+        ],
         "additionalProperties": false
       },
       "Error": {
@@ -2312,11 +2733,16 @@
                 "type": "string"
               }
             },
-            "required": ["code", "message"],
+            "required": [
+              "code",
+              "message"
+            ],
             "additionalProperties": false
           }
         },
-        "required": ["error"],
+        "required": [
+          "error"
+        ],
         "additionalProperties": false
       },
       "CategoryInput": {
@@ -2345,7 +2771,10 @@
             "description": "No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability."
           },
           "closes_at": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "date-time",
             "description": "Automatic closing instant for bounded collections; null when ongoing. Open collections are effectively closed at this instant."
           },
@@ -2368,7 +2797,9 @@
                   "type": "string"
                 }
               },
-              "required": ["label"],
+              "required": [
+                "label"
+              ],
               "additionalProperties": false
             },
             "description": "Empty for contribution kinds, word portraits, and all_people person poll input; otherwise explicit voting options. Word portrait responses never expose other voters’ words."
@@ -2384,7 +2815,11 @@
             "description": "Maximum selections for person/proposal polls or words per voter for word portraits (1–500). Word portraits default to 3, other polls to 1; contribution kinds require 1."
           }
         },
-        "required": ["name", "description", "kind"],
+        "required": [
+          "name",
+          "description",
+          "kind"
+        ],
         "additionalProperties": false
       },
       "SubmissionInput": {
@@ -2434,7 +2869,13 @@
             "type": "string"
           }
         },
-        "required": ["version", "category_id", "title", "body", "context"],
+        "required": [
+          "version",
+          "category_id",
+          "title",
+          "body",
+          "context"
+        ],
         "additionalProperties": false
       },
       "StatusInput": {
@@ -2445,10 +2886,18 @@
           },
           "status": {
             "type": "string",
-            "enum": ["pending", "accepted", "rejected", "withdrawn"]
+            "enum": [
+              "pending",
+              "accepted",
+              "rejected",
+              "withdrawn"
+            ]
           }
         },
-        "required": ["version", "status"],
+        "required": [
+          "version",
+          "status"
+        ],
         "additionalProperties": false
       },
       "UserEdit": {
@@ -2459,7 +2908,11 @@
           },
           "role": {
             "type": "string",
-            "enum": ["student", "manager", "admin"]
+            "enum": [
+              "student",
+              "manager",
+              "admin"
+            ]
           },
           "admitted": {
             "type": "boolean"
@@ -2509,7 +2962,10 @@
             "description": "No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability."
           },
           "closes_at": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "date-time",
             "description": "Future closing instant. For existing bounded polls, a sparse request containing only version and closes_at changes the deadline in any lifecycle state without changing definitions, votes, history or stored status. Omitted deadlines are preserved exactly; contribution deadlines remain fixed. Extending an expired stored-open poll makes it open again; manually closed or hidden polls stay closed or hidden."
           },
@@ -2532,7 +2988,9 @@
                   "type": "string"
                 }
               },
-              "required": ["label"],
+              "required": [
+                "label"
+              ],
               "additionalProperties": false
             },
             "description": "Empty for contribution kinds, word portraits, and all_people person poll input; otherwise explicit voting options. Word portrait responses never expose other voters’ words."
@@ -2551,10 +3009,23 @@
             "description": "Maximum selections for person/proposal polls or words per voter for word portraits (1–500). Word portraits default to 3, other polls to 1; contribution kinds require 1."
           }
         },
-        "required": ["version"],
+        "required": [
+          "version"
+        ],
         "oneOf": [
-          { "required": ["name", "description", "kind"] },
-          { "required": ["closes_at"], "maxProperties": 2 }
+          {
+            "required": [
+              "name",
+              "description",
+              "kind"
+            ]
+          },
+          {
+            "required": [
+              "closes_at"
+            ],
+            "maxProperties": 2
+          }
         ],
         "additionalProperties": false
       },
@@ -2616,8 +3087,349 @@
             "type": "boolean"
           }
         },
-        "required": ["version", "label", "excluded"],
+        "required": [
+          "version",
+          "label",
+          "excluded"
+        ],
         "additionalProperties": false
+      },
+      "EmailPolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "pause_all": {
+            "type": "boolean"
+          },
+          "daily_limit": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "reminder_limit": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "login_reserve": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "version",
+          "paused",
+          "pause_all",
+          "daily_limit",
+          "reminder_limit",
+          "login_reserve"
+        ]
+      },
+      "EmailUsage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date"
+          },
+          "used": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reserved": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "login": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reminder": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "remaining": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "day",
+          "used",
+          "reserved",
+          "login",
+          "reminder",
+          "remaining"
+        ]
+      },
+      "EmailProvider": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "credits": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "observed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "configured",
+          "credits",
+          "observed_at",
+          "error"
+        ]
+      },
+      "EmailHealth": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "last_worker_run": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "pending": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "failed": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "last_worker_run",
+          "pending",
+          "failed"
+        ]
+      },
+      "EmailStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/EmailPolicy"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/EmailUsage"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/EmailProvider"
+          },
+          "health": {
+            "$ref": "#/components/schemas/EmailHealth"
+          }
+        },
+        "required": [
+          "policy",
+          "usage",
+          "provider",
+          "health"
+        ]
+      },
+      "EmailMessage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "user_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "user_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recipient_masked": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "login",
+              "reminder"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "accepted",
+              "delivered",
+              "deferred",
+              "bounced",
+              "failed",
+              "suppressed",
+              "cancelled",
+              "unknown"
+            ]
+          },
+          "provider_message_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "failure_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "user_id",
+          "user_name",
+          "recipient_masked",
+          "kind",
+          "status",
+          "provider_message_id",
+          "attempts",
+          "failure_code"
+        ]
+      },
+      "EmailMessageEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "failure_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "created_at",
+          "failure_code"
+        ]
+      },
+      "EmailMessages": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmailMessage"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ]
+      },
+      "EmailMessageDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/EmailMessage"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmailMessageEvent"
+            }
+          }
+        },
+        "required": [
+          "message",
+          "events"
+        ]
+      },
+      "ReminderPreference": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ]
+      },
+      "ReminderPreview": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "eligible": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "eligible"
+        ]
       }
     }
   }

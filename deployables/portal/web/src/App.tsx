@@ -62,8 +62,10 @@ import {
   type View,
 } from './ui';
 import { ActivityLog, People } from './admin';
+import { EmailAdmin } from './EmailAdmin';
 import { ContributionDetail, Contributions, Editorial, NewContribution, NotFound } from './pages';
 import { SammlungDetail, Sammlungen } from './sammlungen';
+import { ReminderSettings } from './ReminderSettings';
 import { DevDebug } from './DevDebug';
 import { PollStack } from './PollStack';
 
@@ -155,6 +157,14 @@ export function App() {
             element={
               <RoleGuard admin>
                 <ActivityLog />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="verwaltung/email"
+            element={
+              <RoleGuard admin>
+                <EmailAdmin />
               </RoleGuard>
             }
           />
@@ -267,7 +277,7 @@ function Login() {
             Melde dich an, um Erinnerungen einzureichen und bei unseren Sammlungen mitzumachen.
           </p>
           <a className={`${btn.primary} mt-6 w-full`} href="/auth/login">
-            Mit Schulkonto anmelden <Arrow />
+            Anmelden <Arrow />
           </a>
           <p className="mt-5 text-sm text-muted">
             Privater Bereich für unseren Jahrgang. Beiträge und Bilder sind nur für berechtigte Personen zugänglich.
@@ -353,6 +363,7 @@ function Layout() {
           </nav>
           {user.role === 'admin' && view[0] === 'redaktion' && <AdminNav onNavigate={() => setMenu(false)} />}
           <div className="flex flex-none flex-col gap-3 bg-pill px-3 py-4">
+            <ReminderSettings />
             {editorial(user) && <ViewSwitch onSwitch={() => setMenu(false)} />}
             <div className="flex items-center gap-3 px-1">
               <span
@@ -498,6 +509,9 @@ function AdminNav({ onNavigate }: { onNavigate: () => void }) {
           </NavItem>
           <NavItem to="/verwaltung/protokoll" icon={ScrollText}>
             Aktivitätsprotokoll
+          </NavItem>
+          <NavItem to="/verwaltung/email" icon={Settings}>
+            E-Mail
           </NavItem>
         </div>
       )}
@@ -1053,6 +1067,9 @@ function EditorialHome() {
                 {waiting.length > 3 && <p className="mt-1 text-[13px] text-muted">und {waiting.length - 3} weitere</p>}
                 <Link to="/verwaltung/personen" className={`${btn.text} mt-5 self-start`}>
                   Zugänge verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
+                </Link>
+                <Link to="/verwaltung/email" className={`${btn.text} mt-3 self-start`}>
+                  E-Mail-Versand verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
                 </Link>
                 <DevDebug
                   label="Personen"

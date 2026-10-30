@@ -97,7 +97,6 @@ func TestMigration006PreservesDefinitionsVotesAndHistory(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	app := appForPool(t, pool, issuer)
 	// Seed the pre-008 schema directly. The current API reads the new category
 	// and ballot columns, so it cannot be used until the migration is applied.
 	legacyBallotID := "50000000-0000-4000-8000-000000000001"
@@ -128,6 +127,7 @@ func TestMigration006PreservesDefinitionsVotesAndHistory(t *testing.T) {
 	if err := Migrate(ctx, pool); err != nil {
 		t.Fatal(err)
 	}
+	app := appForPool(t, pool, issuer)
 	for table, rows := range before {
 		if snapshot(queries[table]) != rows {
 			t.Fatalf("migration changed existing %s", table)

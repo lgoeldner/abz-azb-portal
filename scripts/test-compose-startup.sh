@@ -9,7 +9,7 @@ compose=(docker compose -p "$project" -f "$config")
 cleanup() {
   local code=$?
   "${compose[@]}" down -v --rmi local >/dev/null 2>&1 || true
-  docker image rm "$project-portal:local" "$project-auth-mock:local" "$project-frontend:local" >/dev/null 2>&1 || true
+  docker image rm "$project-portal:local" "$project-auth:local" "$project-frontend:local" >/dev/null 2>&1 || true
   rm -f "$config"
   exit "$code"
 }
@@ -22,6 +22,7 @@ docker compose --env-file "$root/.env.dev.dist" -f "$root/compose.yaml" -f "$roo
     const c = JSON.parse(fs.readFileSync(0, "utf8"));
     const project = process.env.STARTUP_TEST_PROJECT;
     delete c.services.backup;
+    delete c.services.reminders;
     for (const [name, service] of Object.entries(c.services)) {
       assert.equal(service.restart, "unless-stopped", `${name} must recover after engine restart`);
       service.ports = [];
@@ -36,17 +37,18 @@ docker compose --env-file "$root/.env.dev.dist" -f "$root/compose.yaml" -f "$roo
     process.stdout.write(JSON.stringify(c));
   ' > "$config"
 
-"${compose[@]}" create --build db auth-mock portal frontend caddy
+"${compose[@]}" create --build db auth portal frontend caddy
 portal=$("${compose[@]}" ps -aq portal)
 db=$("${compose[@]}" ps -aq db)
-auth=$("${compose[@]}" ps -aq auth-mock)
+auth=$("${compose[@]}" ps -aq auth)
 frontend=$("${compose[@]}" ps -aq frontend)
 caddy=$("${compose[@]}" ps -aq caddy)
 
 wait_ready() {
   local attempt
   for ((attempt = 0; attempt < 90; attempt++)); do
-    if [[ "$(docker inspect -f '{{.State.Health.Status}}' "$portal")" == healthy ]] &&
+    if [[ "$(docker inspect -f '{{.State.Health.Status}}' "$auth")" == healthy ]] &&
+      [[ "$(docker inspect -f '{{.State.Health.Status}}' "$portal")" == healthy ]] &&
       [[ "$(docker inspect -f '{{.State.Health.Status}}' "$frontend")" == healthy ]] &&
       docker exec "$caddy" wget -q -O - --header 'Host: localhost' http://frontend:5173/ | grep '/@vite/client' >/dev/null; then
       echo 'Portal and hot-reload frontend are ready'
@@ -64,6 +66,8 @@ start_before_database() {
   sleep 3
   [[ "$(docker inspect -f '{{.State.Status}}' "$portal")" == running ]]
   [[ "$(docker inspect -f '{{.RestartCount}}' "$portal")" == 0 ]]
+  [[ "$(docker inspect -f '{{.State.Status}}' "$auth")" == running ]]
+  [[ "$(docker inspect -f '{{.RestartCount}}' "$auth")" == 0 ]]
   docker start "$db" >/dev/null
   wait_ready
 }

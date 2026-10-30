@@ -1,4 +1,9 @@
 {$PUBLIC_HOST} {
 	encode zstd gzip
-	reverse_proxy portal:8080
+
+	@internal path /internal /internal/*
+	respond @internal 404
+	reverse_proxy portal:8080 {
+		header_up X-Portal-Proxy-Token {$AUTH_SERVICE_SECRET}
+	}
 }

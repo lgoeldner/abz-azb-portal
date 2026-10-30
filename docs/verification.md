@@ -140,3 +140,15 @@ Proposal answer options use removable chips. Collection content kind, repeatabil
 - Independent review found no remaining actionable defects after the word portrait integration.
 
 The final word-chip context-menu integration also passed all 151 frontend tests, Go race tests, typecheck, build, contract checks and repo-map validation. The Go proxy timed out during the final lint invocation; building the same pinned golangci-lint v2.15.0 from the verified local module cache completed lint for both Go services with zero issues. Frontend ESLint and shellcheck passed too.
+
+
+## Better Auth and Brevo — 30 October 2026
+
+The first release uses Better Auth 1.7.14 in a separate Node container, mapped to the same PostgreSQL UUID user records. Go verifies dependency sessions through a minimal authenticated private API and keeps local authorization/CSRF. Production closed enrollment, scanner-safe explicit confirmation, mode cutovers, supported CLI/SQL identity changes, retired-email quarantine and dependency-backed dev login are covered by invariant tests. Brevo/capture share persisted quota reservations and a masked delivery audit; collection reminders are opt-in and rechecked before dispatch.
+
+- `make check` passed with disposable PostgreSQL and TEST_DATABASE_DISPOSABLE=YES: Go race/integration tests and vet, all 5 dependency tests (no skips), 206 web tests, typecheck/build, 42-route generated contract, repo-map validation and all linters (zero Go issues).
+- Independent architecture-tier security review found no remaining findings after fixing confirmation/identity-change serialization, stale legacy-mode issuance, trusted proxy handling, settings/version contract, provider event pagination and address-wide suppression after complaints.
+- The Docker recovery drill passed with migrations 001–012, immutable upload hashes, current ballots/named history and mail audit intact. Restore revoked legacy/dependency sessions and pending verification records, cancelled old queued work and retained uncertain send reservations. A non-empty target was refused. Disposable snapshot `c67e3874aa1e1f1fed5734da8ac78c95f7cf1845178a4fa9b22300b116777f1c` and drill resources were cleaned up.
+- Disposable Compose cold/existing-container starts before PostgreSQL and whole-stack restart passed with the Node mock service and detached frontend. The admin quota/settings/logout/student opt-out browser journey passed at desktop and 390px phone width; its screenshot was inspected with no horizontal overflow. Existing contribution/voting/editorial journeys and the word-portrait journey passed with UUID-based login selectors.
+
+No real Brevo credentials or private roster were used. Actual external mailbox delivery remains an operator smoke test after domain/sender verification, account-level tracking configuration and runtime secrets. Google/passkeys remain optional later features through the same dependency.

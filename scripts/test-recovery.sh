@@ -66,7 +66,10 @@ done
 db_url="postgres://portal:recovery-only@${pg}:5432/portal?sslmode=disable"
 app_env=(--network "$network" -e APP_ENV=development -e AUTH_MODE=mock \
   -e DATABASE_URL="$db_url" -e PUBLIC_URL=http://127.0.0.1:8080 \
-  -e SESSION_SECRET=recovery-drill-only-secret-at-least-32-bytes)
+  -e AUTH_INTERNAL_URL=http://auth:3000 \
+  -e AUTH_SERVICE_SECRET=recovery-service-secret-at-least-32-bytes \
+  -e SESSION_SECRET=recovery-drill-only-secret-at-least-32-bytes \
+  -e MAIL_PROVIDER=capture -e REMINDERS_ENABLED=false)
 dc run --rm "${app_env[@]}" "$portal_image" migrate
 dc run --rm "${app_env[@]}" "$portal_image" seed
 
@@ -122,9 +125,43 @@ SELECT gen_random_uuid(),poll_id,user_id,option_id,'60000000-0000-4000-8000-0000
 FROM ballots WHERE poll_id='60000000-0000-4000-8000-000000000001';
 SQL
 
+# Recovery must revoke every credential that could outlive the point-in-time
+# restore and cancel queued work without refunding ambiguous quota.
+dc exec -i "$pg" psql -X -v ON_ERROR_STOP=1 -U portal -d portal <<'SQL'
+INSERT INTO sessions(token_hash,user_id,csrf,expires_at)
+VALUES ('restore-revoke-session','00000000-0000-4000-8000-000000000003','restore-csrf',now()+interval '1 day');
+INSERT INTO auth_sessions(id,expires_at,token,user_id)
+VALUES ('90000000-0000-4000-8000-000000000010',now()+interval '1 day','restore-auth-session','00000000-0000-4000-8000-000000000003');
+INSERT INTO auth_verifications(id,identifier,value,expires_at)
+VALUES ('90000000-0000-4000-8000-000000000011','restore@example.invalid','restore-verification',now()+interval '1 day');
+INSERT INTO auth_accounts(id,account_id,provider_id,user_id,access_token)
+VALUES ('90000000-0000-4000-8000-000000000012','restore-account','test-provider','00000000-0000-4000-8000-000000000003','fixture-token');
+INSERT INTO mail_policy(id) VALUES (1);
+INSERT INTO mail_messages(id,user_id,category_id,kind,status)
+VALUES
+('90000000-0000-4000-8000-000000000020','00000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000001','reminder','queued'),
+('90000000-0000-4000-8000-000000000021','00000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000001','login','accepted');
+INSERT INTO mail_destinations(message_id,recipient_snapshot)
+VALUES
+('90000000-0000-4000-8000-000000000020','restore@example.invalid'),
+('90000000-0000-4000-8000-000000000021','restore@example.invalid');
+INSERT INTO mail_attempts(id,message_id,attempt_number,status,started_at,finished_at)
+VALUES
+('90000000-0000-4000-8000-000000000030','90000000-0000-4000-8000-000000000020',1,'started',now(),NULL),
+('90000000-0000-4000-8000-000000000031','90000000-0000-4000-8000-000000000021',1,'accepted',now(),now());
+INSERT INTO mail_reservations(id,message_id,attempt_id,quota_day,kind,state)
+VALUES
+('90000000-0000-4000-8000-000000000040','90000000-0000-4000-8000-000000000020','90000000-0000-4000-8000-000000000030',current_date,'reminder','reserved'),
+('90000000-0000-4000-8000-000000000041','90000000-0000-4000-8000-000000000021','90000000-0000-4000-8000-000000000031',current_date,'login','consumed');
+INSERT INTO mail_delivery_events(id,message_id,dedup_key,status,occurred_at)
+VALUES ('90000000-0000-4000-8000-000000000050','90000000-0000-4000-8000-000000000021','restore-delivery-event','delivered',now());
+INSERT INTO mail_reminder_jobs(id,user_id,category_id,closes_at,milestone,dedup_key,status)
+VALUES ('90000000-0000-4000-8000-000000000060','00000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000001',now()+interval '24 hours',24,'restore-reminder-job','queued');
+SQL
+
 capture_signature() {
   local database=$1 table
-  for table in users categories sessions submissions revisions attachments corrections poll_options ballots ballot_audit audit_events schema_migrations; do
+  for table in users categories submissions revisions attachments corrections poll_options ballots ballot_audit audit_events schema_migrations auth_accounts auth_rate_limits auth_email_rate_limits mail_policy mail_delivery_events mail_admin_events; do
     dc exec -e PGDATABASE="$database" "$pg" psql -X -qAt -U portal -c \
       "SELECT '$table',count(*),COALESCE(md5(string_agg(row_to_json(t)::text,E'\\n' ORDER BY row_to_json(t)::text)),'') FROM $table t" \
       | tr -d '\r'
@@ -191,4 +228,27 @@ if ! dc exec "$pg" psql -X -qAt -U portal -d portal_restore -c \
   exit 1
 fi
 
-echo "Recovery drill passed for snapshot $snapshot (migrations, seed data, revisions, word moderation, ballots, and attachment files verified)."
+check_count() {
+  local label=$1 query=$2 expected=$3 actual
+  actual=$(dc exec "$pg" psql -X -qAt -U portal -d portal_restore -c "$query" | tr -d '\r')
+  if [[ "$actual" != "$expected" ]]; then
+    echo "Unexpected restored recovery state for $label: got $actual, expected $expected" >&2
+    exit 1
+  fi
+}
+check_count 'legacy Go sessions' 'SELECT count(*) FROM sessions' 0
+check_count 'Better Auth sessions' 'SELECT count(*) FROM auth_sessions' 0
+check_count 'Better Auth verification tokens' 'SELECT count(*) FROM auth_verifications' 0
+check_count 'preserved provider account' "SELECT count(*) FROM auth_accounts WHERE id='90000000-0000-4000-8000-000000000012' AND access_token='fixture-token'" 1
+check_count 'queued message cancellation' "SELECT count(*) FROM mail_messages WHERE id='90000000-0000-4000-8000-000000000020' AND status='cancelled'" 1
+check_count 'accepted message preservation' "SELECT count(*) FROM mail_messages WHERE id='90000000-0000-4000-8000-000000000021' AND status='accepted'" 1
+check_count 'destination snapshot preservation' "SELECT count(*) FROM mail_destinations WHERE message_id IN ('90000000-0000-4000-8000-000000000020','90000000-0000-4000-8000-000000000021')" 2
+check_count 'in-flight attempt classification' "SELECT count(*) FROM mail_attempts WHERE id='90000000-0000-4000-8000-000000000030' AND status='unknown'" 1
+check_count 'accepted attempt preservation' "SELECT count(*) FROM mail_attempts WHERE id='90000000-0000-4000-8000-000000000031' AND status='accepted'" 1
+check_count 'conservative reservation' "SELECT count(*) FROM mail_reservations WHERE id='90000000-0000-4000-8000-000000000040' AND state='uncertain'" 1
+check_count 'consumed quota preservation' "SELECT count(*) FROM mail_reservations WHERE id='90000000-0000-4000-8000-000000000041' AND state='consumed'" 1
+check_count 'delivery event preservation' "SELECT count(*) FROM mail_delivery_events WHERE id='90000000-0000-4000-8000-000000000050'" 1
+check_count 'local mail budget preservation' 'SELECT daily_limit FROM mail_policy WHERE id=1' 300
+check_count 'pending reminder cancellation' "SELECT count(*) FROM mail_reminder_jobs WHERE id='90000000-0000-4000-8000-000000000060' AND status='cancelled' AND lease_until IS NULL" 1
+
+echo "Recovery drill passed for snapshot $snapshot (migrations, seed data, ballots, attachments, credential revocation, and mail audit/quota recovery verified)."

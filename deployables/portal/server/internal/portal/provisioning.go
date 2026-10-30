@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"encoding/json"
@@ -30,7 +31,11 @@ func normalizedEmail(value string) (string, error) {
 	return value, nil
 }
 func parseRoster(reader io.Reader, allowElevated bool) ([]provisionRecord, error) {
-	r := csv.NewReader(io.LimitReader(reader, 10<<20))
+	raw, err := io.ReadAll(io.LimitReader(reader, (10<<20)+1))
+	if err != nil || len(raw) > 10<<20 {
+		return nil, errors.New("CSV exceeds 10 MiB or cannot be read")
+	}
+	r := csv.NewReader(bytes.NewReader(raw))
 	r.TrimLeadingSpace = true
 	header, err := r.Read()
 	if err != nil {

@@ -31,7 +31,9 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: deployables/portal/web/package-lock.json
+          cache-dependency-path: |
+            deployables/auth/package-lock.json
+            deployables/portal/web/package-lock.json
       - name: Go lint
         uses: golangci/golangci-lint-action@v9
         with:
@@ -46,6 +48,8 @@ jobs:
           working-directory: deployables/auth-mock
       - name: Shell lint
         run: shellcheck -S warning scripts/*.sh deployables/backup/*.sh
+      - name: Auth service checks
+        run: cd deployables/auth && npm ci && npm run check
       - name: Frontend lint and types
         run: cd deployables/portal/web && npm ci && npm run lint && npm run typecheck
       - name: API contract
@@ -72,7 +76,9 @@ jobs:
           cd deployables/portal/server && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
           cd ../../auth-mock && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
       - name: npm advisories
-        run: cd deployables/portal/web && npm audit --audit-level=high
+        run: |
+          cd deployables/auth && npm ci && npm audit --omit=dev --audit-level=high
+          cd ../portal/web && npm audit --audit-level=high
 
   test:
     runs-on: ubuntu-latest
@@ -103,7 +109,9 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: deployables/portal/web/package-lock.json
+          cache-dependency-path: |
+            deployables/auth/package-lock.json
+            deployables/portal/web/package-lock.json
       - name: Go tests and vet
         env:
           TEST_DATABASE_URL: postgres://portal:portal_test@localhost:5432/portal_test?sslmode=disable
@@ -112,6 +120,11 @@ jobs:
           cd ../../auth-mock && go test -race ./... && go vet ./...
       - name: Frontend tests and production build
         run: cd deployables/portal/web && npm ci && npm test -- --run && npm run build
+      - name: Auth dependency integration invariants
+        env:
+          TEST_DATABASE_URL: postgres://portal:portal_test@localhost:5432/portal_test?sslmode=disable
+          TEST_DATABASE_DISPOSABLE: "YES"
+        run: cd deployables/auth && npm ci && npm run check
       - name: Ops shell and restore safety checks
         run: |
           bash deployables/backup/test-backup-lock.sh
@@ -123,12 +136,14 @@ jobs:
           DATABASE_URL: postgres://portal:portal_test@localhost:5432/portal_test?sslmode=disable
           PUBLIC_URL: http://127.0.0.1:8080
           AUTH_MODE: mock
-          OIDC_ISSUER: http://localhost:9090
-          OIDC_CLIENT_ID: portal-dev
-          OIDC_CLIENT_SECRET: dev-only
-          AUTH_MOCK_USERS: ${{ github.workspace }}/deployables/auth-mock/users.yaml
-          AUTH_MOCK_REDIRECT_URIS: http://127.0.0.1:8080/auth/callback
+          AUTH_INTERNAL_URL: http://127.0.0.1:3000
+          AUTH_SERVICE_SECRET: ci-service-secret-at-least-32-bytes
+          MOCK_AUTH_SECRET: ci-mock-secret-at-least-32-bytes
+          BETTER_AUTH_URL: http://127.0.0.1:8080
+          PORTAL_INTERNAL_URL: http://127.0.0.1:8080
           SESSION_SECRET: ci-only-secret-at-least-32-bytes-long
+          MAIL_PROVIDER: capture
+          REMINDERS_ENABLED: "false"
           UPLOAD_DIR: /tmp/portal-uploads
           STATIC_DIR: ${{ github.workspace }}/deployables/portal/web/dist
           BACKUP_STATUS_FILE: /tmp/portal-backup-status.json
@@ -137,13 +152,12 @@ jobs:
           (cd deployables/portal/server && go build -o /tmp/portal ./cmd/portal)
           /tmp/portal migrate
           /tmp/portal seed
-          (cd deployables/auth-mock && go build -o /tmp/auth-mock .)
-          ADDR=:9090 /tmp/auth-mock >/tmp/auth-mock.log 2>&1 &
+          (cd deployables/auth && APP_ENV=development AUTH_MODE=mock AUTH_SERVICE_SECRET="$AUTH_SERVICE_SECRET" MOCK_AUTH_SECRET="$MOCK_AUTH_SECRET" DATABASE_URL="$DATABASE_URL" BETTER_AUTH_URL="$BETTER_AUTH_URL" PORTAL_INTERNAL_URL="$PORTAL_INTERNAL_URL" PORT=3000 npm run start:mock) >/tmp/auth.log 2>&1 &
           for _ in $(seq 1 30); do
-            if curl --fail --silent http://localhost:9090/healthz; then break; fi
+            if curl --fail --silent http://localhost:3000/healthz; then break; fi
             sleep 1
           done
-          curl --fail --silent http://localhost:9090/healthz
+          curl --fail --silent http://localhost:3000/healthz
           /tmp/portal serve >/tmp/portal.log 2>&1 &
           for _ in $(seq 1 30); do
             curl --fail --silent http://127.0.0.1:8080/readyz && exit 0
@@ -168,7 +182,7 @@ jobs:
           retention-days: 7
       - name: App logs
         if: failure()
-        run: cat /tmp/portal.log /tmp/auth-mock.log
+        run: cat /tmp/portal.log
 
   recovery:
     runs-on: ubuntu-latest

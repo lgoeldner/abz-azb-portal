@@ -3,8 +3,14 @@ import { expect, test } from './fixtures';
 
 async function login(page: Page, slug: string) {
   await page.goto('/');
-  await page.getByRole('link', { name: /Mit Schulkonto anmelden/ }).click();
-  await page.getByRole('button', { name: new RegExp(`\\b${slug}$`) }).click();
+  await page.getByRole('link', { name: /^Anmelden$/ }).click();
+  const ids: Record<string, string> = {
+    alex_admin: '00000000-0000-4000-8000-000000000001',
+    sam_redaktion: '00000000-0000-4000-8000-000000000002',
+    mia_weber: '00000000-0000-4000-8000-000000000003',
+  };
+  await page.locator(`[data-user-id="${ids[slug]}"]`).click();
+  await page.waitForURL((url) => url.pathname === '/');
   await expect(page.getByRole('main').getByRole('heading', { level: 1 })).toBeVisible();
 }
 

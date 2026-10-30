@@ -1,14 +1,20 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 
-// Identities are picked by display_slug, which (unlike display names) is stable.
+// Development identities use the same permanent UUIDs as the application roster.
 async function signInAs(page: Page, role: 'Jahrgang' | 'Redaktion' | 'Administration') {
   await page.goto('/');
-  await page.getByRole('link', { name: /Mit Schulkonto anmelden/ }).click();
-  const slug = role === 'Jahrgang' ? 'mia_weber' : role === 'Redaktion' ? 'sam_redaktion' : 'alex_admin';
-  const access = page.getByRole('button', { name: new RegExp(`\\b${slug}$`) });
+  await page.getByRole('link', { name: /^Anmelden$/ }).click();
+  const id =
+    role === 'Jahrgang'
+      ? '00000000-0000-4000-8000-000000000003'
+      : role === 'Redaktion'
+        ? '00000000-0000-4000-8000-000000000002'
+        : '00000000-0000-4000-8000-000000000001';
+  const access = page.locator(`[data-user-id="${id}"]`);
   await expect(access, `Development login for ${role} is available (start a seeded development server)`).toBeVisible();
   await access.click();
+  await page.waitForURL((url) => url.pathname === '/');
   // The sidebar brand link is hidden on mobile, so wait for the page heading instead.
   await expect(page.getByRole('main').getByRole('heading', { level: 1 })).toBeVisible();
 }
@@ -34,10 +40,8 @@ test('student signs in, submits a contribution, and can reach a ballot', async (
     .getByRole('link', { name: /^Ideen/ })
     .click();
   await page.getByRole('link', { name: /Beitrag einreichen/ }).click();
-  await page.getByPlaceholder('Gib deiner Erinnerung einen Namen').fill(`E2E Erinnerung ${Date.now()}`);
-  await page
-    .getByPlaceholder('Was ist passiert? Welcher Spruch darf nicht fehlen?')
-    .fill('Eine Geschichte aus dem Testlauf.');
+  await page.getByPlaceholder('Gib deinem Beitrag einen Namen').fill(`E2E Erinnerung ${Date.now()}`);
+  await page.getByRole('textbox', { name: 'Dein Beitrag', exact: true }).fill('Eine Geschichte aus dem Testlauf.');
   await page.getByRole('button', { name: /Beitrag einreichen/ }).click();
   await expect(page.getByRole('heading', { name: /E2E Erinnerung/ })).toBeVisible();
   await expect(page.getByText('Eingereicht').first()).toBeVisible();
@@ -51,8 +55,10 @@ test('student casts a ballot in the seeded open poll', async ({ page }) => {
   await signInAs(page, 'Jahrgang');
   await page.goto('/sammlungen/30000000-0000-4000-8000-000000000001'); // seeded open proposal Sammlung
   const option = page
-    .getByRole('list', { name: /Optionen auswählen.*Suchergebnisse/ })
-    .getByRole('button')
+    .getByRole('main')
+    .locator('ul')
+    .filter({ has: page.locator('button[aria-pressed]') })
+    .locator('button[aria-pressed="false"]:not(:disabled)')
     .first();
   await expect(option, 'the seeded Sammlung has an eligible option').toBeVisible();
   await option.click();
@@ -68,9 +74,9 @@ test('editor reads and annotates an original, exports without approval, and sees
     .getByRole('link', { name: /^Ideen/ })
     .click();
   await page.getByRole('link', { name: /Beitrag einreichen/ }).click();
-  await page.getByPlaceholder('Gib deiner Erinnerung einen Namen').fill(title);
+  await page.getByPlaceholder('Gib deinem Beitrag einen Namen').fill(title);
   await page
-    .getByPlaceholder('Was ist passiert? Welcher Spruch darf nicht fehlen?')
+    .getByRole('textbox', { name: 'Dein Beitrag', exact: true })
     .fill('Ein Original für die spätere Moderation.');
   await page.getByRole('button', { name: /Beitrag einreichen/ }).click();
   await expect(page.getByRole('heading', { name: title })).toBeVisible();
@@ -136,8 +142,8 @@ test('old bookmarks under /abstimmungen land on the Sammlungen pages', async ({ 
 test('admin dashboard shows one widget per class and links to the filtered list', async ({ page }) => {
   await signInAs(page, 'Administration');
   const widgets = page.getByRole('region', { name: 'Sammlungen', exact: true });
-  await expect(widgets.getByRole('listitem')).toHaveCount(6);
-  for (const label of ['Ideen', 'Zitate', 'Erinnerungen', 'Fotos', 'Personenwahl', 'Vorschlagswahl'])
+  await expect(widgets.getByRole('listitem')).toHaveCount(7);
+  for (const label of ['Ideen', 'Zitate', 'Erinnerungen', 'Fotos', 'Personenwahl', 'Vorschlagswahl', 'Wortwolke'])
     await expect(widgets.getByRole('link', { name: new RegExp(`^${label}`) })).toBeVisible();
   await widgets.getByRole('link', { name: /^Vorschlagswahl/ }).click();
   await expect(page).toHaveURL(/\/sammlungen\?klasse=proposal$/);

@@ -1,4 +1,6 @@
-# School identity integration
+# Optional legacy school identity integration
+
+The default login is now Better Auth magic links using the shared PostgreSQL roster. See [auth and email operations](auth-email-operations.md). These notes apply only to an explicitly selected legacy OIDC provider or a future Better Auth school-provider integration. No school identity is required for the default setup.
 
 The portal uses an OIDC authorization-code flow with PKCE. Go validates identity tokens and holds the browser session; React never stores provider tokens. A development-only OIDC provider exercises the same flow with fake users.
 

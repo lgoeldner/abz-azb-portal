@@ -52,7 +52,7 @@ it('starts provider login without fetching identities from the portal', async ()
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByRole('link', { name: /Mit Schulkonto anmelden/ })).toHaveAttribute('href', '/auth/login');
+  expect(await screen.findByRole('link', { name: /^Anmelden$/ })).toHaveAttribute('href', '/auth/login');
   expect(fetchMock.mock.calls.every((call) => String(call[0]) === '/api/v1/me')).toBe(true);
 });
 

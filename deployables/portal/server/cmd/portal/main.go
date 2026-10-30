@@ -55,7 +55,11 @@ func waitForDatabase(ctx context.Context, ping func(context.Context) error, time
 func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	c, e := portal.LoadConfig()
+	command := "serve"
+	if len(os.Args) > 1 {
+		command = os.Args[1]
+	}
+	c, e := portal.LoadConfigForCommand(command)
 	if e != nil {
 		return e
 	}
@@ -67,18 +71,18 @@ func run() error {
 	if e = waitForDatabase(ctx, pool.Ping, databaseReadyTimeout, databasePingTimeout, databaseRetryDelay); e != nil {
 		return e
 	}
-	command := "serve"
-	if len(os.Args) > 1 {
-		command = os.Args[1]
-	}
 	switch command {
 	case "migrate":
 		return portal.Migrate(ctx, pool)
 	case "seed":
 		return portal.SeedWithIssuer(ctx, pool, c.Env, c.Issuer)
+	case "users":
+		return portal.RunUserCommand(ctx, pool, os.Args[2:], os.Stdout)
+	case "reminders":
+		return portal.RunReminderCommand(ctx, pool, c.Mail, os.Args[2:], os.Stdout)
 	case "serve":
 	default:
-		return errors.New("usage: portal [serve|migrate|seed]")
+		return errors.New("usage: portal [serve|migrate|seed|users|reminders]")
 	}
 	app, e := portal.New(ctx, c, pool)
 	if e != nil {

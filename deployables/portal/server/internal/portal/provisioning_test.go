@@ -10,6 +10,9 @@ import (
 )
 
 func TestRosterParsingRejectsConflictsAndImplicitPrivilege(t *testing.T) {
+	if _, err := parseRoster(strings.NewReader("email,name\n"+strings.Repeat(" ", 10<<20)), false); err == nil {
+		t.Fatal("oversized roster was silently truncated")
+	}
 	for _, input := range []string{
 		"email,name,role\na@example.test,A,admin\n",
 		"email,name\na@example.test,A\nA@example.test,B\n",

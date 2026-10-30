@@ -465,6 +465,126 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/email-reminders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current user reminder delivery preference */
+        get: operations["getReminderPreference"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Change own reminder preference; does not affect login email */
+        patch: operations["setReminderPreference"];
+        trace?: never;
+    };
+    "/api/v1/admin/email/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin-only local quota, observed Brevo credits and worker health; never provider credentials */
+        get: operations["getEmailStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/email/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin-only versioned mail budgets and pause controls within deployment ceilings */
+        patch: operations["updateEmailPolicy"];
+        trace?: never;
+    };
+    "/api/v1/admin/email/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin-only paginated masked delivery metadata; never message bodies or login links */
+        get: operations["listEmailMessages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/email/messages/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin-only sanitized delivery attempt and event history */
+        get: operations["getEmailMessage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/email/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin-only rate-limited refresh of provider status and delivery events */
+        post: operations["reconcileEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/email/reminders/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin-only aggregate currently eligible reminder count; never sends */
+        post: operations["previewReminders"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -738,6 +858,82 @@ export interface components {
             /** @description One Unicode NFC lowercase word without whitespace or control characters; normalized on input. */
             label: string;
             excluded: boolean;
+        };
+        EmailPolicy: {
+            version: number;
+            paused: boolean;
+            pause_all: boolean;
+            daily_limit: number;
+            reminder_limit: number;
+            login_reserve: number;
+        };
+        EmailUsage: {
+            /** Format: date */
+            day: string;
+            used: number;
+            reserved: number;
+            login: number;
+            reminder: number;
+            remaining: number;
+        };
+        EmailProvider: {
+            name: string;
+            configured: boolean;
+            credits: number | null;
+            /** Format: date-time */
+            observed_at: string | null;
+            error: string | null;
+        };
+        EmailHealth: {
+            /** Format: date-time */
+            last_worker_run: string | null;
+            pending: number;
+            failed: number;
+        };
+        EmailStatus: {
+            policy: components["schemas"]["EmailPolicy"];
+            usage: components["schemas"]["EmailUsage"];
+            provider: components["schemas"]["EmailProvider"];
+            health: components["schemas"]["EmailHealth"];
+        };
+        EmailMessage: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            user_id: string | null;
+            user_name: string | null;
+            recipient_masked: string;
+            /** @enum {string} */
+            kind: "login" | "reminder";
+            /** @enum {string} */
+            status: "queued" | "accepted" | "delivered" | "deferred" | "bounced" | "failed" | "suppressed" | "cancelled" | "unknown";
+            provider_message_id: string | null;
+            attempts: number;
+            failure_code: string | null;
+        };
+        EmailMessageEvent: {
+            /** Format: uuid */
+            id: string;
+            status: string;
+            /** Format: date-time */
+            created_at: string;
+            failure_code: string | null;
+        };
+        EmailMessages: {
+            items: components["schemas"]["EmailMessage"][];
+            next_cursor: string | null;
+        };
+        EmailMessageDetail: {
+            message: components["schemas"]["EmailMessage"];
+            events: components["schemas"]["EmailMessageEvent"][];
+        };
+        ReminderPreference: {
+            enabled: boolean;
+        };
+        ReminderPreview: {
+            eligible: number;
         };
     };
     responses: never;
@@ -1913,6 +2109,255 @@ export interface operations {
                 };
                 content: {
                     "text/csv": string;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getReminderPreference: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReminderPreference"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    setReminderPreference: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReminderPreference"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReminderPreference"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getEmailStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailStatus"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateEmailPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailPolicy"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailStatus"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listEmailMessages: {
+        parameters: {
+            query?: {
+                kind?: "login" | "reminder";
+                status?: string;
+                cursor?: string;
+                user_id?: string;
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailMessages"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getEmailMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailMessageDetail"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    reconcileEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailStatus"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    previewReminders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReminderPreview"];
                 };
             };
             /** @description Error */

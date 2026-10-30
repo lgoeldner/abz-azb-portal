@@ -67,6 +67,9 @@ func (a *App) setupAuth(ctx context.Context) error {
 		auth.client.Transport = issuerTransport{canonical, backchannel, http.DefaultTransport}
 	}
 	a.auth = auth
+	if c.dependencyAuth() {
+		return nil
+	}
 	auth.oauth = oauth2.Config{ClientID: c.ClientID, ClientSecret: c.ClientSecret, RedirectURL: strings.TrimRight(c.PublicURL, "/") + "/auth/callback", Scopes: []string{oidc.ScopeOpenID, "profile"}}
 	ctx = oidc.ClientContext(ctx, auth.client)
 	discovery, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -115,6 +118,13 @@ func (a *App) parseState(s string) (loginState, error) {
 	return st, nil
 }
 func (a *App) login(w http.ResponseWriter, r *http.Request) error {
+	if a.Config.dependencyAuth() {
+		a.authProxy(w, r)
+		return nil
+	}
+	if err := a.assertAuthMode(r.Context(), a.DB); err != nil {
+		return err
+	}
 	st := loginState{randomToken(), randomToken(), oauth2.GenerateVerifier(), time.Now().Add(5 * time.Minute).Unix()}
 	opts := []oauth2.AuthCodeOption{oidc.Nonce(st.Nonce), oauth2.S256ChallengeOption(st.Verifier)}
 
@@ -124,6 +134,12 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 func (a *App) callback(w http.ResponseWriter, r *http.Request) error {
+	if a.Config.dependencyAuth() {
+		return missing()
+	}
+	if err := a.assertAuthMode(r.Context(), a.DB); err != nil {
+		return err
+	}
 	c, e := r.Cookie("portal_login")
 	if e != nil {
 		return fail(400, "oauth_state", "Ungültiger Anmeldevorgang.")
@@ -160,6 +176,12 @@ func (a *App) callback(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	defer tx.Rollback(ctx)
+	if _, e = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(74120984)"); e != nil {
+		return e
+	}
+	if e = a.assertAuthMode(ctx, tx); e != nil {
+		return e
+	}
 	e = tx.QueryRow(ctx, "SELECT id::text FROM users WHERE subject=$1", subject).Scan(&uid)
 	if errors.Is(e, pgx.ErrNoRows) {
 
@@ -202,6 +224,11 @@ func (a *App) callback(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 func (a *App) logout(w http.ResponseWriter, r *http.Request) error {
+	if a.Config.dependencyAuth() {
+		r.URL.Path = "/api/auth/sign-out"
+		a.authProxy(w, r)
+		return nil
+	}
 	c, e := r.Cookie("portal_session")
 	if e == nil {
 		if _, e = a.DB.Exec(r.Context(), "DELETE FROM sessions WHERE token_hash=$1", digest(c.Value)); e != nil {

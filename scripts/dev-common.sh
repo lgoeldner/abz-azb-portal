@@ -7,17 +7,18 @@ cd "$ROOT_DIR"
 export APP_ENV=development
 export ADDR=127.0.0.1:8080
 export AUTH_MODE=mock
-export OIDC_ISSUER=http://localhost:9090
-export OIDC_CLIENT_ID=portal-dev
-export OIDC_CLIENT_SECRET=dev-only
+export AUTH_INTERNAL_URL=http://localhost:3000
+export AUTH_SERVICE_SECRET=dev-only-service-secret-at-least-32-bytes
 unset OIDC_BACKCHANNEL_URL
 export PUBLIC_URL=http://localhost:5173
 export DATABASE_URL='postgres://portal:portal-dev@localhost:5432/portal?sslmode=disable'
 export UPLOAD_DIR="$ROOT_DIR/deployables/portal/server/data/uploads"
 export SESSION_SECRET=development-only-secret-change-for-production
+export MAIL_PROVIDER=capture
+export REMINDERS_ENABLED=false
 
 start_dev_services() {
-  local services=(db auth-mock portal frontend caddy)
+  local services=(db auth portal frontend caddy)
   # Shell env beats --env-file; drop the host-dev PUBLIC_URL so .env.dev reaches the containers.
   local compose=(env -u PUBLIC_URL docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml)
   if [[ "${BACKUP_DEV:-false}" == true ]]; then

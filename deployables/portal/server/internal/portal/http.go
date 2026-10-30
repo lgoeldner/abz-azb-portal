@@ -22,6 +22,7 @@ import (
 type App struct {
 	DB         *pgxpool.Pool
 	Config     Config
+	Mail       *MailService
 	auth       *authState
 	handler    http.Handler
 	imageSlots chan struct{}
@@ -142,8 +143,11 @@ func New(ctx context.Context, c Config, db *pgxpool.Pool) (*App, error) {
 	if e := os.MkdirAll(c.UploadDir, 0700); e != nil {
 		return nil, e
 	}
-	a := &App{DB: db, Config: c, imageSlots: make(chan struct{}, 2)}
+	a := &App{DB: db, Config: c, Mail: NewMailService(db, c.Mail), imageSlots: make(chan struct{}, 2)}
 	if e := a.setupAuth(ctx); e != nil {
+		return nil, e
+	}
+	if e := a.syncAuthMode(ctx); e != nil {
 		return nil, e
 	}
 	a.routes()
@@ -153,18 +157,27 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("Referrer-Policy", "same-origin")
-	w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+	if !(a.Config.dependencyAuth() && (strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/api/auth/"))) {
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+	}
 	if a.Config.Env == "production" {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000")
 	}
 	a.handler.ServeHTTP(w, r)
 }
 func (a *App) protected(next http.Handler) http.Handler {
+	if a.Config.dependencyAuth() {
+		return a.dependencyProtected(next)
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		cookie, e := r.Cookie("portal_session")
 		if e != nil {
 			respondError(w, fail(401, "unauthenticated", "Bitte anmelden."))
+			return
+		}
+		if e = a.assertAuthMode(r.Context(), a.DB); e != nil {
+			respondError(w, e)
 			return
 		}
 		var uid, csrf string
@@ -214,6 +227,11 @@ func (a *App) routes() {
 	m.HandleFunc("GET /auth/login", a.endpoint(a.login))
 	m.HandleFunc("GET /auth/callback", a.endpoint(a.callback))
 	m.Handle("POST /auth/logout", a.protected(a.endpoint(a.logout)))
+	if a.Config.dependencyAuth() {
+		m.HandleFunc("/auth/", a.authProxy)
+		m.HandleFunc("/api/auth/", a.authProxy)
+	}
+	m.HandleFunc("POST /internal/email/login", a.endpoint(a.internalEmailLogin))
 	api := http.NewServeMux()
 	bind := func(pattern string, fn endpoint) { api.HandleFunc(pattern, a.endpoint(fn)) }
 	bind("GET /api/v1/me", func(w http.ResponseWriter, r *http.Request) error {
@@ -254,6 +272,14 @@ func (a *App) routes() {
 	bind("DELETE /api/v1/admin/users/{id}", a.deleteUser)
 	bind("GET /api/v1/admin/audit", a.auditEvents)
 	bind("GET /api/v1/admin/status", a.systemStatus)
+	bind("GET /api/v1/me/email-reminders", a.emailReminderPreference)
+	bind("PATCH /api/v1/me/email-reminders", a.emailReminderPreference)
+	bind("GET /api/v1/admin/email/status", a.emailStatus)
+	bind("PATCH /api/v1/admin/email/settings", a.emailSettings)
+	bind("GET /api/v1/admin/email/messages", a.emailMessages)
+	bind("GET /api/v1/admin/email/messages/{id}", a.emailMessageDetail)
+	bind("POST /api/v1/admin/email/reconcile", a.emailReconcile)
+	bind("POST /api/v1/admin/email/reminders/preview", a.emailReminderPreview)
 	api.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { respondError(w, missing()) })
 	m.Handle("/api/", a.protected(api))
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

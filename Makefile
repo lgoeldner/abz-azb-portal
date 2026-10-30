@@ -29,6 +29,7 @@ check:
 	bash deployables/backup/test-restore-safety.sh
 	cd deployables/portal/server && go test -race ./... && go vet ./...
 	cd deployables/auth-mock && go test -race ./... && go vet ./...
+	cd deployables/auth && npm ci && npm run check
 	cd deployables/portal/web && npm ci && npm run typecheck && npm test -- --run && npm run build
 	node scripts/check-contract.mjs
 	bash scripts/check-repo-map.sh
@@ -39,11 +40,13 @@ lint:
 	shellcheck -S warning scripts/*.sh deployables/backup/*.sh
 	cd deployables/portal/server && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...
 	cd deployables/auth-mock && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...
+	cd deployables/auth && npm run check
 	cd deployables/portal/web && npm run lint
 
 audit:
 	cd deployables/portal/server && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 	cd deployables/auth-mock && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	cd deployables/auth && npm audit --omit=dev --audit-level=high
 	cd deployables/portal/web && npm audit --audit-level=high
 
 migrate:

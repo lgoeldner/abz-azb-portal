@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/dev-common.sh"
+export BETTER_AUTH_URL="$PUBLIC_URL"
 
 if [[ "${SKIP_DEV_DB_SETUP:-0}" != 1 ]]; then
   start_dev_services
