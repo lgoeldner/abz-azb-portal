@@ -1,0 +1,70 @@
+/* Crepe adapted to the workspace tokens (schueler and redaktion set them on [data-workspace]). */
+.md-editor {
+  min-width: 0;
+  border: 2px solid var(--color-line);
+  border-radius: var(--radius-ui);
+  background: white;
+}
+.md-editor:focus-within {
+  border-color: var(--color-ink);
+}
+.md-editor[data-readonly] {
+  border-color: transparent;
+  background: transparent;
+}
+.md-editor-fallback {
+  padding: 0.75rem 1rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+}
+.md-editor[data-readonly] .md-editor-fallback {
+  padding: 0;
+}
+
+.md-editor .milkdown {
+  --crepe-color-background: transparent;
+  --crepe-color-on-background: var(--color-ink);
+  --crepe-color-surface: white;
+  --crepe-color-surface-low: var(--color-soft);
+  --crepe-color-on-surface: var(--color-ink);
+  --crepe-color-on-surface-variant: var(--color-muted);
+  --crepe-color-outline: var(--color-muted);
+  --crepe-color-primary: var(--color-accent);
+  --crepe-color-secondary: var(--color-pop);
+  --crepe-color-on-secondary: var(--color-ink);
+  --crepe-color-inverse: var(--color-ink);
+  --crepe-color-on-inverse: white;
+  --crepe-color-inline-code: var(--color-accent-dark);
+  --crepe-color-error: var(--color-bad);
+  --crepe-color-hover: var(--color-soft);
+  --crepe-color-selected: var(--color-pill);
+  --crepe-color-inline-area: var(--color-pill);
+  --crepe-base-font-size: 15px;
+  --crepe-font-title: var(--font-sans);
+  --crepe-font-default: var(--font-sans);
+  --crepe-font-code: ui-monospace, Menlo, Monaco, 'Courier New', monospace;
+  --crepe-shadow-1: 0 6px 24px rgb(21 24 31 / 0.16), 0 1px 3px rgb(21 24 31 / 0.2);
+  --crepe-shadow-2: 0 8px 28px rgb(21 24 31 / 0.2), 0 1px 3px rgb(21 24 31 / 0.2);
+}
+.md-editor .milkdown .ProseMirror {
+  min-height: 6rem;
+  padding: 0.75rem 1rem 0.75rem 3.25rem;
+}
+.md-editor[data-readonly] .milkdown .ProseMirror {
+  min-height: 0;
+  padding: 0;
+}
+.md-editor .milkdown .ProseMirror :focus-visible {
+  outline: none;
+}
+.md-editor .milkdown .ProseMirror h1,
+.md-editor .milkdown .ProseMirror h2,
+.md-editor .milkdown .ProseMirror h3 {
+  letter-spacing: -0.02em;
+}
+.md-editor .milkdown-slash-menu,
+.md-editor .milkdown-block-handle,
+.md-editor .milkdown-toolbar {
+  z-index: 30;
+}
