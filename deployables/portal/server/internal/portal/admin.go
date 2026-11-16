@@ -232,6 +232,6 @@ func (a *App) systemStatus(w http.ResponseWriter, r *http.Request) error {
 	if e != nil {
 		return e
 	}
-	jsonOut(w, 200, map[string]any{"backup_last_success": last, "backup_stale": stale, "upload_bytes": size})
+	jsonOut(w, 200, SystemStatus{BackupLastSuccess: last, BackupStale: stale, UploadBytes: int(size)})
 	return nil
 }

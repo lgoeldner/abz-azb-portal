@@ -316,10 +316,7 @@ func allowedTransition(u User, s Submission, next string) bool {
 	return s.Status == "pending" && (next == "accepted" || next == "rejected") || s.Status != "pending" && next == "pending"
 }
 func (a *App) statusSubmission(w http.ResponseWriter, r *http.Request) error {
-	var in struct {
-		Version int    `json:"version"`
-		Status  string `json:"status"`
-	}
+	var in StatusInput
 	if e := decode(w, r, &in); e != nil {
 		return e
 	}
@@ -416,9 +413,7 @@ func (a *App) corrections(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 func (a *App) addCorrection(w http.ResponseWriter, r *http.Request) error {
-	var in struct {
-		Body string `json:"body"`
-	}
+	var in CommentInput
 	if e := decode(w, r, &in); e != nil {
 		return e
 	}

@@ -368,13 +368,13 @@ func (a *App) roster(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	defer rows.Close()
-	out := []map[string]string{}
+	out := []RosterEntry{}
 	for rows.Next() {
 		var id, name string
 		if e = rows.Scan(&id, &name); e != nil {
 			return e
 		}
-		out = append(out, map[string]string{"id": id, "name": name})
+		out = append(out, RosterEntry{ID: id, Name: name})
 	}
 	if e = rows.Err(); e != nil {
 		return e

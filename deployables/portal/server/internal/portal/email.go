@@ -159,43 +159,43 @@ func NewMailService(db *pgxpool.Pool, config MailConfig) *MailService {
 	return &MailService{db: db, config: config, client: &http.Client{Timeout: 12 * time.Second}}
 }
 
-type mailPolicy struct {
-	Version       int  `json:"version"`
+type EmailPolicy struct {
+	Version       int  `json:"version" minimum:"1"`
 	Paused        bool `json:"paused"`
 	PauseAll      bool `json:"pause_all"`
-	DailyLimit    int  `json:"daily_limit"`
-	ReminderLimit int  `json:"reminder_limit"`
-	LoginReserve  int  `json:"login_reserve"`
+	DailyLimit    int  `json:"daily_limit" minimum:"1"`
+	ReminderLimit int  `json:"reminder_limit" minimum:"0"`
+	LoginReserve  int  `json:"login_reserve" minimum:"0"`
 }
 
-type mailUsage struct {
-	Day       string `json:"day"`
-	Used      int    `json:"used"`
-	Reserved  int    `json:"reserved"`
-	Login     int    `json:"login"`
-	Reminder  int    `json:"reminder"`
-	Remaining int    `json:"remaining"`
+type EmailUsage struct {
+	Day       string `json:"day" format:"date"`
+	Used      int    `json:"used" minimum:"0"`
+	Reserved  int    `json:"reserved" minimum:"0"`
+	Login     int    `json:"login" minimum:"0"`
+	Reminder  int    `json:"reminder" minimum:"0"`
+	Remaining int    `json:"remaining" minimum:"0"`
 }
 
-type mailProviderStatus struct {
+type EmailProvider struct {
 	Name       string     `json:"name"`
 	Configured bool       `json:"configured"`
-	Credits    *int       `json:"credits"`
+	Credits    *int       `json:"credits" minimum:"0"`
 	ObservedAt *time.Time `json:"observed_at"`
 	Error      *string    `json:"error"`
 }
 
-type mailHealth struct {
+type EmailHealth struct {
 	LastWorkerRun *time.Time `json:"last_worker_run"`
-	Pending       int        `json:"pending"`
-	Failed        int        `json:"failed"`
+	Pending       int        `json:"pending" minimum:"0"`
+	Failed        int        `json:"failed" minimum:"0"`
 }
 
-type emailStatusResponse struct {
-	Policy   mailPolicy         `json:"policy"`
-	Usage    mailUsage          `json:"usage"`
-	Provider mailProviderStatus `json:"provider"`
-	Health   mailHealth         `json:"health"`
+type EmailStatus struct {
+	Policy   EmailPolicy   `json:"policy"`
+	Usage    EmailUsage    `json:"usage"`
+	Provider EmailProvider `json:"provider"`
+	Health   EmailHealth   `json:"health"`
 }
 
 func (m *MailService) ensurePolicy(ctx context.Context) error {
@@ -213,11 +213,11 @@ WHERE id=1 AND (daily_limit>$1 OR reminder_limit>$2 OR login_reserve>$3)`, m.con
 	return err
 }
 
-func (m *MailService) effectivePolicy(ctx context.Context) (mailPolicy, error) {
+func (m *MailService) effectivePolicy(ctx context.Context) (EmailPolicy, error) {
 	if err := m.ensurePolicy(ctx); err != nil {
-		return mailPolicy{}, err
+		return EmailPolicy{}, err
 	}
-	var p mailPolicy
+	var p EmailPolicy
 	err := m.db.QueryRow(ctx, `SELECT version,paused,pause_all,
 LEAST(daily_limit,$1),LEAST(reminder_limit,$2),LEAST(login_reserve,$3)
 FROM mail_policy WHERE id=1`, m.config.DailyLimit, m.config.ReminderLimit, m.config.LoginReserve).Scan(
@@ -225,13 +225,13 @@ FROM mail_policy WHERE id=1`, m.config.DailyLimit, m.config.ReminderLimit, m.con
 	return p, err
 }
 
-func (m *MailService) status(ctx context.Context) (emailStatusResponse, error) {
+func (m *MailService) status(ctx context.Context) (EmailStatus, error) {
 	p, err := m.effectivePolicy(ctx)
 	if err != nil {
-		return emailStatusResponse{}, err
+		return EmailStatus{}, err
 	}
 	day := time.Now().UTC().Format("2006-01-02")
-	var usage mailUsage
+	var usage EmailUsage
 	usage.Day = day
 	err = m.db.QueryRow(ctx, `SELECT
 count(*) FILTER (WHERE state='consumed'),
@@ -240,7 +240,7 @@ count(*) FILTER (WHERE state='consumed' AND kind='login'),
 count(*) FILTER (WHERE state='consumed' AND kind='reminder')
 FROM mail_reservations WHERE quota_day=$1::date`, day).Scan(&usage.Used, &usage.Reserved, &usage.Login, &usage.Reminder)
 	if err != nil {
-		return emailStatusResponse{}, err
+		return EmailStatus{}, err
 	}
 	usage.Remaining = p.DailyLimit - usage.Used - usage.Reserved
 	if usage.Remaining < 0 {
@@ -253,7 +253,7 @@ FROM mail_reservations WHERE quota_day=$1::date`, day).Scan(&usage.Used, &usage.
 	var pending, failed int
 	err = m.db.QueryRow(ctx, `SELECT provider_credits,provider_observed_at,provider_error,last_worker_run FROM mail_policy WHERE id=1`).Scan(&credits, &observed, &providerErr, &lastWorker)
 	if err != nil {
-		return emailStatusResponse{}, err
+		return EmailStatus{}, err
 	}
 	if m.config.Provider != "brevo" {
 		credits, observed, providerErr = nil, nil, nil
@@ -261,19 +261,19 @@ FROM mail_reservations WHERE quota_day=$1::date`, day).Scan(&usage.Used, &usage.
 	err = m.db.QueryRow(ctx, `SELECT count(*) FILTER (WHERE status IN ('queued','unknown')),
 count(*) FILTER (WHERE status='failed') FROM mail_messages`).Scan(&pending, &failed)
 	if err != nil {
-		return emailStatusResponse{}, err
+		return EmailStatus{}, err
 	}
-	return emailStatusResponse{
+	return EmailStatus{
 		Policy: p,
 		Usage:  usage,
-		Provider: mailProviderStatus{
+		Provider: EmailProvider{
 			Name:       m.config.Provider,
 			Configured: m.config.Provider == "capture" || m.config.APIKey != "" && m.config.From != "" && m.config.TrackingDisabled,
 			Credits:    credits,
 			ObservedAt: observed,
 			Error:      providerErr,
 		},
-		Health: mailHealth{LastWorkerRun: lastWorker, Pending: pending, Failed: failed},
+		Health: EmailHealth{LastWorkerRun: lastWorker, Pending: pending, Failed: failed},
 	}, nil
 }
 
@@ -307,7 +307,7 @@ func (a *App) emailSettings(w http.ResponseWriter, r *http.Request) error {
 	if a.Mail == nil {
 		return fail(503, "mail_unavailable", "E-Mail-Dienst nicht verfügbar.")
 	}
-	var in mailPolicy
+	var in EmailPolicy
 	if err := decode(w, r, &in); err != nil {
 		return err
 	}
@@ -323,7 +323,7 @@ func (a *App) emailSettings(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	defer tx.Rollback(ctx)
-	var before mailPolicy
+	var before EmailPolicy
 	if err = tx.QueryRow(ctx, `SELECT version,paused,pause_all,daily_limit,reminder_limit,login_reserve
 FROM mail_policy WHERE id=1 FOR UPDATE`).Scan(&before.Version, &before.Paused, &before.PauseAll, &before.DailyLimit, &before.ReminderLimit, &before.LoginReserve); err != nil {
 		return err
@@ -331,7 +331,7 @@ FROM mail_policy WHERE id=1 FOR UPDATE`).Scan(&before.Version, &before.Paused, &
 	if before.Version != in.Version {
 		return fail(409, "stale_version", "Die E-Mail-Einstellungen wurden zwischenzeitlich geändert.")
 	}
-	var after mailPolicy
+	var after EmailPolicy
 	err = tx.QueryRow(ctx, `UPDATE mail_policy SET version=version+1,paused=$2,pause_all=$3,
 daily_limit=$4,reminder_limit=$5,login_reserve=$6 WHERE id=1 AND version=$1
 RETURNING version,paused,pause_all,daily_limit,reminder_limit,login_reserve`,
@@ -358,16 +358,16 @@ RETURNING version,paused,pause_all,daily_limit,reminder_limit,login_reserve`,
 	return nil
 }
 
-type emailMessageItem struct {
-	ID                string    `json:"id"`
+type EmailMessage struct {
+	ID                string    `json:"id" format:"uuid"`
 	CreatedAt         time.Time `json:"created_at"`
-	UserID            *string   `json:"user_id"`
+	UserID            *string   `json:"user_id" format:"uuid"`
 	UserName          *string   `json:"user_name"`
 	RecipientMasked   string    `json:"recipient_masked"`
-	Kind              string    `json:"kind"`
-	Status            string    `json:"status"`
+	Kind              string    `json:"kind" enum:"login,reminder"`
+	Status            string    `json:"status" enum:"queued,accepted,delivered,deferred,bounced,failed,suppressed,cancelled,unknown"`
 	ProviderMessageID *string   `json:"provider_message_id"`
-	Attempts          int       `json:"attempts"`
+	Attempts          int       `json:"attempts" minimum:"0"`
 	FailureCode       *string   `json:"failure_code"`
 }
 
@@ -474,9 +474,9 @@ ORDER BY m.created_at DESC,m.id DESC LIMIT $6`, args...)
 		return err
 	}
 	defer rows.Close()
-	items := make([]emailMessageItem, 0, limit+1)
+	items := make([]EmailMessage, 0, limit+1)
 	for rows.Next() {
-		var item emailMessageItem
+		var item EmailMessage
 		var recipient string
 		if err := rows.Scan(&item.ID, &item.CreatedAt, &item.UserID, &item.UserName, &recipient, &item.Kind, &item.Status, &item.ProviderMessageID, &item.FailureCode, &item.Attempts); err != nil {
 			return err
@@ -493,7 +493,7 @@ ORDER BY m.created_at DESC,m.id DESC LIMIT $6`, args...)
 		v := encodeMailCursor(mailCursor{CreatedAt: items[len(items)-1].CreatedAt, ID: items[len(items)-1].ID})
 		next = &v
 	}
-	jsonOut(w, http.StatusOK, map[string]any{"items": items, "next_cursor": next})
+	jsonOut(w, http.StatusOK, EmailMessages{Items: items, NextCursor: next})
 	return nil
 }
 
@@ -514,7 +514,7 @@ func (a *App) emailMessageDetail(w http.ResponseWriter, r *http.Request) error {
 	if !validID(id) {
 		return missing()
 	}
-	var item emailMessageItem
+	var item EmailMessage
 	var recipient string
 	err := a.DB.QueryRow(r.Context(), `SELECT m.id::text,m.created_at,m.user_id::text,u.name,d.recipient_snapshot,
 m.kind,m.status,m.provider_message_id,m.failure_code,
@@ -525,13 +525,7 @@ FROM mail_messages m LEFT JOIN users u ON u.id=m.user_id JOIN mail_destinations 
 		return err
 	}
 	item.RecipientMasked = maskEmail(recipient)
-	type event struct {
-		ID          string    `json:"id"`
-		Status      string    `json:"status"`
-		CreatedAt   time.Time `json:"created_at"`
-		FailureCode *string   `json:"failure_code"`
-	}
-	events := make([]event, 0)
+	events := make([]EmailMessageEvent, 0)
 	rows, err := a.DB.Query(r.Context(), `SELECT id::text,status,COALESCE(finished_at,started_at),failure_code
 FROM mail_attempts WHERE message_id=$1
 UNION ALL
@@ -542,7 +536,7 @@ ORDER BY 3,id`, id)
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var e event
+		var e EmailMessageEvent
 		if err := rows.Scan(&e.ID, &e.Status, &e.CreatedAt, &e.FailureCode); err != nil {
 			return err
 		}
@@ -551,7 +545,7 @@ ORDER BY 3,id`, id)
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	jsonOut(w, http.StatusOK, map[string]any{"message": item, "events": events})
+	jsonOut(w, http.StatusOK, EmailMessageDetail{Message: item, Events: events})
 	return nil
 }
 
@@ -734,7 +728,7 @@ AND login_email IS NOT NULL AND lower(login_email)=lower($2))`, req.UserID, stri
 			return "", "", "", &mailSendFailure{code: "cancelled"}
 		}
 	}
-	var p mailPolicy
+	var p EmailPolicy
 	var providerCredits *int
 	var providerObservedAt *time.Time
 	if err = tx.QueryRow(ctx, `SELECT version,paused,pause_all,LEAST(daily_limit,$1),LEAST(reminder_limit,$2),LEAST(login_reserve,$3)

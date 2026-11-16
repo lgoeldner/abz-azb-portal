@@ -17,11 +17,11 @@ Uploads are private and immutable, and removal is soft deletion. There are no pu
 
 React, TypeScript and Vite in `deployables/portal/web/`; Go (`net/http`) and PostgreSQL in `deployables/portal/server/`; Caddy and Docker Compose for deployment. Go serves the production frontend and enforces application rules. The maintained Better Auth dependency runs in `deployables/auth/`, sharing PostgreSQL UUID users and owning real/development sessions. Brevo delivers login links and opt-in reminders.
 
-The API is described by [`docs/openapi.json`](docs/openapi.json), which generates the frontend types. See also [`docs/implementation-contract.md`](docs/implementation-contract.md).
+The API is described by [`docs/openapi.json`](docs/openapi.json), which is generated from the Go route table (`apiRoutes` in `http.go`) and request/response types, and which in turn generates the frontend types. See also [`docs/implementation-contract.md`](docs/implementation-contract.md).
 
 ```sh
-node scripts/check-contract.mjs --write  # regenerate types after editing the API contract
-node scripts/check-contract.mjs          # fail on route/type drift
+node scripts/check-contract.mjs --write  # regenerate openapi.json and TS types after editing routes or Go types
+node scripts/check-contract.mjs          # fail when generated files are stale
 ```
 
 ## Run locally

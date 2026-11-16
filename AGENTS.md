@@ -14,7 +14,7 @@ Give each worker file ownership, an API contract, and acceptance tests. Do not l
 
 - Start with docs/repo-map.md: `rg -i '<topic>' docs/repo-map.md` before exploring the tree.
 - Read docs/implementation-contract.md and docs/openapi.json before API work.
-- Update OpenAPI and regenerate TypeScript with `node scripts/check-contract.mjs --write` after contract changes. Do not edit generated types by hand.
+- docs/openapi.json is generated from the Go route table (`apiRoutes` in http.go) and the request/response types (contract.go, types.go struct tags). Change the Go side, then run `node scripts/check-contract.mjs --write` to regenerate OpenAPI and TypeScript. Never edit either generated file by hand.
 - Run `make check`; use TEST_DATABASE_URL pointing only to a disposable PostgreSQL database for integration tests. Never run seed against production.
 - New permission, lifecycle, voting, or persistence behavior requires invariant-focused tests. Assert observable guarantees; avoid implementation-mirroring tests.
 - Verify migrations, backup and restore together. Never claim recovery is tested merely because a backup file exists.

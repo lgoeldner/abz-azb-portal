@@ -139,6 +139,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/submissions/{id}/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read correction requests */
+        get: operations["getSubmissionsIdCorrections"];
+        put?: never;
+        /** Add editorial annotation with category grant (any status), or author correction request on locked contribution */
+        post: operations["postSubmissionsIdCorrections"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/submissions/{id}/corrections/{correctionID}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve correction request */
+        post: operations["postSubmissionsIdCorrectionsCorrectionIDResolve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/submissions/{id}/attachments": {
         parameters: {
             query?: never;
@@ -167,11 +202,11 @@ export interface paths {
         put?: never;
         post?: never;
         /** Remove attachment from own pending contribution; final image in a photo collection cannot be removed */
-        delete: operations["deleteSubmissionsIdAttachmentsAttachmentid"];
+        delete: operations["deleteSubmissionsIdAttachmentsAttachmentID"];
         options?: never;
         head?: never;
         /** Edit photo caption on own pending contribution with optimistic concurrency */
-        patch: operations["patchSubmissionsIdAttachmentsAttachmentid"];
+        patch: operations["patchSubmissionsIdAttachmentsAttachmentID"];
         trace?: never;
     };
     "/api/v1/attachments/{id}": {
@@ -208,25 +243,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/submissions/{id}/corrections": {
+    "/api/v1/categories/{id}/export": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Read correction requests */
-        get: operations["getSubmissionsIdCorrections"];
+        /** Export all collected contributions by default, with optional explicit status filter (editors, repeatable only) */
+        get: operations["getCategoriesIdExport"];
         put?: never;
-        /** Add editorial annotation with category grant (any status), or author correction request on locked contribution */
-        post: operations["postSubmissionsIdCorrections"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/submissions/{id}/corrections/{correctionID}/resolve": {
+    "/api/v1/categories/{id}/words": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Editorial anonymous original word counts and moderation, word portraits only */
+        get: operations["getCategoriesIdWords"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories/{id}/words/{optionID}": {
         parameters: {
             query?: never;
             header?: never;
@@ -235,8 +286,93 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Resolve correction request */
-        post: operations["postSubmissionsIdCorrectionsCorrectionidResolve"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Grant-controlled reversible word exclusion/correction/merge; originals and named history stay unchanged */
+        patch: operations["patchCategoriesIdWordsOptionID"];
+        trace?: never;
+    };
+    "/api/v1/categories/{id}/words/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Editorial CSV export of included effective words and distinct voter counts, word portraits only */
+        get: operations["getCategoriesIdWordsExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Open, close or hide a collection (admin or manager with grant; draft->open, open->closed, open/closed->draft). Expired collections cannot reopen. Hiding preserves votes/history and first opened_at; reopening keeps candidates fixed. */
+        post: operations["postCategoriesIdStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories/{id}/ballot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Cast a named ballot: replace current selection when one-off; append an idempotent entry when repeatable (ballot_id required) */
+        put: operations["putCategoriesIdBallot"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories/{id}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Editorial aggregate counts (single-answer only) */
+        get: operations["getCategoriesIdResults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories/{id}/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin-only named ballot history (single-answer only) */
+        get: operations["getCategoriesIdAudit"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -252,23 +388,6 @@ export interface paths {
         };
         /** Verified cohort names */
         get: operations["getRoster"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/categories/{id}/export": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Export all collected contributions by default, with optional explicit status filter (editors, repeatable only) */
-        get: operations["getCategoriesIdExport"];
         put?: never;
         post?: never;
         delete?: never;
@@ -346,125 +465,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/categories/{id}/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Open, close or hide a collection (admin or manager with grant; draft->open, open->closed, open/closed->draft). Expired collections cannot reopen. Hiding preserves votes/history and first opened_at; reopening keeps candidates fixed. */
-        post: operations["postCategoriesIdStatus"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/categories/{id}/ballot": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Cast a named ballot: replace current selection when one-off; append an idempotent entry when repeatable (ballot_id required) */
-        put: operations["putCategoriesIdBallot"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/categories/{id}/results": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Editorial aggregate counts (single-answer only) */
-        get: operations["getCategoriesIdResults"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/categories/{id}/audit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Admin-only named ballot history (single-answer only) */
-        get: operations["getCategoriesIdAudit"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/categories/{id}/words": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Editorial anonymous original word counts and moderation, word portraits only */
-        get: operations["getCategoriesIdWords"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/categories/{id}/words/{optionID}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Grant-controlled reversible word exclusion/correction/merge; originals and named history stay unchanged */
-        patch: operations["patchCategoriesIdWordsOptionID"];
-        trace?: never;
-    };
-    "/api/v1/categories/{id}/words/export": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Editorial CSV export of included effective words and distinct voter counts, word portraits only */
-        get: operations["getCategoriesIdWordsExport"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/me/email-reminders": {
         parameters: {
             query?: never;
@@ -473,14 +473,14 @@ export interface paths {
             cookie?: never;
         };
         /** Current user reminder delivery preference */
-        get: operations["getReminderPreference"];
+        get: operations["getMeEmailReminders"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         /** Change own reminder preference; does not affect login email */
-        patch: operations["setReminderPreference"];
+        patch: operations["patchMeEmailReminders"];
         trace?: never;
     };
     "/api/v1/admin/email/status": {
@@ -491,7 +491,7 @@ export interface paths {
             cookie?: never;
         };
         /** Admin-only local quota, observed Brevo credits and worker health; never provider credentials */
-        get: operations["getEmailStatus"];
+        get: operations["getAdminEmailStatus"];
         put?: never;
         post?: never;
         delete?: never;
@@ -514,7 +514,7 @@ export interface paths {
         options?: never;
         head?: never;
         /** Admin-only versioned mail budgets and pause controls within deployment ceilings */
-        patch: operations["updateEmailPolicy"];
+        patch: operations["patchAdminEmailSettings"];
         trace?: never;
     };
     "/api/v1/admin/email/messages": {
@@ -525,7 +525,7 @@ export interface paths {
             cookie?: never;
         };
         /** Admin-only paginated masked delivery metadata; never message bodies or login links */
-        get: operations["listEmailMessages"];
+        get: operations["getAdminEmailMessages"];
         put?: never;
         post?: never;
         delete?: never;
@@ -542,7 +542,7 @@ export interface paths {
             cookie?: never;
         };
         /** Admin-only sanitized delivery attempt and event history */
-        get: operations["getEmailMessage"];
+        get: operations["getAdminEmailMessagesId"];
         put?: never;
         post?: never;
         delete?: never;
@@ -561,7 +561,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Admin-only rate-limited refresh of provider status and delivery events */
-        post: operations["reconcileEmail"];
+        post: operations["postAdminEmailReconcile"];
         delete?: never;
         options?: never;
         head?: never;
@@ -578,7 +578,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Admin-only aggregate currently eligible reminder count; never sends */
-        post: operations["previewReminders"];
+        post: operations["postAdminEmailRemindersPreview"];
         delete?: never;
         options?: never;
         head?: never;
@@ -744,28 +744,278 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        User: {
+        Area: {
+            /** Format: uuid */
             id: string;
             name: string;
-            /** @enum {string} */
-            role: "student" | "manager" | "admin";
-            admitted: boolean;
-            cohort_member: boolean;
-            category_ids: string[];
+            position: number;
+            reviewers: components["schemas"]["UserRef"][];
+            version: number;
+        };
+        AreaEdit: {
+            name: string;
+            reviewer_ids: string[];
+            version: number;
+        };
+        AreaInput: {
+            name: string;
+            reviewer_ids: string[];
+        };
+        Attachment: {
+            caption: string;
+            filename: string;
+            id: string;
+            mime_type: string;
+            preview_url: string;
+            size_bytes: number;
+            url: string;
+        };
+        AttachmentEdit: {
+            caption: string;
+            version: number;
+        };
+        AttachmentUpload: {
+            caption?: string;
+            /** Format: binary */
+            file: string;
+            version: number;
+        };
+        AuditEvent: {
+            action: string;
+            actor_name: string;
             /** Format: date-time */
             created_at: string;
+            entity_id: string;
+            id: string;
+        };
+        BallotAudit: {
+            /** @description Groups the complete selection from one ballot change. Null for legacy single-choice history. */
+            ballot_id: null | string;
+            /** Format: date-time */
+            created_at: string;
+            option_id: string;
+            option_label: string;
+            user_id: string;
+            user_name: string;
+        };
+        BallotInput: {
+            /**
+             * Format: uuid
+             * @description Client-generated key required for repeatable ballots; replay with the same selection returns success without an extra entry, changed selection conflicts.
+             */
+            ballot_id?: string;
+            option_id?: string;
+            option_ids?: string[];
+            words?: string[];
+        } & (unknown | unknown | unknown);
+        BallotReceipt: {
+            /**
+             * Format: uuid
+             * @description Client-generated key required for repeatable ballots; replay with the same selection returns success without an extra entry, changed selection conflicts.
+             */
+            ballot_id?: string;
+            option_id: string;
+            option_ids: string[];
+            words?: string[];
+        };
+        Category: {
+            /** @description Person polls only: all admitted cohort members, refreshed when opening and fixed thereafter. Existing polls retain explicit candidates. */
+            all_people: boolean;
+            allow_self_vote: boolean;
+            /** @description Number of distinct current voters. Editors only; null for students and contribution categories. */
+            ballot_count: null | number;
+            /**
+             * Format: date-time
+             * @description Automatic closing instant for bounded collections; null when ongoing. Open collections are effectively closed at this instant.
+             */
+            closes_at: null | string;
+            /** Format: date-time */
+            created_at: string;
+            description: string;
+            id: string;
+            /** @enum {string} */
+            kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal" | "words";
+            /** @description Maximum selections for person/proposal polls or words per voter for word portraits (1–500). Word portraits default to 3, other polls to 1; contribution kinds require 1. */
+            max_choices: number;
+            /** @description First current selection in canonical ID order (legacy compatibility), or null. */
+            my_option_id: null | string;
+            /** @description Viewer’s complete current selection; empty for contribution categories or before voting. */
+            my_option_ids: string[];
+            /** @description Only the viewer’s current original normalized words, empty for other kinds or before voting. Originals are unchanged by editorial moderation. */
+            my_words?: string[];
+            name: string;
+            /** @description No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability. */
+            ongoing: boolean;
+            /**
+             * Format: date-time
+             * @description Set once when a single-answer category moves from draft to open; creation time for repeatable ones.
+             */
+            opened_at: null | string;
+            /** @description Empty for contribution kinds, word portraits, and all_people person poll input; otherwise explicit voting options. Word portrait responses never expose other voters’ words. */
+            options: components["schemas"]["PollOption"][];
+            /** @description Current voting participation among admitted cohort members, regardless of role. Both counts use the same population and database snapshot. Editors only; null for students and contribution categories. Preserved ballots from people no longer eligible are excluded here but remain in ballot_count. */
+            participation: components["schemas"]["VotingParticipation"] | null;
+            /** @description Allow multiple contributions or independent ballot entries per person, independently of kind. False ballots retain one changeable current selection. */
+            repeatable: boolean;
+            /**
+             * @description All kinds support draft, open and closed; the closing deadline also makes open collections effectively closed. Draft means hidden from students, including previously opened polls; opened_at distinguishes editable new drafts from locked hidden polls.
+             * @enum {string}
+             */
+            status: "draft" | "open" | "closed";
+            version: number;
+        };
+        CategoryEdit: {
+            /** @description Person polls: all admitted cohort members instead of explicit options. Defaults true on creation; omission preserves mode on edit. Other kinds require false. */
+            all_people?: boolean;
+            allow_self_vote?: boolean;
+            /**
+             * Format: date-time
+             * @description Future closing instant. For existing bounded polls, a sparse request containing only version and closes_at changes the deadline in any lifecycle state without changing definitions, votes, history or stored status. Omitted deadlines are preserved exactly; contribution deadlines remain fixed. Extending an expired stored-open poll makes it open again; manually closed or hidden polls stay closed or hidden.
+             */
+            closes_at?: null | string;
+            description?: string;
+            /** @enum {string} */
+            kind?: "idea" | "quote" | "memory" | "photo" | "person" | "proposal" | "words";
+            /** @description Maximum selections for person/proposal polls or words per voter for word portraits (1–500). Word portraits default to 3, other polls to 1; contribution kinds require 1. */
+            max_choices?: number;
+            name?: string;
+            /** @description No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability. */
+            ongoing?: boolean;
+            /** @description Empty for contribution kinds, word portraits, and all_people person poll input; otherwise explicit voting options. Word portrait responses never expose other voters’ words. */
+            options?: components["schemas"]["CategoryOption"][];
+            /** @description Allow multiple contributions per person independently of kind. Omission defaults from kind on create and preserves the stored flag on edit. */
+            repeatable?: boolean;
+            version: number;
+        } & (unknown | unknown);
+        CategoryInput: {
+            /** @description Person polls: all admitted cohort members instead of explicit options. Defaults true on creation; omission preserves mode on edit. Other kinds require false. */
+            all_people?: boolean;
+            allow_self_vote?: boolean;
+            /**
+             * Format: date-time
+             * @description Automatic closing instant for bounded collections; null when ongoing. Open collections are effectively closed at this instant.
+             */
+            closes_at?: null | string;
+            description: string;
+            /** @enum {string} */
+            kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal" | "words";
+            /** @description Maximum selections for person/proposal polls or words per voter for word portraits (1–500). Word portraits default to 3, other polls to 1; contribution kinds require 1. */
+            max_choices?: number;
+            name: string;
+            /** @description No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability. */
+            ongoing?: boolean;
+            /** @description Empty for contribution kinds, word portraits, and all_people person poll input; otherwise explicit voting options. Word portrait responses never expose other voters’ words. */
+            options?: components["schemas"]["CategoryOption"][];
+            /** @description Allow multiple contributions per person independently of kind. Omission defaults from kind on create and preserves the stored flag on edit. */
+            repeatable?: boolean;
+        };
+        CategoryOption: {
+            label: string;
+            user_id?: string;
+        };
+        CategoryStatusInput: {
+            /** @enum {string} */
+            status: "draft" | "open" | "closed";
+            version: number;
+        };
+        CommentInput: {
+            body: string;
+        };
+        Correction: {
+            author_name: string;
+            body: string;
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            resolved: boolean;
+            submission_id: string;
+        };
+        EmailHealth: {
+            failed: number;
+            /** Format: date-time */
+            last_worker_run: null | string;
+            pending: number;
+        };
+        EmailMessage: {
+            attempts: number;
+            /** Format: date-time */
+            created_at: string;
+            failure_code: null | string;
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "login" | "reminder";
+            provider_message_id: null | string;
+            recipient_masked: string;
+            /** @enum {string} */
+            status: "queued" | "accepted" | "delivered" | "deferred" | "bounced" | "failed" | "suppressed" | "cancelled" | "unknown";
+            /** Format: uuid */
+            user_id: null | string;
+            user_name: null | string;
+        };
+        EmailMessageDetail: {
+            events: components["schemas"]["EmailMessageEvent"][];
+            message: components["schemas"]["EmailMessage"];
+        };
+        EmailMessageEvent: {
+            /** Format: date-time */
+            created_at: string;
+            failure_code: null | string;
+            /** Format: uuid */
+            id: string;
+            status: string;
+        };
+        EmailMessages: {
+            items: components["schemas"]["EmailMessage"][];
+            next_cursor: null | string;
+        };
+        EmailPolicy: {
+            daily_limit: number;
+            login_reserve: number;
+            pause_all: boolean;
+            paused: boolean;
+            reminder_limit: number;
+            version: number;
+        };
+        EmailProvider: {
+            configured: boolean;
+            credits: null | number;
+            error: null | string;
+            name: string;
+            /** Format: date-time */
+            observed_at: null | string;
+        };
+        EmailStatus: {
+            health: components["schemas"]["EmailHealth"];
+            policy: components["schemas"]["EmailPolicy"];
+            provider: components["schemas"]["EmailProvider"];
+            usage: components["schemas"]["EmailUsage"];
+        };
+        EmailUsage: {
+            /** Format: date */
+            day: string;
+            login: number;
+            remaining: number;
+            reminder: number;
+            reserved: number;
+            used: number;
+        };
+        Error: {
+            error: components["schemas"]["ErrorBody"];
+        };
+        ErrorBody: {
+            code: string;
+            message: string;
         };
         Me: {
-            user: components["schemas"]["User"];
             csrf_token: string;
+            user: components["schemas"]["User"];
         };
         MyBallot: {
-            /** @description Ballot entry key, grouped across all selected options or words. */
-            id: string;
             category_id: string;
-            category_name: string;
             /** @enum {string} */
             category_kind: "person" | "proposal" | "words";
+            category_name: string;
             /**
              * @description Effective collection status; draft entries are displayed without a collection link.
              * @enum {string}
@@ -776,105 +1026,8 @@ export interface components {
              * @description Latest timestamp of this current ballot entry.
              */
             created_at: string;
-        };
-        Category: {
+            /** @description Ballot entry key, grouped across all selected options or words. */
             id: string;
-            name: string;
-            description: string;
-            /** @enum {string} */
-            kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal" | "words";
-            /** @description No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability. */
-            ongoing: boolean;
-            /**
-             * Format: date-time
-             * @description Automatic closing instant for bounded collections; null when ongoing. Open collections are effectively closed at this instant.
-             */
-            closes_at: string | null;
-            /** @description Allow multiple contributions or independent ballot entries per person, independently of kind. False ballots retain one changeable current selection. */
-            repeatable: boolean;
-            /**
-             * @description All kinds support draft, open and closed; the closing deadline also makes open collections effectively closed. Draft means hidden from students, including previously opened polls; opened_at distinguishes editable new drafts from locked hidden polls.
-             * @enum {string}
-             */
-            status: "draft" | "open" | "closed";
-            allow_self_vote: boolean;
-            /** @description Empty for contribution kinds, word portraits, and all_people person poll input; otherwise explicit voting options. Word portrait responses never expose other voters’ words. */
-            options: components["schemas"]["PollOption"][];
-            /** @description First current selection in canonical ID order (legacy compatibility), or null. */
-            my_option_id: string | null;
-            version: number;
-            /** Format: date-time */
-            created_at: string;
-            /**
-             * Format: date-time
-             * @description Set once when a single-answer category moves from draft to open; creation time for repeatable ones.
-             */
-            opened_at: string | null;
-            /** @description Number of distinct current voters. Editors only; null for students and contribution categories. */
-            ballot_count: number | null;
-            /** @description Current voting participation among admitted cohort members, regardless of role. Both counts use the same population and database snapshot. Editors only; null for students and contribution categories. Preserved ballots from people no longer eligible are excluded here but remain in ballot_count. */
-            participation: {
-                /** @description Currently eligible people with a current ballot in this collection. */
-                voted: number;
-                /** @description All currently admitted cohort members. */
-                eligible: number;
-            } | null;
-            /** @description Person polls only: all admitted cohort members, refreshed when opening and fixed thereafter. Existing polls retain explicit candidates. */
-            all_people: boolean;
-            /** @description Maximum selections for person/proposal polls or words per voter for word portraits (1–500). Word portraits default to 3, other polls to 1; contribution kinds require 1. */
-            max_choices: number;
-            /** @description Viewer’s complete current selection; empty for contribution categories or before voting. */
-            my_option_ids: string[];
-            /** @description Only the viewer’s current original normalized words, empty for other kinds or before voting. Originals are unchanged by editorial moderation. */
-            my_words?: string[];
-        };
-        Attachment: {
-            id: string;
-            filename: string;
-            mime_type: string;
-            size_bytes: number;
-            url: string;
-            preview_url: string;
-            caption: string;
-        };
-        Submission: {
-            id: string;
-            category_id: string;
-            author_id: string;
-            author_name: string;
-            title: string;
-            body: string;
-            context: string;
-            /** @enum {string} */
-            status: "pending" | "accepted" | "rejected" | "withdrawn";
-            version: number;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
-            attachments: components["schemas"]["Attachment"][];
-        };
-        Revision: {
-            id: string;
-            version: number;
-            actor_name: string;
-            title: string;
-            body: string;
-            context: string;
-            /** @enum {string} */
-            status: "pending" | "accepted" | "rejected" | "withdrawn";
-            /** Format: date-time */
-            created_at: string;
-            attachments: components["schemas"]["Attachment"][];
-        };
-        Correction: {
-            id: string;
-            submission_id: string;
-            author_name: string;
-            body: string;
-            /** Format: date-time */
-            created_at: string;
-            resolved: boolean;
         };
         PollOption: {
             id: string;
@@ -882,207 +1035,9 @@ export interface components {
             user_id?: string;
         };
         PollResult: {
-            option_id: string;
-            label: string;
             count: number;
-        };
-        BallotAudit: {
-            user_id: string;
-            user_name: string;
-            option_id: string;
-            option_label: string;
-            /** Format: date-time */
-            created_at: string;
-            /** @description Groups the complete selection from one ballot change. Null for legacy single-choice history. */
-            ballot_id: string | null;
-        };
-        AuditEvent: {
-            id: string;
-            actor_name: string;
-            action: string;
-            entity_id: string;
-            /** Format: date-time */
-            created_at: string;
-        };
-        SystemStatus: {
-            backup_last_success: string | null;
-            backup_stale: boolean;
-            upload_bytes: number;
-        };
-        RosterEntry: {
-            id: string;
-            name: string;
-        };
-        Error: {
-            error: {
-                code: string;
-                message: string;
-            };
-        };
-        CategoryInput: {
-            name: string;
-            description: string;
-            /** @enum {string} */
-            kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal" | "words";
-            /** @description No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability. */
-            ongoing?: boolean;
-            /**
-             * Format: date-time
-             * @description Automatic closing instant for bounded collections; null when ongoing. Open collections are effectively closed at this instant.
-             */
-            closes_at?: string | null;
-            /** @description Allow multiple contributions per person independently of kind. Omission defaults from kind on create and preserves the stored flag on edit. */
-            repeatable?: boolean;
-            allow_self_vote?: boolean;
-            /** @description Empty for contribution kinds, word portraits, and all_people person poll input; otherwise explicit voting options. Word portrait responses never expose other voters’ words. */
-            options?: {
-                label: string;
-                user_id?: string;
-            }[];
-            /** @description Person polls: all admitted cohort members instead of explicit options. Defaults true on creation; omission preserves mode on edit. Other kinds require false. */
-            all_people?: boolean;
-            /** @description Maximum selections for person/proposal polls or words per voter for word portraits (1–500). Word portraits default to 3, other polls to 1; contribution kinds require 1. */
-            max_choices?: number;
-        };
-        SubmissionInput: {
-            idempotency_key: string;
-            category_id: string;
-            title: string;
-            body: string;
-            context: string;
-        };
-        SubmissionEdit: {
-            version: number;
-            category_id: string;
-            title: string;
-            body: string;
-            context: string;
-        };
-        StatusInput: {
-            version: number;
-            /** @enum {string} */
-            status: "pending" | "accepted" | "rejected" | "withdrawn";
-        };
-        UserEdit: {
-            name: string;
-            /** @enum {string} */
-            role: "student" | "manager" | "admin";
-            admitted: boolean;
-            cohort_member: boolean;
-            category_ids: string[];
-        };
-        CategoryEdit: {
-            name?: string;
-            description?: string;
-            /** @enum {string} */
-            kind?: "idea" | "quote" | "memory" | "photo" | "person" | "proposal" | "words";
-            /** @description No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability. */
-            ongoing?: boolean;
-            /**
-             * Format: date-time
-             * @description Future closing instant. For existing bounded polls, a sparse request containing only version and closes_at changes the deadline in any lifecycle state without changing definitions, votes, history or stored status. Omitted deadlines are preserved exactly; contribution deadlines remain fixed. Extending an expired stored-open poll makes it open again; manually closed or hidden polls stay closed or hidden.
-             */
-            closes_at?: string | null;
-            /** @description Allow multiple contributions per person independently of kind. Omission defaults from kind on create and preserves the stored flag on edit. */
-            repeatable?: boolean;
-            allow_self_vote?: boolean;
-            /** @description Empty for contribution kinds, word portraits, and all_people person poll input; otherwise explicit voting options. Word portrait responses never expose other voters’ words. */
-            options?: {
-                label: string;
-                user_id?: string;
-            }[];
-            version: number;
-            /** @description Person polls: all admitted cohort members instead of explicit options. Defaults true on creation; omission preserves mode on edit. Other kinds require false. */
-            all_people?: boolean;
-            /** @description Maximum selections for person/proposal polls or words per voter for word portraits (1–500). Word portraits default to 3, other polls to 1; contribution kinds require 1. */
-            max_choices?: number;
-        } & (unknown | unknown);
-        /** @description Editorial anonymous original-word tally and reversible moderation; contains no voter identity. Equal effective labels merge, counting each current voter once in results. */
-        WordEntry: {
-            option_id: string;
-            /** @description One Unicode NFC lowercase word without whitespace or control characters; normalized on input. */
-            word: string;
-            /** @description One Unicode NFC lowercase word without whitespace or control characters; normalized on input. */
             label: string;
-            excluded: boolean;
-            count: number;
-            version: number;
-        };
-        WordModerationInput: {
-            version: number;
-            /** @description One Unicode NFC lowercase word without whitespace or control characters; normalized on input. */
-            label: string;
-            excluded: boolean;
-        };
-        EmailPolicy: {
-            version: number;
-            paused: boolean;
-            pause_all: boolean;
-            daily_limit: number;
-            reminder_limit: number;
-            login_reserve: number;
-        };
-        EmailUsage: {
-            /** Format: date */
-            day: string;
-            used: number;
-            reserved: number;
-            login: number;
-            reminder: number;
-            remaining: number;
-        };
-        EmailProvider: {
-            name: string;
-            configured: boolean;
-            credits: number | null;
-            /** Format: date-time */
-            observed_at: string | null;
-            error: string | null;
-        };
-        EmailHealth: {
-            /** Format: date-time */
-            last_worker_run: string | null;
-            pending: number;
-            failed: number;
-        };
-        EmailStatus: {
-            policy: components["schemas"]["EmailPolicy"];
-            usage: components["schemas"]["EmailUsage"];
-            provider: components["schemas"]["EmailProvider"];
-            health: components["schemas"]["EmailHealth"];
-        };
-        EmailMessage: {
-            /** Format: uuid */
-            id: string;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: uuid */
-            user_id: string | null;
-            user_name: string | null;
-            recipient_masked: string;
-            /** @enum {string} */
-            kind: "login" | "reminder";
-            /** @enum {string} */
-            status: "queued" | "accepted" | "delivered" | "deferred" | "bounced" | "failed" | "suppressed" | "cancelled" | "unknown";
-            provider_message_id: string | null;
-            attempts: number;
-            failure_code: string | null;
-        };
-        EmailMessageEvent: {
-            /** Format: uuid */
-            id: string;
-            status: string;
-            /** Format: date-time */
-            created_at: string;
-            failure_code: string | null;
-        };
-        EmailMessages: {
-            items: components["schemas"]["EmailMessage"][];
-            next_cursor: string | null;
-        };
-        EmailMessageDetail: {
-            message: components["schemas"]["EmailMessage"];
-            events: components["schemas"]["EmailMessageEvent"][];
+            option_id: string;
         };
         ReminderPreference: {
             enabled: boolean;
@@ -1090,123 +1045,220 @@ export interface components {
         ReminderPreview: {
             eligible: number;
         };
+        ReviewInput: {
+            /** @description The ticket round the voter saw; a different current round returns 409 so stale votes never count in a new round. */
+            round: number;
+            self_confirmed?: boolean;
+            /** @enum {string} */
+            verdict: "approve" | "changes";
+        };
+        Revision: {
+            actor_name: string;
+            attachments: components["schemas"]["Attachment"][];
+            body: string;
+            context: string;
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            /** @enum {string} */
+            status: "pending" | "accepted" | "rejected" | "withdrawn";
+            title: string;
+            version: number;
+        };
+        RosterEntry: {
+            id: string;
+            name: string;
+        };
+        StatusInput: {
+            /** @enum {string} */
+            status: "pending" | "accepted" | "rejected" | "withdrawn";
+            version: number;
+        };
+        Submission: {
+            attachments: components["schemas"]["Attachment"][];
+            author_id: string;
+            author_name: string;
+            body: string;
+            category_id: string;
+            context: string;
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            /** @enum {string} */
+            status: "pending" | "accepted" | "rejected" | "withdrawn";
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+            version: number;
+        };
+        SubmissionEdit: {
+            body: string;
+            category_id: string;
+            context: string;
+            title: string;
+            version: number;
+        };
+        SubmissionInput: {
+            body: string;
+            category_id: string;
+            context: string;
+            idempotency_key: string;
+            title: string;
+        };
+        SubmissionUpload: {
+            body?: string;
+            caption?: string;
+            category_id: string;
+            context?: string;
+            /** Format: binary */
+            file: string;
+            idempotency_key: string;
+            /** @description Defaults to filename when omitted */
+            title?: string;
+        };
+        SystemStatus: {
+            /** Format: date-time */
+            backup_last_success: null | string;
+            backup_stale: boolean;
+            upload_bytes: number;
+        };
+        Ticket: {
+            /** @description True when the current round has a binding approval by a still admitted editor. Derived, never client-written. */
+            approved: boolean;
+            /** Format: uuid */
+            area_id: string;
+            area_name: string;
+            assignee: components["schemas"]["UserRef"] | null;
+            body: string;
+            /** Format: date-time */
+            created_at: string;
+            created_by: components["schemas"]["UserRef"];
+            est_pages: null | number;
+            goal: string;
+            /** Format: uuid */
+            id: string;
+            number: number;
+            /** @description Votes of the current round. */
+            reviews: components["schemas"]["TicketReview"][];
+            round: number;
+            /** @enum {string} */
+            size: "XS" | "S" | "M" | "L" | "XL";
+            /** @enum {string} */
+            status: "todo" | "in_progress" | "review" | "done";
+            /** Format: date-time */
+            status_changed_at: string;
+            title: string;
+            /** @enum {string} */
+            type: "aufgabe" | "artikel";
+            /** Format: date-time */
+            updated_at: string;
+            version: number;
+        };
+        TicketDetail: {
+            events: components["schemas"]["TicketEvent"][];
+            ticket: components["schemas"]["Ticket"];
+        };
+        TicketEdit: {
+            /** Format: uuid */
+            area_id: string;
+            /** Format: uuid */
+            assignee_id: null | string;
+            body: string;
+            est_pages: null | number;
+            goal: string;
+            /** @enum {string} */
+            size: "XS" | "S" | "M" | "L" | "XL";
+            title: string;
+            version: number;
+        };
+        TicketEvent: {
+            actor: components["schemas"]["UserRef"];
+            body: string;
+            /** Format: date-time */
+            created_at: string;
+            detail: string;
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "comment" | "status" | "assign" | "review" | "edit";
+        };
+        TicketInput: {
+            /** Format: uuid */
+            area_id: string;
+            /** Format: uuid */
+            assignee_id: null | string;
+            body: string;
+            est_pages: null | number;
+            goal: string;
+            /** @enum {string} */
+            size: "XS" | "S" | "M" | "L" | "XL";
+            title: string;
+            /** @enum {string} */
+            type: "aufgabe" | "artikel";
+        };
+        TicketReview: {
+            binding: boolean;
+            self_confirmed: boolean;
+            /** Format: date-time */
+            updated_at: string;
+            user: components["schemas"]["UserRef"];
+            /** @enum {string} */
+            verdict: "approve" | "changes";
+        };
+        TicketStatusInput: {
+            /** @enum {string} */
+            status: "todo" | "in_progress" | "review" | "done";
+            version: number;
+        };
+        User: {
+            admitted: boolean;
+            category_ids: string[];
+            cohort_member: boolean;
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            name: string;
+            /** @enum {string} */
+            role: "student" | "manager" | "admin";
+        };
+        UserEdit: {
+            admitted: boolean;
+            category_ids: string[];
+            cohort_member: boolean;
+            name: string;
+            /** @enum {string} */
+            role: "student" | "manager" | "admin";
+        };
         UserRef: {
             /** Format: uuid */
             id: string;
             name: string;
         };
-        Area: {
-            /** Format: uuid */
-            id: string;
-            name: string;
-            position: number;
-            version: number;
-            reviewers: components["schemas"]["UserRef"][];
-        };
-        AreaInput: {
-            name: string;
-            reviewer_ids: string[];
-        };
-        AreaEdit: {
-            name: string;
-            reviewer_ids: string[];
+        VersionInput: {
             version: number;
         };
-        TicketReview: {
-            user: components["schemas"]["UserRef"];
-            /** @enum {string} */
-            verdict: "approve" | "changes";
-            binding: boolean;
-            self_confirmed: boolean;
-            /** Format: date-time */
-            updated_at: string;
+        VotingParticipation: {
+            /** @description All currently admitted cohort members. */
+            eligible: number;
+            /** @description Currently eligible people with a current ballot in this collection. */
+            voted: number;
         };
-        Ticket: {
-            /** Format: uuid */
-            id: string;
-            number: number;
-            /** @enum {string} */
-            type: "aufgabe" | "artikel";
-            title: string;
-            body: string;
-            /** Format: uuid */
-            area_id: string;
-            area_name: string;
-            assignee: components["schemas"]["UserRef"] | null;
-            created_by: components["schemas"]["UserRef"];
-            /** @enum {string} */
-            size: "XS" | "S" | "M" | "L" | "XL";
-            goal: string;
-            est_pages: number | null;
-            /** @enum {string} */
-            status: "todo" | "in_progress" | "review" | "done";
-            round: number;
+        /** @description Editorial anonymous original-word tally and reversible moderation; contains no voter identity. Equal effective labels merge, counting each current voter once in results. */
+        WordEntry: {
+            count: number;
+            excluded: boolean;
+            /** @description One Unicode NFC lowercase word without whitespace or control characters; normalized on input. */
+            label: string;
+            option_id: string;
             version: number;
-            /** @description True when the current round has a binding approval by a still admitted editor. Derived, never client-written. */
-            approved: boolean;
-            /** @description Votes of the current round. */
-            reviews: components["schemas"]["TicketReview"][];
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
-            /** Format: date-time */
-            status_changed_at: string;
+            /** @description One Unicode NFC lowercase word without whitespace or control characters; normalized on input. */
+            word: string;
         };
-        TicketEvent: {
-            /** Format: uuid */
-            id: string;
-            /** @enum {string} */
-            kind: "comment" | "status" | "assign" | "review" | "edit";
-            actor: components["schemas"]["UserRef"];
-            body: string;
-            detail: string;
-            /** Format: date-time */
-            created_at: string;
-        };
-        TicketDetail: {
-            ticket: components["schemas"]["Ticket"];
-            events: components["schemas"]["TicketEvent"][];
-        };
-        TicketInput: {
-            /** @enum {string} */
-            type: "aufgabe" | "artikel";
-            title: string;
-            body: string;
-            /** Format: uuid */
-            area_id: string;
-            assignee_id: string | null;
-            /** @enum {string} */
-            size: "XS" | "S" | "M" | "L" | "XL";
-            goal: string;
-            est_pages: number | null;
-        };
-        TicketEdit: {
-            title: string;
-            body: string;
-            /** Format: uuid */
-            area_id: string;
-            assignee_id: string | null;
-            /** @enum {string} */
-            size: "XS" | "S" | "M" | "L" | "XL";
-            goal: string;
-            est_pages: number | null;
+        WordModerationInput: {
+            excluded: boolean;
+            /** @description One Unicode NFC lowercase word without whitespace or control characters; normalized on input. */
+            label: string;
             version: number;
-        };
-        TicketStatusInput: {
-            version: number;
-            /** @enum {string} */
-            status: "todo" | "in_progress" | "review" | "done";
-        };
-        CommentInput: {
-            body: string;
-        };
-        ReviewInput: {
-            /** @enum {string} */
-            verdict: "approve" | "changes";
-            /** @description The ticket round the voter saw; a different current round returns 409 so stale votes never count in a new round. */
-            round: number;
-            self_confirmed?: boolean;
         };
     };
     responses: never;
@@ -1352,13 +1404,11 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    version: number;
-                };
+                "application/json": components["schemas"]["VersionInput"];
             };
         };
         responses: {
-            /** @description Collection deleted */
+            /** @description No content */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -1417,8 +1467,8 @@ export interface operations {
         parameters: {
             query?: {
                 category_id?: string;
-                status?: string;
                 q?: string;
+                status?: string;
             };
             header?: never;
             path?: never;
@@ -1458,18 +1508,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SubmissionInput"];
-                "multipart/form-data": {
-                    category_id: string;
-                    idempotency_key: string;
-                    /** @description Defaults to filename when omitted */
-                    title?: string;
-                    /** @enum {string} */
-                    body?: "";
-                    context?: string;
-                    /** Format: binary */
-                    file: string;
-                    caption?: string;
-                };
+                "multipart/form-data": components["schemas"]["SubmissionUpload"];
             };
         };
         responses: {
@@ -1629,6 +1668,108 @@ export interface operations {
             };
         };
     };
+    getSubmissionsIdCorrections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Correction"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postSubmissionsIdCorrections: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommentInput"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Correction"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postSubmissionsIdCorrectionsCorrectionIDResolve: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                id: string;
+                correctionID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Correction"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     postSubmissionsIdAttachments: {
         parameters: {
             query?: never;
@@ -1642,12 +1783,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "multipart/form-data": {
-                    /** Format: binary */
-                    file: string;
-                    version: number;
-                    caption?: string;
-                };
+                "multipart/form-data": components["schemas"]["AttachmentUpload"];
             };
         };
         responses: {
@@ -1671,7 +1807,7 @@ export interface operations {
             };
         };
     };
-    deleteSubmissionsIdAttachmentsAttachmentid: {
+    deleteSubmissionsIdAttachmentsAttachmentID: {
         parameters: {
             query?: never;
             header: {
@@ -1685,9 +1821,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    version: number;
-                };
+                "application/json": components["schemas"]["VersionInput"];
             };
         };
         responses: {
@@ -1711,7 +1845,7 @@ export interface operations {
             };
         };
     };
-    patchSubmissionsIdAttachmentsAttachmentid: {
+    patchSubmissionsIdAttachmentsAttachmentID: {
         parameters: {
             query?: never;
             header: {
@@ -1725,10 +1859,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    version: number;
-                    caption: string;
-                };
+                "application/json": components["schemas"]["AttachmentEdit"];
             };
         };
         responses: {
@@ -1814,7 +1945,40 @@ export interface operations {
             };
         };
     };
-    getSubmissionsIdCorrections: {
+    getCategoriesIdExport: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": string;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCategoriesIdWords: {
         parameters: {
             query?: never;
             header?: never;
@@ -1831,7 +1995,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Correction"][];
+                    "application/json": components["schemas"]["WordEntry"][];
                 };
             };
             /** @description Error */
@@ -1845,7 +2009,76 @@ export interface operations {
             };
         };
     };
-    postSubmissionsIdCorrections: {
+    patchCategoriesIdWordsOptionID: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                id: string;
+                optionID: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WordModerationInput"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WordEntry"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCategoriesIdWordsExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postCategoriesIdStatus: {
         parameters: {
             query?: never;
             header: {
@@ -1858,19 +2091,17 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    body: string;
-                };
+                "application/json": components["schemas"]["CategoryStatusInput"];
             };
         };
         responses: {
             /** @description Success */
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Correction"];
+                    "application/json": components["schemas"]["Category"];
                 };
             };
             /** @description Error */
@@ -1884,7 +2115,7 @@ export interface operations {
             };
         };
     };
-    postSubmissionsIdCorrectionsCorrectionidResolve: {
+    putCategoriesIdBallot: {
         parameters: {
             query?: never;
             header: {
@@ -1892,7 +2123,41 @@ export interface operations {
             };
             path: {
                 id: string;
-                correctionID: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BallotInput"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BallotReceipt"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCategoriesIdResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
             };
             cookie?: never;
         };
@@ -1904,7 +2169,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Correction"];
+                    "application/json": components["schemas"]["PollResult"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCategoriesIdAudit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BallotAudit"][];
                 };
             };
             /** @description Error */
@@ -1934,40 +2230,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RosterEntry"][];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getCategoriesIdExport: {
-        parameters: {
-            query?: {
-                /** @description Defaults to all statuses; explicit status filtering remains available for later moderation. */
-                status?: string;
-            };
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/zip": string;
                 };
             };
             /** @description Error */
@@ -2023,7 +2285,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Deleted */
+            /** @description No content */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -2136,266 +2398,7 @@ export interface operations {
             };
         };
     };
-    postCategoriesIdStatus: {
-        parameters: {
-            query?: never;
-            header: {
-                "X-CSRF-Token": string;
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    version: number;
-                    /** @enum {string} */
-                    status: "draft" | "open" | "closed";
-                };
-            };
-        };
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Category"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    putCategoriesIdBallot: {
-        parameters: {
-            query?: never;
-            header: {
-                "X-CSRF-Token": string;
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /**
-                     * Format: uuid
-                     * @description Client-generated key required for repeatable ballots; replay with the same selection returns success without an extra entry, changed selection conflicts.
-                     */
-                    ballot_id?: string;
-                    option_id?: string;
-                    option_ids?: string[];
-                    words?: string[];
-                } & (unknown | unknown | unknown);
-            };
-        };
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /**
-                         * Format: uuid
-                         * @description Client-generated key required for repeatable ballots; replay with the same selection returns success without an extra entry, changed selection conflicts.
-                         */
-                        ballot_id?: string;
-                        option_id: string;
-                        option_ids: string[];
-                        words?: string[];
-                    };
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getCategoriesIdResults: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PollResult"][];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getCategoriesIdAudit: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BallotAudit"][];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getCategoriesIdWords: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WordEntry"][];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    patchCategoriesIdWordsOptionID: {
-        parameters: {
-            query?: never;
-            header: {
-                "X-CSRF-Token": string;
-            };
-            path: {
-                id: string;
-                optionID: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WordModerationInput"];
-            };
-        };
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WordEntry"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getCategoriesIdWordsExport: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description CSV with formula-safe word and count columns */
-            200: {
-                headers: {
-                    "Content-Disposition"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/csv": string;
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getReminderPreference: {
+    getMeEmailReminders: {
         parameters: {
             query?: never;
             header?: never;
@@ -2424,10 +2427,12 @@ export interface operations {
             };
         };
     };
-    setReminderPreference: {
+    patchMeEmailReminders: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2457,7 +2462,7 @@ export interface operations {
             };
         };
     };
-    getEmailStatus: {
+    getAdminEmailStatus: {
         parameters: {
             query?: never;
             header?: never;
@@ -2486,10 +2491,12 @@ export interface operations {
             };
         };
     };
-    updateEmailPolicy: {
+    patchAdminEmailSettings: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2519,15 +2526,15 @@ export interface operations {
             };
         };
     };
-    listEmailMessages: {
+    getAdminEmailMessages: {
         parameters: {
             query?: {
+                cursor?: string;
+                from?: string;
                 kind?: "login" | "reminder";
                 status?: string;
-                cursor?: string;
-                user_id?: string;
-                from?: string;
                 to?: string;
+                user_id?: string;
             };
             header?: never;
             path?: never;
@@ -2555,7 +2562,7 @@ export interface operations {
             };
         };
     };
-    getEmailMessage: {
+    getAdminEmailMessagesId: {
         parameters: {
             query?: never;
             header?: never;
@@ -2586,10 +2593,12 @@ export interface operations {
             };
         };
     };
-    reconcileEmail: {
+    postAdminEmailReconcile: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2615,10 +2624,12 @@ export interface operations {
             };
         };
     };
-    previewReminders: {
+    postAdminEmailRemindersPreview: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2750,9 +2761,9 @@ export interface operations {
             query?: {
                 area?: string;
                 assignee?: string;
-                type?: string;
-                q?: string;
                 include_finished?: string;
+                q?: string;
+                type?: string;
             };
             header?: never;
             path?: never;

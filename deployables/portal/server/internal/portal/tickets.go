@@ -17,11 +17,11 @@ import (
 // docs/implementation-contract.md ("Tickets (Kanban board)").
 
 type UserRef struct {
-	ID   string `json:"id"`
+	ID   string `json:"id" format:"uuid"`
 	Name string `json:"name"`
 }
 type Area struct {
-	ID        string    `json:"id"`
+	ID        string    `json:"id" format:"uuid"`
 	Name      string    `json:"name"`
 	Position  int       `json:"position"`
 	Version   int       `json:"version"`
@@ -29,36 +29,36 @@ type Area struct {
 }
 type TicketReview struct {
 	User          UserRef   `json:"user"`
-	Verdict       string    `json:"verdict"`
+	Verdict       string    `json:"verdict" enum:"approve,changes"`
 	Binding       bool      `json:"binding"`
 	SelfConfirmed bool      `json:"self_confirmed"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 type Ticket struct {
-	ID              string         `json:"id"`
+	ID              string         `json:"id" format:"uuid"`
 	Number          int64          `json:"number"`
-	Type            string         `json:"type"`
+	Type            string         `json:"type" enum:"aufgabe,artikel"`
 	Title           string         `json:"title"`
 	Body            string         `json:"body"`
-	AreaID          string         `json:"area_id"`
+	AreaID          string         `json:"area_id" format:"uuid"`
 	AreaName        string         `json:"area_name"`
 	Assignee        *UserRef       `json:"assignee"`
 	CreatedBy       UserRef        `json:"created_by"`
-	Size            string         `json:"size"`
+	Size            string         `json:"size" enum:"XS,S,M,L,XL"`
 	Goal            string         `json:"goal"`
 	EstPages        *int           `json:"est_pages"`
-	Status          string         `json:"status"`
+	Status          string         `json:"status" enum:"todo,in_progress,review,done"`
 	Round           int            `json:"round"`
 	Version         int            `json:"version"`
-	Approved        bool           `json:"approved"`
-	Reviews         []TicketReview `json:"reviews"`
+	Approved        bool           `json:"approved" description:"True when the current round has a binding approval by a still admitted editor. Derived, never client-written."`
+	Reviews         []TicketReview `json:"reviews" description:"Votes of the current round."`
 	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at"`
 	StatusChangedAt time.Time      `json:"status_changed_at"`
 }
 type TicketEvent struct {
-	ID        string    `json:"id"`
-	Kind      string    `json:"kind"`
+	ID        string    `json:"id" format:"uuid"`
+	Kind      string    `json:"kind" enum:"comment,status,assign,review,edit"`
 	Actor     UserRef   `json:"actor"`
 	Body      string    `json:"body"`
 	Detail    string    `json:"detail"`
@@ -831,10 +831,7 @@ func (a *App) ticketStatus(w http.ResponseWriter, r *http.Request) error {
 	if !validID(id) {
 		return missing()
 	}
-	var in struct {
-		Version int    `json:"version"`
-		Status  string `json:"status"`
-	}
+	var in TicketStatusInput
 	if e = decode(w, r, &in); e != nil {
 		return e
 	}
@@ -942,9 +939,7 @@ func (a *App) commentTicket(w http.ResponseWriter, r *http.Request) error {
 	if !validID(id) {
 		return missing()
 	}
-	var in struct {
-		Body string `json:"body"`
-	}
+	var in CommentInput
 	if e = decode(w, r, &in); e != nil {
 		return e
 	}

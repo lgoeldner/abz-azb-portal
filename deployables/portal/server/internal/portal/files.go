@@ -230,9 +230,7 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) error {
 	return a.finishSubmission(w, r, tx, u, s.ID, "attachment.added")
 }
 func (a *App) deleteAttachment(w http.ResponseWriter, r *http.Request) error {
-	var in struct {
-		Version int `json:"version"`
-	}
+	var in VersionInput
 	if e := decode(w, r, &in); e != nil {
 		return e
 	}

@@ -441,8 +441,8 @@ VALUES($1,$2,'login','accepted',$3,$4,$4)`, id, MiaID, fmt.Sprintf("page-%d", i)
 		t.Fatalf("filtered message list: %d %s", response.Code, response.Body)
 	}
 	var first struct {
-		Items      []emailMessageItem `json:"items"`
-		NextCursor *string            `json:"next_cursor"`
+		Items      []EmailMessage `json:"items"`
+		NextCursor *string        `json:"next_cursor"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &first); err != nil {
 		t.Fatal(err)
@@ -459,7 +459,7 @@ VALUES($1,$2,'login','accepted',$3,$4,$4)`, id, MiaID, fmt.Sprintf("page-%d", i)
 		t.Fatalf("second message page: %d %s", response.Code, response.Body)
 	}
 	var second struct {
-		Items []emailMessageItem `json:"items"`
+		Items []EmailMessage `json:"items"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &second); err != nil || len(second.Items) != 1 || second.Items[0].ID == first.Items[0].ID {
 		t.Fatalf("unstable second page: %s err=%v", response.Body, err)

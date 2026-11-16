@@ -84,7 +84,7 @@ func (a *App) emailReminderPreview(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
-	jsonOut(w, http.StatusOK, map[string]int{"eligible": count})
+	jsonOut(w, http.StatusOK, ReminderPreview{Eligible: count})
 	return nil
 }
 
@@ -97,19 +97,17 @@ func (a *App) emailReminderPreference(w http.ResponseWriter, r *http.Request) er
 		if err := a.DB.QueryRow(r.Context(), `SELECT email_reminders_enabled FROM users WHERE id=$1`, user.ID).Scan(&enabled); err != nil {
 			return err
 		}
-		jsonOut(w, http.StatusOK, map[string]bool{"enabled": enabled})
+		jsonOut(w, http.StatusOK, ReminderPreference{Enabled: enabled})
 		return nil
 	}
-	var in struct {
-		Enabled bool `json:"enabled"`
-	}
+	var in ReminderPreference
 	if err := decode(w, r, &in); err != nil {
 		return err
 	}
 	if _, err := a.DB.Exec(r.Context(), `UPDATE users SET email_reminders_enabled=$2 WHERE id=$1`, user.ID, in.Enabled); err != nil {
 		return err
 	}
-	jsonOut(w, http.StatusOK, map[string]bool{"enabled": in.Enabled})
+	jsonOut(w, http.StatusOK, in)
 	return nil
 }
 

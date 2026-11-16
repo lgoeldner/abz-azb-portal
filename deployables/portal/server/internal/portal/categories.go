@@ -526,10 +526,7 @@ func (a *App) statusCategory(w http.ResponseWriter, r *http.Request) error {
 	if !editor(u) {
 		return forbidden()
 	}
-	var in struct {
-		Version int    `json:"version"`
-		Status  string `json:"status"`
-	}
+	var in CategoryStatusInput
 	if e := decode(w, r, &in); e != nil {
 		return e
 	}
@@ -589,9 +586,7 @@ func (a *App) deleteCategory(w http.ResponseWriter, r *http.Request) error {
 	if actor.Role != "admin" {
 		return forbidden()
 	}
-	var in struct {
-		Version int `json:"version"`
-	}
+	var in VersionInput
 	if e := decode(w, r, &in); e != nil {
 		return e
 	}

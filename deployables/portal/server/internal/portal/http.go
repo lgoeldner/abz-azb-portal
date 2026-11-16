@@ -233,64 +233,9 @@ func (a *App) routes() {
 	}
 	m.HandleFunc("POST /internal/email/login", a.endpoint(a.internalEmailLogin))
 	api := http.NewServeMux()
-	bind := func(pattern string, fn endpoint) { api.HandleFunc(pattern, a.endpoint(fn)) }
-	bind("GET /api/v1/me", func(w http.ResponseWriter, r *http.Request) error {
-		u := r.Context().Value(contextKey{}).(requestUser)
-		jsonOut(w, 200, map[string]any{"user": u.User, "csrf_token": u.CSRF})
-		return nil
-	})
-	bind("GET /api/v1/me/ballots", a.myBallots)
-	bind("GET /api/v1/categories", a.listCategories)
-	bind("POST /api/v1/categories", a.writeCategory)
-	bind("PATCH /api/v1/categories/{id}", a.writeCategory)
-	bind("DELETE /api/v1/categories/{id}", a.deleteCategory)
-	bind("GET /api/v1/submissions", a.listSubmissions)
-	bind("POST /api/v1/submissions", a.createSubmission)
-	bind("GET /api/v1/submissions/{id}", a.getSubmission)
-	bind("PATCH /api/v1/submissions/{id}", a.editSubmission)
-	bind("POST /api/v1/submissions/{id}/status", a.statusSubmission)
-	bind("GET /api/v1/submissions/{id}/revisions", a.revisions)
-	bind("GET /api/v1/submissions/{id}/corrections", a.corrections)
-	bind("POST /api/v1/submissions/{id}/corrections", a.addCorrection)
-	bind("POST /api/v1/submissions/{id}/corrections/{correctionID}/resolve", a.resolveCorrection)
-	bind("POST /api/v1/submissions/{id}/attachments", a.upload)
-	bind("DELETE /api/v1/submissions/{id}/attachments/{attachmentID}", a.deleteAttachment)
-	bind("PATCH /api/v1/submissions/{id}/attachments/{attachmentID}", a.editAttachment)
-	bind("GET /api/v1/attachments/{id}", a.download)
-	bind("GET /api/v1/attachments/{id}/preview", a.download)
-	bind("GET /api/v1/categories/{id}/export", a.exportCategory)
-	bind("GET /api/v1/categories/{id}/words", a.listWords)
-	bind("PATCH /api/v1/categories/{id}/words/{optionID}", a.moderateWord)
-	bind("GET /api/v1/categories/{id}/words/export", a.exportWords)
-	bind("POST /api/v1/categories/{id}/status", a.statusCategory)
-	bind("PUT /api/v1/categories/{id}/ballot", a.vote)
-	bind("GET /api/v1/categories/{id}/results", a.results)
-	bind("GET /api/v1/categories/{id}/audit", a.ballotAudit)
-	bind("GET /api/v1/roster", a.roster)
-	bind("GET /api/v1/admin/users", a.users)
-	bind("PATCH /api/v1/admin/users/{id}", a.editUser)
-	bind("DELETE /api/v1/admin/users/{id}", a.deleteUser)
-	bind("GET /api/v1/admin/audit", a.auditEvents)
-	bind("GET /api/v1/admin/status", a.systemStatus)
-	bind("GET /api/v1/me/email-reminders", a.emailReminderPreference)
-	bind("PATCH /api/v1/me/email-reminders", a.emailReminderPreference)
-	bind("GET /api/v1/admin/email/status", a.emailStatus)
-	bind("PATCH /api/v1/admin/email/settings", a.emailSettings)
-	bind("GET /api/v1/admin/email/messages", a.emailMessages)
-	bind("GET /api/v1/admin/email/messages/{id}", a.emailMessageDetail)
-	bind("POST /api/v1/admin/email/reconcile", a.emailReconcile)
-	bind("POST /api/v1/admin/email/reminders/preview", a.emailReminderPreview)
-	bind("GET /api/v1/areas", a.listAreas)
-	bind("POST /api/v1/admin/areas", a.createArea)
-	bind("PATCH /api/v1/admin/areas/{id}", a.editArea)
-	bind("GET /api/v1/tickets", a.listTickets)
-	bind("POST /api/v1/tickets", a.createTicket)
-	bind("GET /api/v1/tickets/{id}", a.getTicket)
-	bind("PATCH /api/v1/tickets/{id}", a.editTicket)
-	bind("POST /api/v1/tickets/{id}/status", a.ticketStatus)
-	bind("POST /api/v1/tickets/{id}/claim", a.claimTicket)
-	bind("POST /api/v1/tickets/{id}/comments", a.commentTicket)
-	bind("PUT /api/v1/tickets/{id}/review", a.reviewTicket)
+	for _, rt := range a.apiRoutes() {
+		api.HandleFunc(rt.Pattern, a.endpoint(rt.Handler))
+	}
 	api.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { respondError(w, missing()) })
 	m.Handle("/api/", a.protected(api))
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -306,4 +251,69 @@ func (a *App) routes() {
 		http.ServeFile(w, r, filepath.Join(a.Config.StaticDir, "index.html"))
 	})
 	a.handler = m
+}
+
+func (a *App) me(w http.ResponseWriter, r *http.Request) error {
+	u := r.Context().Value(contextKey{}).(requestUser)
+	jsonOut(w, 200, Me{User: u.User, CSRFToken: u.CSRF})
+	return nil
+}
+
+// apiRoutes is the single list of /api/v1 routes: it feeds the mux and the generated docs/openapi.json.
+func (a *App) apiRoutes() []apiRoute {
+	return []apiRoute{
+		{"GET /api/v1/me", a.me, opDoc{Summary: "Current user and CSRF token", Res: Me{}}},
+		{"GET /api/v1/me/ballots", a.myBallots, opDoc{Summary: "Current viewer’s own poll submissions, one per current ballot entry including repeatable and hidden collections; never named history or other voters", Res: []MyBallot{}}},
+		{"GET /api/v1/categories", a.listCategories, opDoc{Summary: "List collections (students: no drafts; ballot_count and participation editors only)", Res: []Category{}}},
+		{"POST /api/v1/categories", a.writeCategory, opDoc{Summary: "Create collection of any kind (admins and managers; manager creator receives a category grant atomically)", Req: CategoryInput{}, Res: Category{}, Status: 201}},
+		{"PATCH /api/v1/categories/{id}", a.writeCategory, opDoc{Summary: "Update collection (admin or granted manager); ballot definitions lock after first opening, bounded poll deadlines remain editable with version and closes_at only; repeatable and ongoing fixed after creation; photo collections with active images cannot change to a non-photo kind", Req: CategoryEdit{}, Res: Category{}}},
+		{"DELETE /api/v1/categories/{id}", a.deleteCategory, opDoc{Summary: "Delete a single-answer collection and its votes/history (admin only; 400 repeatable, 404 missing, 409 stale version)", Req: VersionInput{}, Status: 204}},
+		{"GET /api/v1/submissions", a.listSubmissions, opDoc{Summary: "List authorized submissions", Res: []Submission{}, Query: SubmissionQuery{}}},
+		{"POST /api/v1/submissions", a.createSubmission, opDoc{Summary: "Create idempotent contribution; multipart images only for photo collections and create atomically", Req: SubmissionInput{}, Form: SubmissionUpload{}, Res: Submission{}, Status: 201}},
+		{"GET /api/v1/submissions/{id}", a.getSubmission, opDoc{Summary: "Read authorized contribution", Res: Submission{}}},
+		{"PATCH /api/v1/submissions/{id}", a.editSubmission, opDoc{Summary: "Edit own pending contribution with optimistic concurrency; active images cannot move to a non-photo collection; editorial roles cannot change another author’s original", Req: SubmissionEdit{}, Res: Submission{}}},
+		{"POST /api/v1/submissions/{id}/status", a.statusSubmission, opDoc{Summary: "Transition contribution status", Req: StatusInput{}, Res: Submission{}}},
+		{"GET /api/v1/submissions/{id}/revisions", a.revisions, opDoc{Summary: "Read contribution revision history", Res: []Revision{}}},
+		{"GET /api/v1/submissions/{id}/corrections", a.corrections, opDoc{Summary: "Read correction requests", Res: []Correction{}}},
+		{"POST /api/v1/submissions/{id}/corrections", a.addCorrection, opDoc{Summary: "Add editorial annotation with category grant (any status), or author correction request on locked contribution", Req: CommentInput{}, Res: Correction{}, Status: 201}},
+		{"POST /api/v1/submissions/{id}/corrections/{correctionID}/resolve", a.resolveCorrection, opDoc{Summary: "Resolve correction request", Res: Correction{}}},
+		{"POST /api/v1/submissions/{id}/attachments", a.upload, opDoc{Summary: "Attach image to own pending contribution in a photo collection only; other collection types return 400", Form: AttachmentUpload{}, Res: Submission{}}},
+		{"DELETE /api/v1/submissions/{id}/attachments/{attachmentID}", a.deleteAttachment, opDoc{Summary: "Remove attachment from own pending contribution; final image in a photo collection cannot be removed", Req: VersionInput{}, Res: Submission{}}},
+		{"PATCH /api/v1/submissions/{id}/attachments/{attachmentID}", a.editAttachment, opDoc{Summary: "Edit photo caption on own pending contribution with optimistic concurrency", Req: AttachmentEdit{}, Res: Submission{}}},
+		{"GET /api/v1/attachments/{id}", a.download, opDoc{Summary: "Read authorized original image", File: "application/octet-stream"}},
+		{"GET /api/v1/attachments/{id}/preview", a.download, opDoc{Summary: "Read authorized image preview", File: "image/jpeg"}},
+		{"GET /api/v1/categories/{id}/export", a.exportCategory, opDoc{Summary: "Export all collected contributions by default, with optional explicit status filter (editors, repeatable only)", File: "application/zip", Query: CategoryExportQuery{}}},
+		{"GET /api/v1/categories/{id}/words", a.listWords, opDoc{Summary: "Editorial anonymous original word counts and moderation, word portraits only", Res: []WordEntry{}}},
+		{"PATCH /api/v1/categories/{id}/words/{optionID}", a.moderateWord, opDoc{Summary: "Grant-controlled reversible word exclusion/correction/merge; originals and named history stay unchanged", Req: WordModerationInput{}, Res: WordEntry{}}},
+		{"GET /api/v1/categories/{id}/words/export", a.exportWords, opDoc{Summary: "Editorial CSV export of included effective words and distinct voter counts, word portraits only", File: "text/csv"}},
+		{"POST /api/v1/categories/{id}/status", a.statusCategory, opDoc{Summary: "Open, close or hide a collection (admin or manager with grant; draft->open, open->closed, open/closed->draft). Expired collections cannot reopen. Hiding preserves votes/history and first opened_at; reopening keeps candidates fixed.", Req: CategoryStatusInput{}, Res: Category{}}},
+		{"PUT /api/v1/categories/{id}/ballot", a.vote, opDoc{Summary: "Cast a named ballot: replace current selection when one-off; append an idempotent entry when repeatable (ballot_id required)", Req: BallotInput{}, Res: BallotReceipt{}}},
+		{"GET /api/v1/categories/{id}/results", a.results, opDoc{Summary: "Editorial aggregate counts (single-answer only)", Res: []PollResult{}}},
+		{"GET /api/v1/categories/{id}/audit", a.ballotAudit, opDoc{Summary: "Admin-only named ballot history (single-answer only)", Res: []BallotAudit{}}},
+		{"GET /api/v1/roster", a.roster, opDoc{Summary: "Verified cohort names", Res: []RosterEntry{}}},
+		{"GET /api/v1/admin/users", a.users, opDoc{Summary: "Admin user list", Res: []User{}}},
+		{"PATCH /api/v1/admin/users/{id}", a.editUser, opDoc{Summary: "Admin admission and grants", Req: UserEdit{}, Res: User{}}},
+		{"DELETE /api/v1/admin/users/{id}", a.deleteUser, opDoc{Summary: "Delete user without content", Status: 204}},
+		{"GET /api/v1/admin/audit", a.auditEvents, opDoc{Summary: "Recent administrative audit events", Res: []AuditEvent{}}},
+		{"GET /api/v1/admin/status", a.systemStatus, opDoc{Summary: "Backup freshness and storage", Res: SystemStatus{}}},
+		{"GET /api/v1/me/email-reminders", a.emailReminderPreference, opDoc{Summary: "Current user reminder delivery preference", Res: ReminderPreference{}}},
+		{"PATCH /api/v1/me/email-reminders", a.emailReminderPreference, opDoc{Summary: "Change own reminder preference; does not affect login email", Req: ReminderPreference{}, Res: ReminderPreference{}}},
+		{"GET /api/v1/admin/email/status", a.emailStatus, opDoc{Summary: "Admin-only local quota, observed Brevo credits and worker health; never provider credentials", Res: EmailStatus{}}},
+		{"PATCH /api/v1/admin/email/settings", a.emailSettings, opDoc{Summary: "Admin-only versioned mail budgets and pause controls within deployment ceilings", Req: EmailPolicy{}, Res: EmailStatus{}}},
+		{"GET /api/v1/admin/email/messages", a.emailMessages, opDoc{Summary: "Admin-only paginated masked delivery metadata; never message bodies or login links", Res: EmailMessages{}, Query: EmailMessagesQuery{}}},
+		{"GET /api/v1/admin/email/messages/{id}", a.emailMessageDetail, opDoc{Summary: "Admin-only sanitized delivery attempt and event history", Res: EmailMessageDetail{}}},
+		{"POST /api/v1/admin/email/reconcile", a.emailReconcile, opDoc{Summary: "Admin-only rate-limited refresh of provider status and delivery events", Res: EmailStatus{}}},
+		{"POST /api/v1/admin/email/reminders/preview", a.emailReminderPreview, opDoc{Summary: "Admin-only aggregate currently eligible reminder count; never sends", Res: ReminderPreview{}}},
+		{"GET /api/v1/areas", a.listAreas, opDoc{Summary: "List Bereiche with default reviewers (managers and admins)", Res: []Area{}}},
+		{"POST /api/v1/admin/areas", a.createArea, opDoc{Summary: "Create a Bereich (admin)", Req: AreaInput{}, Res: Area{}, Status: 201}},
+		{"PATCH /api/v1/admin/areas/{id}", a.editArea, opDoc{Summary: "Rename a Bereich and replace its default reviewers; reviewers must be admitted managers/admins (admin)", Req: AreaEdit{}, Res: Area{}}},
+		{"GET /api/v1/tickets", a.listTickets, opDoc{Summary: "List tickets; finished (done and approved) only with include_finished=true", Res: []Ticket{}, Query: TicketQuery{}}},
+		{"POST /api/v1/tickets", a.createTicket, opDoc{Summary: "Create a ticket; area reviewers/admins may assign anyone, other managers only themselves", Req: TicketInput{}, Res: Ticket{}, Status: 201}},
+		{"GET /api/v1/tickets/{id}", a.getTicket, opDoc{Summary: "Ticket with its timeline", Res: TicketDetail{}}},
+		{"PATCH /api/v1/tickets/{id}", a.editTicket, opDoc{Summary: "Edit ticket fields (assignee, area reviewers, admin); changing area, assignee, size or est_pages starts a new review round", Req: TicketEdit{}, Res: Ticket{}}},
+		{"POST /api/v1/tickets/{id}/status", a.ticketStatus, opDoc{Summary: "Move a ticket between columns; going back to todo/in_progress starts a new review round", Req: TicketStatusInput{}, Res: Ticket{}}},
+		{"POST /api/v1/tickets/{id}/claim", a.claimTicket, opDoc{Summary: "Claim an unassigned ticket atomically and set it in_progress", Res: Ticket{}}},
+		{"POST /api/v1/tickets/{id}/comments", a.commentTicket, opDoc{Summary: "Add a markdown comment", Req: CommentInput{}, Res: TicketEvent{}, Status: 201}},
+		{"PUT /api/v1/tickets/{id}/review", a.reviewTicket, opDoc{Summary: "Set own review vote in review/done; only binding votes make a ticket approved", Req: ReviewInput{}, Res: Ticket{}}},
+	}
 }
