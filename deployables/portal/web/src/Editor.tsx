@@ -7,6 +7,33 @@ import { placeholder as placeholderFeature } from '@milkdown/crepe/feature/place
 import { table } from '@milkdown/crepe/feature/table';
 import { toolbar } from '@milkdown/crepe/feature/toolbar';
 import { uploadConfig } from '@milkdown/kit/plugin/upload';
+import { callCommand } from '@milkdown/kit/utils';
+import {
+  insertHrCommand,
+  toggleEmphasisCommand,
+  toggleInlineCodeCommand,
+  toggleLinkCommand,
+  toggleStrongCommand,
+  turnIntoTextCommand,
+  wrapInBlockquoteCommand,
+  wrapInBulletListCommand,
+  wrapInHeadingCommand,
+  wrapInOrderedListCommand,
+} from '@milkdown/kit/preset/commonmark';
+import { toggleStrikethroughCommand } from '@milkdown/kit/preset/gfm';
+import {
+  Bold,
+  Code,
+  Italic,
+  Link2,
+  List,
+  ListOrdered,
+  Minus,
+  Pilcrow,
+  Quote,
+  Strikethrough,
+  type LucideIcon,
+} from 'lucide-react';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import '@milkdown/crepe/theme/common/prosemirror.css';
 import '@milkdown/crepe/theme/common/reset.css';
@@ -33,6 +60,39 @@ export interface MarkdownEditorProps {
 
 const SAFE_LINK = /^(https?:|mailto:)/i;
 
+type Run = (crepe: CrepeBuilder) => void;
+const cmd =
+  // The key of a command is only assigned once the editor has loaded it, so read it at click time.
+  (command: { key: unknown }, payload?: unknown): Run =>
+    (crepe) =>
+      crepe.editor.action(callCommand(command.key as never, payload as never));
+
+// Persistent formatting bar: the same actions as Crepe's floating toolbar and slash menu, always visible.
+const tools: ({ label: string; icon?: LucideIcon; text?: string; run: Run } | 'sep')[] = [
+  { label: 'Text', icon: Pilcrow, run: cmd(turnIntoTextCommand) },
+  { label: 'Überschrift 1', text: 'H1', run: cmd(wrapInHeadingCommand, 1) },
+  { label: 'Überschrift 2', text: 'H2', run: cmd(wrapInHeadingCommand, 2) },
+  { label: 'Überschrift 3', text: 'H3', run: cmd(wrapInHeadingCommand, 3) },
+  'sep',
+  { label: 'Fett', icon: Bold, run: cmd(toggleStrongCommand) },
+  { label: 'Kursiv', icon: Italic, run: cmd(toggleEmphasisCommand) },
+  { label: 'Durchgestrichen', icon: Strikethrough, run: cmd(toggleStrikethroughCommand) },
+  { label: 'Code', icon: Code, run: cmd(toggleInlineCodeCommand) },
+  {
+    label: 'Link',
+    icon: Link2,
+    run: (crepe) => {
+      const href = window.prompt('Link-Adresse (https://… oder mailto:…)')?.trim();
+      if (href && SAFE_LINK.test(href)) cmd(toggleLinkCommand, { href })(crepe);
+    },
+  },
+  'sep',
+  { label: 'Aufzählung', icon: List, run: cmd(wrapInBulletListCommand) },
+  { label: 'Nummerierte Liste', icon: ListOrdered, run: cmd(wrapInOrderedListCommand) },
+  { label: 'Zitat', icon: Quote, run: cmd(wrapInBlockquoteCommand) },
+  { label: 'Trennlinie', icon: Minus, run: cmd(insertHrCommand) },
+];
+
 /** Notion-like markdown editor on Milkdown Crepe: slash menu, block handles, toolbar. No images, LaTeX, code editor or uploads. */
 export default function MarkdownEditor({
   value,
@@ -43,6 +103,8 @@ export default function MarkdownEditor({
 }: MarkdownEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const [initial] = useState(value);
+  const crepeRef = useRef<CrepeBuilder | null>(null);
+  const [ready, setReady] = useState(false);
   const onChangeRef = useRef(onChange);
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -116,10 +178,16 @@ export default function MarkdownEditor({
         if (markdown !== previous) onChangeRef.current?.(markdown);
       });
     });
-    const ready = crepe.create();
+    const created = crepe.create();
+    void created.then(() => {
+      crepeRef.current = crepe;
+      setReady(true);
+    });
     return () => {
+      crepeRef.current = null;
+      setReady(false);
       // create() is async: destroy only after it settled, then drop the root.
-      void ready
+      void created
         .catch(() => undefined)
         .then(() => crepe.destroy())
         .catch(() => undefined)
@@ -148,6 +216,28 @@ export default function MarkdownEditor({
       aria-label={label}
       onClickCapture={guardLinks}
     >
+      {!readonly && (
+        <div className="md-editor-bar" role="toolbar" aria-label="Formatierung">
+          {tools.map((tool, i) =>
+            tool === 'sep' ? (
+              <span key={i} aria-hidden="true" className="md-editor-sep" />
+            ) : (
+              <button
+                key={tool.label}
+                type="button"
+                title={tool.label}
+                aria-label={tool.label}
+                disabled={!ready}
+                // Keep the editor selection: do not let the button take focus.
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => crepeRef.current && tool.run(crepeRef.current)}
+              >
+                {tool.icon ? <tool.icon aria-hidden="true" size={16} /> : tool.text}
+              </button>
+            ),
+          )}
+        </div>
+      )}
       {!active && <div className="md-editor-fallback">{initial}</div>}
     </div>
   );
