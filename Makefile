@@ -1,7 +1,7 @@
 COMPOSE := docker compose
 DEV_COMPOSE := docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml
 
-.PHONY: env doctor dev dev\:frontend dev\:backend down check lint audit backup restore migrate
+.PHONY: env doctor dev dev\:auth dev\:frontend dev\:backend down check lint audit backup restore migrate
 
 dev:
 	bash scripts/dev.sh
@@ -9,10 +9,13 @@ dev:
 env:
 	bash scripts/env.sh
 
-doctor dev dev\:frontend dev\:backend down: env
+doctor dev dev\:auth dev\:frontend dev\:backend down: env
 
 doctor:
 	bash scripts/doctor.sh
+
+dev\:auth:
+	DEV_AUTH=real bash scripts/dev.sh
 
 dev\:frontend:
 	bash scripts/dev-frontend.sh
@@ -21,7 +24,7 @@ dev\:backend:
 	bash scripts/dev-backend.sh
 
 down:
-	$(DEV_COMPOSE) --profile production down
+	$(DEV_COMPOSE) -f compose.dev.real-auth.yaml --profile production down
 
 check:
 	bash -n scripts/*.sh deployables/backup/*.sh deployables/portal/entrypoint.sh

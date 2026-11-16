@@ -20,6 +20,7 @@ dir `deployables/caddy/` :: Caddyfile, mounted into the stock caddy image [tls, 
 file `go.work` :: joins portal and auth-mock modules for dev/tests only; Docker builds use GOWORK=off [workspace]
 file `compose.yaml` :: production stack: db, portal, Better Auth, caddy, backup and opt-in reminder worker [deploy, production]
 file `deployables/caddy/Caddyfile.dev` :: development proxy: pages/HMR to Vite, API/auth/health to Go [dev, caddy, proxy, hot reload]
+file `compose.dev.real-auth.yaml` :: extra dev override for `make dev:auth`: real Better Auth container replaces the mock `auth` service, portal switches to AUTH_MODE=better_auth and Brevo (needs BREVO_API_KEY, MAIL_FROM, BREVO_TRACKING_DISABLED=true in .env.dev) [dev, auth, brevo, real login]
 file `compose.dev.yaml` :: dev overrides: dependency-backed Node mock picker, detached Vite hot reload, local ports, dev bind mounts; runtime services recover with unless-stopped [dev, docker, restart]
 file `Makefile` :: dev, check, lint, audit, backup, restore, migrate targets [make, ci]
 file `.github/workflows/ci.yaml` :: CI: lint, audit, Go/web tests, e2e [ci, github]
@@ -37,7 +38,7 @@ file `ops/README.md` :: operations, backup, restore, tidy caveat [ops, restore, 
 ## Scripts
 
 cmd `scripts/dev.sh` :: `make dev`: build/start containers, wait for readiness, print `PUBLIC_URL` and exit [dev, start]
-cmd `scripts/dev-common.sh` :: dev env vars (DATABASE_URL, UPLOAD_DIR), start_dev_services (detached Vite, fresh dependency volumes), prepare_dev_database (migrate+seed) [env, dev]
+cmd `scripts/dev-common.sh` :: dev env vars (DATABASE_URL, UPLOAD_DIR), start_dev_services (DEV_AUTH=real adds compose.dev.real-auth.yaml; detached Vite, fresh dependency volumes), prepare_dev_database (migrate+seed) [env, dev]
 cmd `scripts/dev-backend.sh` :: builds and runs the host Go API; SKIP_DEV_DB_SETUP=1 skips containers/migrate/seed [backend, dev]
 cmd `scripts/dev-frontend.sh` :: Vite dev server starts at 5173 and uses the next free port if occupied [frontend, dev, port]
 cmd `scripts/doctor.sh` :: checks local prerequisites [setup]

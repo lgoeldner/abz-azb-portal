@@ -10,6 +10,10 @@ Caddy blocks `/internal/*` and overwrites a private proxy token; Go uses it to t
 
 The server performs migrations before serving. For an existing OIDC deployment, apply the schema, review the existing UUID/email mapping and provision the first usable admin before switching modes. The old subject column and explicit `AUTH_MODE=oidc` consumer are retained for a tested real-provider rollback. A mode change revokes both legacy and dependency sessions and outstanding verifications under the shared database lock. Use a coordinated restart, not mixed auth configurations. Logout through the portal remains CSRF protected.
 
+## Real login in development
+
+`make dev:auth` layers `compose.dev.real-auth.yaml` over the dev stack. The same `auth` service runs the production image in `better_auth` mode instead of the mock picker, and the portal sends through Brevo. Plain `make dev` returns to the mock; either switch revokes existing sessions (mode cutover). Put these in `.env.dev` first: `BREVO_API_KEY`, `MAIL_FROM` (a sender verified in Brevo; without a domain use a single verified sender address, which may land in spam), `BREVO_TRACKING_DISABLED=true` after disabling tracking in Brevo. Seeded dev users have synthetic addresses, so provision your own with `portal users import` (see below) before logging in.
+
 ## Provision users without a GUI
 
 The existing portal image contains the CLI. It requires DATABASE_URL; maintenance commands do not require working mail/auth credentials. Never run `seed` against production.
