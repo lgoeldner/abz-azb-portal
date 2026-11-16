@@ -36,6 +36,7 @@ import {
 } from './ui';
 import { DevDebug } from './DevDebug';
 import { PhotoGallery } from './PhotoGallery';
+import { Steckbrief } from './Steckbrief';
 
 type SelectedImage = { file: File; caption: string };
 
@@ -144,6 +145,7 @@ export function NewContribution() {
   const category = categories.data?.find((c) => c.id === params.get('kategorie') && submittable(c));
   const isPhoto = category?.kind === 'photo';
   const isQuote = category?.kind === 'quote';
+  const isSteckbrief = category?.kind === 'steckbrief';
   const savedDestination = saved && isPhoto ? `/sammlungen/${saved.category_id}` : `/beitraege/${saved?.id}`;
   const backDestination = isPhoto ? `/sammlungen/${category.id}` : '/beitraege';
   const own = submissions.data?.filter((s) => s.author_id === user.id) ?? [];
@@ -218,13 +220,17 @@ export function NewContribution() {
           category
             ? isPhoto
               ? `Fotos für „${category.name}“`
-              : `Beitrag für „${category.name}“`
+              : isSteckbrief
+                ? category.name
+                : `Beitrag für „${category.name}“`
             : 'Was sollen wir festhalten?'
         }
       >
         {isPhoto
           ? 'Lade mindestens ein Foto hoch. Zu jedem Bild kannst du einen optionalen Bildtext hinzufügen.'
-          : 'Dein Beitrag wird in der Sammlung gespeichert. Die Redaktion sichtet die Sammlung nach dem Sammelzeitraum.'}
+          : isSteckbrief
+            ? category.description || 'Dein Blatt in der Abizeitung.'
+            : 'Dein Beitrag wird in der Sammlung gespeichert. Die Redaktion sichtet die Sammlung nach dem Sammelzeitraum.'}
       </PageHead>
       {categories.isPending || submissions.isPending ? (
         <Loading />
@@ -247,6 +253,8 @@ export function NewContribution() {
         <Empty>Neue Beiträge können nur in offenen Sammlungen eingereicht werden.</Empty>
       ) : !category ? (
         <Navigate to="/" replace />
+      ) : isSteckbrief ? (
+        <Steckbrief key={category.id} category={category} />
       ) : (
         <div
           className={`grid grid-cols-1 gap-6 ${isQuote ? '' : 'lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start'}`}
@@ -470,6 +478,8 @@ export function ContributionDetail() {
   const [correction, setCorrection] = useState('');
   if (item.isPending) return <Loading />;
   if (item.error) return <Failure error={item.error} retry={() => item.refetch()} />;
+  // The collection kind decides how the body is rendered; never show Steckbrief JSON as text meanwhile.
+  if (categories.isPending) return <Loading />;
   const s = item.data;
   const own = s.author_id === user.id;
   const editable = own && s.status === 'pending' && !isRedaktion;
@@ -483,14 +493,17 @@ export function ContributionDetail() {
       c.id === s.category_id ||
       (c.status === 'open' &&
         submittable(c) &&
+        c.kind !== 'steckbrief' &&
         (!s.attachments.length || c.kind === 'photo') &&
         (c.kind !== 'photo' || (!s.body.trim() && s.attachments.length > 0)) &&
         (own || canEdit(user, c.id)) &&
         (c.repeatable || (!submissions.isPending && !submissions.error && !occupied.has(c.id)))),
   );
-  const categoryName = categories.data?.find((c) => c.id === s.category_id)?.name;
-  const categoryKind = categories.data?.find((c) => c.id === s.category_id)?.kind;
+  const category = categories.data?.find((c) => c.id === s.category_id);
+  const categoryName = category?.name;
+  const categoryKind = category?.kind;
   const isPhoto = categoryKind === 'photo';
+  const isSteckbrief = categoryKind === 'steckbrief';
   const beginEdit = () => {
     setDraft({
       title: s.title,
@@ -670,6 +683,7 @@ export function ContributionDetail() {
       )}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,1fr)] lg:items-start">
         <div className="min-w-0 space-y-6">
+          {isSteckbrief && <Steckbrief key={s.id} category={category!} submission={s} readOnly={!editable} />}
           {editing && editable && !isPhoto ? (
             <form className={`${panel} space-y-5`} onSubmit={save}>
               <label className={label}>
@@ -724,7 +738,7 @@ export function ContributionDetail() {
               </div>
             </form>
           ) : null}
-          {(!isPhoto || s.body || s.context) && (
+          {!isSteckbrief && (!isPhoto || s.body || s.context) && (
             <article className={panel}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className={heading}>
@@ -753,7 +767,7 @@ export function ContributionDetail() {
               )}
             </article>
           )}
-          {(isPhoto || !!s.attachments?.length) && (
+          {!isSteckbrief && (isPhoto || !!s.attachments?.length) && (
             <section className={panel}>
               <h2 className={heading}>
                 {isPhoto ? 'Deine Fotos' : 'Fotos'}{' '}

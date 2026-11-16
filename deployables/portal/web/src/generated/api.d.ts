@@ -201,7 +201,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Attach image to own pending contribution in a photo collection only; other collection types return 400 */
+        /** Attach image to own pending contribution: photo collections, or a Steckbrief with caption naming a template slot (replaces that slot); other collection types return 400 */
         post: operations["postSubmissionsIdAttachments"];
         delete?: never;
         options?: never;
@@ -223,7 +223,7 @@ export interface paths {
         delete: operations["deleteSubmissionsIdAttachmentsAttachmentID"];
         options?: never;
         head?: never;
-        /** Edit photo caption on own pending contribution with optimistic concurrency */
+        /** Edit photo caption on own pending contribution with optimistic concurrency; 400 for Steckbrief slots */
         patch: operations["patchSubmissionsIdAttachmentsAttachmentID"];
         trace?: never;
     };
@@ -852,7 +852,7 @@ export interface components {
             description: string;
             id: string;
             /** @enum {string} */
-            kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal" | "words";
+            kind: "idea" | "quote" | "memory" | "photo" | "steckbrief" | "person" | "proposal" | "words";
             /** @description Maximum selections for person/proposal polls or words per voter for word portraits (1–500). Word portraits default to 3, other polls to 1; contribution kinds require 1. */
             max_choices: number;
             /** @description First current selection in canonical ID order (legacy compatibility), or null. */
@@ -880,6 +880,11 @@ export interface components {
              * @enum {string}
              */
             status: "draft" | "open" | "closed";
+            /**
+             * @description Steckbrief collections only: which hardcoded Steckbrief form this collection uses, fixed after creation. Empty for every other kind.
+             * @enum {string}
+             */
+            template?: "" | "standard";
             version: number;
         };
         CategoryEdit: {
@@ -893,7 +898,7 @@ export interface components {
             closes_at?: null | string;
             description?: string;
             /** @enum {string} */
-            kind?: "idea" | "quote" | "memory" | "photo" | "person" | "proposal" | "words";
+            kind?: "idea" | "quote" | "memory" | "photo" | "steckbrief" | "person" | "proposal" | "words";
             /** @description Maximum selections for person/proposal polls or words per voter for word portraits (1–500). Word portraits default to 3, other polls to 1; contribution kinds require 1. */
             max_choices?: number;
             name?: string;
@@ -903,6 +908,11 @@ export interface components {
             options?: components["schemas"]["CategoryOption"][];
             /** @description Allow multiple contributions per person independently of kind. Omission defaults from kind on create and preserves the stored flag on edit. */
             repeatable?: boolean;
+            /**
+             * @description Fixed after creation: omitted preserves the stored value, a different value is rejected.
+             * @enum {string}
+             */
+            template?: "" | "standard";
             version: number;
         } & (unknown | unknown);
         CategoryInput: {
@@ -916,7 +926,7 @@ export interface components {
             closes_at?: null | string;
             description: string;
             /** @enum {string} */
-            kind: "idea" | "quote" | "memory" | "photo" | "person" | "proposal" | "words";
+            kind: "idea" | "quote" | "memory" | "photo" | "steckbrief" | "person" | "proposal" | "words";
             /** @description Maximum selections for person/proposal polls or words per voter for word portraits (1–500). Word portraits default to 3, other polls to 1; contribution kinds require 1. */
             max_choices?: number;
             name: string;
@@ -926,6 +936,11 @@ export interface components {
             options?: components["schemas"]["CategoryOption"][];
             /** @description Allow multiple contributions per person independently of kind. Omission defaults from kind on create and preserves the stored flag on edit. */
             repeatable?: boolean;
+            /**
+             * @description Steckbrief collections only; defaults to standard on creation and is fixed afterwards. Other kinds require it empty or omitted.
+             * @enum {string}
+             */
+            template?: "" | "standard";
         };
         CategoryOption: {
             label: string;

@@ -1,0 +1,516 @@
+/* Steckbrief: a small stack of punched school paper. Brand tokens only; no textures or extra fonts. */
+.sb {
+  --sb-rule: color-mix(in srgb, var(--color-line) 75%, white);
+  --sb-margin: color-mix(in srgb, var(--color-accent) 40%, white);
+  --sb-row: 2.1rem;
+  max-width: 46rem;
+}
+
+/* Register tabs sticking out of the stack. */
+.sb-tabs {
+  position: relative;
+  z-index: 7;
+  display: flex;
+  gap: 0.3rem;
+  margin-bottom: -1px;
+  padding-left: 3.25rem;
+}
+.sb-tab {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--color-line);
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  background: var(--color-soft);
+  padding: 0.5rem 0.9rem 0.55rem;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  font-weight: 700;
+  transform: translateY(5px);
+  transition:
+    transform 0.2s,
+    background-color 0.2s;
+}
+.sb-tab:hover {
+  transform: translateY(2px);
+}
+.sb-tab[aria-selected='true'] {
+  background: white;
+  color: var(--color-ink);
+  transform: none;
+}
+.sb-tab-number {
+  display: grid;
+  width: 1.4rem;
+  height: 1.4rem;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-pill);
+  color: var(--color-ink);
+  font-size: 0.75rem;
+}
+.sb-tab[aria-selected='true'] .sb-tab-number {
+  background: var(--color-pop);
+}
+.sb-tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* All sheets share one grid cell, so the stack is as tall as its longest sheet. */
+.sb-stack {
+  display: grid;
+  margin-inline: -0.75rem;
+  padding: 0 0.75rem 1.75rem;
+  overflow-x: clip;
+}
+.sb-sheet {
+  position: relative;
+  grid-area: 1 / 1;
+  min-width: 0;
+  border: 1px solid var(--color-line);
+  border-radius: 4px 14px 14px 4px;
+  background: white;
+  padding: 1.5rem 1.75rem 2.25rem 4rem;
+  box-shadow:
+    0 1px 0 rgb(21 24 31 / 0.04),
+    0 14px 26px -20px rgb(21 24 31 / 0.4);
+  z-index: calc(5 - var(--d, 0));
+  transform: var(--rest, none);
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* Margin line and two punched holes. */
+.sb-sheet::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  left: 2.9rem;
+  width: 1.5px;
+  background: var(--sb-margin);
+}
+.sb-sheet::after {
+  content: '';
+  position: absolute;
+  top: 5rem;
+  left: 1rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+  background: var(--color-paper);
+  box-shadow:
+    inset 0 1px 2px rgb(21 24 31 / 0.18),
+    0 13rem 0 var(--color-paper);
+}
+.sb-sheet[data-depth='1'] {
+  --d: 1;
+  --rest: translate(8px, 9px) rotate(1.2deg);
+}
+.sb-sheet[data-depth='2'] {
+  --d: 2;
+  --rest: translate(-6px, 16px) rotate(-1deg);
+}
+.sb-sheet[data-depth='3'] {
+  --d: 3;
+  --rest: translate(3px, 22px) rotate(0.5deg);
+}
+.sb-sheet[data-move='back'] {
+  animation: sb-to-back 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.sb-sheet[data-move='front'] {
+  animation: sb-to-front 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes sb-to-back {
+  0% {
+    z-index: 6;
+    transform: none;
+  }
+  45% {
+    z-index: 6;
+    transform: translate(64%, -1%) rotate(6deg);
+  }
+  55% {
+    z-index: calc(5 - var(--d, 0));
+    transform: translate(64%, -1%) rotate(6deg);
+  }
+  100% {
+    z-index: calc(5 - var(--d, 0));
+    transform: var(--rest, none);
+  }
+}
+@keyframes sb-to-front {
+  0% {
+    z-index: 0;
+    transform: translate(-6px, 16px) rotate(-1deg);
+  }
+  45% {
+    z-index: 0;
+    transform: translate(64%, -1%) rotate(6deg);
+  }
+  55% {
+    z-index: 6;
+    transform: translate(64%, -1%) rotate(6deg);
+  }
+  100% {
+    z-index: 6;
+    transform: none;
+  }
+}
+
+.sb-sheet-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  color: var(--color-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.sb-sheet-head h2 {
+  color: var(--color-ink);
+  font-size: 1.35rem;
+}
+.sb-sheet-head span {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.sb-masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: -0.25rem 0 1.5rem;
+}
+.sb-title {
+  position: relative;
+  font-size: clamp(2.4rem, 9vw, 4rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+.sb-squiggle {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  height: 0.75rem;
+  fill: none;
+  stroke: var(--color-pop);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+.sb-stamp {
+  width: clamp(4.5rem, 16vw, 6.5rem);
+  flex: none;
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.85;
+  rotate: 11deg;
+}
+.sb-stamp text {
+  fill: var(--color-accent);
+  stroke: none;
+  font: 800 25px var(--font-sans);
+  letter-spacing: 0.02em;
+}
+.sb-doodle {
+  fill: none;
+  stroke: var(--color-ink);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.sb-star {
+  position: absolute;
+  top: 3.4rem;
+  right: 1.5rem;
+  width: 2.4rem;
+  fill: var(--color-pop);
+  rotate: 12deg;
+}
+.sb-swoosh {
+  width: 4.5rem;
+  flex: none;
+  align-self: center;
+}
+
+/* Photos: small prints, one taped and one clipped on. */
+.sb-photos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1.75rem 1.25rem;
+  margin: 2rem 0 2.25rem;
+}
+.sb-photo {
+  position: relative;
+  width: min(100%, 12.5rem);
+  border: 1px solid var(--color-line);
+  background: white;
+  padding: 0.6rem 0.6rem 0.5rem;
+  box-shadow: 0 10px 18px -14px rgb(21 24 31 / 0.55);
+  rotate: var(--tilt);
+  transition: rotate 0.25s;
+}
+.sb:not(.sb-read) .sb-photo:is(:hover, :focus-within) {
+  rotate: 0deg;
+}
+.sb-photo-frame {
+  display: grid;
+  aspect-ratio: 4 / 5;
+  place-items: center;
+  overflow: hidden;
+  background: var(--color-soft);
+}
+label.sb-photo-frame {
+  cursor: pointer;
+}
+.sb-photo:has(input:focus-visible) .sb-photo-frame {
+  outline: 3px solid var(--color-ink);
+  outline-offset: 2px;
+}
+.sb-photo-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.sb-photo-empty {
+  display: grid;
+  justify-items: center;
+  gap: 0.4rem;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+.sb-photo figcaption {
+  padding-top: 0.45rem;
+  text-align: center;
+  font-weight: 800;
+}
+.sb-photo-actions {
+  display: flex;
+  justify-content: center;
+}
+.sb-tape {
+  position: absolute;
+  top: -0.7rem;
+  left: 50%;
+  z-index: 1;
+  width: 5.5rem;
+  height: 1.5rem;
+  border-inline: 1px dashed rgb(21 24 31 / 0.18);
+  background: color-mix(in srgb, var(--color-pop) 72%, transparent);
+  translate: -50%;
+  rotate: -3deg;
+}
+.sb-clip {
+  position: absolute;
+  top: -1.1rem;
+  right: 1.1rem;
+  z-index: 1;
+  width: 2.2rem;
+  height: 2.2rem;
+  color: var(--color-ink);
+  rotate: -38deg;
+}
+
+/* Answers are written on dotted and ruled lines instead of boxed fields. */
+.sb-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.35rem 1.75rem;
+}
+.sb-line,
+.sb-pick {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+.sb-wide {
+  grid-column: 1 / -1;
+}
+.sb-label {
+  display: block;
+  padding: 0;
+  color: var(--color-muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.sb-input,
+.sb-value {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--sb-row);
+  border: 0;
+  border-bottom: 2px dotted color-mix(in srgb, var(--color-ink) 45%, white);
+  border-radius: 0;
+  background: transparent;
+  padding: 0.3rem 0.15rem 0.15rem;
+  color: var(--color-ink);
+  font: 600 1.15rem / 1.4 var(--font-sans);
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.sb-ruled {
+  display: block;
+  width: 100%;
+  min-height: calc(var(--rows, 2) * var(--sb-row));
+  border: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0 calc(var(--sb-row) - 2px),
+    var(--sb-rule) calc(var(--sb-row) - 2px) var(--sb-row)
+  );
+  background-attachment: local;
+  padding: 0 0.15rem;
+  color: var(--color-ink);
+  font: 600 1.1rem / var(--sb-row) var(--font-sans);
+  letter-spacing: -0.01em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  resize: none;
+  field-sizing: content;
+}
+:is(.sb-input, .sb-ruled)::placeholder {
+  color: color-mix(in srgb, var(--color-muted) 55%, white);
+  font-weight: 500;
+  opacity: 1;
+}
+/* Focus reads as a highlighter stroke plus a solid pen line. */
+.sb-input:focus-visible {
+  outline: none;
+  border-bottom: 2px solid var(--color-ink);
+  background: linear-gradient(transparent 45%, color-mix(in srgb, var(--color-pop) 60%, transparent) 45%);
+}
+.sb-ruled:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+.sb :is(.sb-input, .sb-ruled):disabled {
+  opacity: 0.6;
+}
+
+.sb-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+  margin-top: 0.4rem;
+}
+.sb-option {
+  position: relative;
+  padding: 0.3rem 0.85rem;
+  color: var(--color-muted);
+  font: 600 1.05rem / 1.4 var(--font-sans);
+  transition: color 0.15s;
+}
+label.sb-option {
+  cursor: pointer;
+}
+label.sb-option:hover,
+.sb-option[data-on] {
+  color: var(--color-ink);
+}
+.sb-option svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  opacity: 0;
+  scale: 0.85;
+  pointer-events: none;
+  transition:
+    opacity 0.15s,
+    scale 0.2s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.sb-option[data-on] svg {
+  opacity: 1;
+  scale: 1;
+}
+.sb-option:has(input:focus-visible) {
+  outline: 3px solid var(--color-ink);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+.sb-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.sb-flip {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-pop);
+  color: var(--color-ink);
+}
+
+/* Reading view (Redaktion, locked Steckbrief): the sheets lie side by side below each other. */
+.sb-read .sb-stack {
+  gap: 1.25rem;
+  padding-bottom: 0;
+}
+.sb-read .sb-sheet {
+  grid-area: auto;
+}
+
+@media (max-width: 650px) {
+  .sb-tabs {
+    padding-left: 1rem;
+  }
+  .sb-tab:not([aria-selected='true']) .sb-tab-title {
+    display: none;
+  }
+  .sb-sheet {
+    padding: 1.25rem 1rem 1.75rem 2.6rem;
+  }
+  .sb-sheet::before {
+    left: 1.9rem;
+  }
+  .sb-sheet::after {
+    left: 0.55rem;
+    width: 0.75rem;
+    height: 0.75rem;
+  }
+  .sb-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sb-photos {
+    gap: 1.75rem 0.75rem;
+  }
+  .sb-photo {
+    width: min(46%, 11rem);
+    padding: 0.4rem 0.4rem 0.35rem;
+  }
+  .sb-swoosh {
+    display: none;
+  }
+  .sb-star {
+    right: 0.75rem;
+    width: 2rem;
+  }
+}

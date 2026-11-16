@@ -3,6 +3,7 @@ import {
   BookHeart,
   Camera,
   Hash,
+  IdCard,
   Lightbulb,
   ListChecks,
   Quote,
@@ -160,13 +161,14 @@ export function Badge({ status, label }: { status: keyof typeof statusLabels; la
     </span>
   );
 }
-// One class (kind) per Sammlung: one icon and one label for all six, shown wherever the class is named.
+// One class (kind) per Sammlung: one icon and one label for all eight, shown wherever the class is named.
 export type Kind = Category['kind'];
 export const kindIcon: Record<Kind, LucideIcon> = {
   idea: Lightbulb,
   quote: Quote,
   memory: BookHeart,
   photo: Camera,
+  steckbrief: IdCard,
   person: UserRound,
   proposal: ListChecks,
   words: Hash,
@@ -176,11 +178,12 @@ export const kindLabel: Record<Kind, string> = {
   quote: 'Zitate',
   memory: 'Erinnerungen',
   photo: 'Fotos',
+  steckbrief: 'Steckbrief',
   person: 'Personenwahl',
   proposal: 'Vorschlagswahl',
   words: 'Wortwolke',
 };
-export const submissionKinds: Kind[] = ['idea', 'quote', 'memory', 'photo'];
+export const submissionKinds: Kind[] = ['idea', 'quote', 'memory', 'photo', 'steckbrief'];
 export const ballotKinds: Kind[] = ['person', 'proposal', 'words'];
 export const isSubmissionCollection = (kind: Kind) => submissionKinds.includes(kind);
 export const isBallot = (kind: Kind) => ballotKinds.includes(kind);

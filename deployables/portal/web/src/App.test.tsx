@@ -1153,7 +1153,7 @@ describe('admin home', () => {
     const widgets = screen.getByRole('region', { name: 'Sammlungen' });
     const tile = (name: string) => within(widgets).getByText(name).closest('a')!;
     await waitFor(() => expect(tile('Erinnerungen')).toHaveTextContent('1 Sammlung'));
-    expect(within(widgets).getAllByRole('listitem')).toHaveLength(7);
+    expect(within(widgets).getAllByRole('listitem')).toHaveLength(8);
     expect(tile('Erinnerungen')).toHaveTextContent('3 Beiträge');
     expect(tile('Erinnerungen')).toHaveAttribute('href', '/sammlungen?klasse=memory');
     expect(tile('Zitate')).toHaveTextContent('1 Sammlung');
@@ -1261,7 +1261,7 @@ describe('editor home', () => {
       '50',
     );
     const tiles = within(screen.getByRole('region', { name: 'Sammlungen' }));
-    expect(tiles.getAllByRole('listitem')).toHaveLength(7);
+    expect(tiles.getAllByRole('listitem')).toHaveLength(8);
     expect(tiles.getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('1 Sammlung');
     expect(tiles.getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('4 Beiträge');
     expect(tiles.getByRole('link', { name: /Vorschlagswahl/ })).toHaveTextContent('3 Sammlungen');
@@ -1576,14 +1576,23 @@ describe('sammlungen', () => {
     );
   });
 
-  it('offers all seven classes to managers and creates a choice poll', async () => {
+  it('offers all eight classes to managers and creates a choice poll', async () => {
     const calls = mount('/sammlungen?neu', manager);
     const klasse = await screen.findByLabelText('Klasse');
     expect(
       within(klasse)
         .getAllByRole('option')
         .map((o) => o.textContent),
-    ).toEqual(['Ideen', 'Zitate', 'Erinnerungen', 'Fotos', 'Personenwahl', 'Vorschlagswahl', 'Wortwolke']);
+    ).toEqual([
+      'Ideen',
+      'Zitate',
+      'Erinnerungen',
+      'Fotos',
+      'Steckbrief',
+      'Personenwahl',
+      'Vorschlagswahl',
+      'Wortwolke',
+    ]);
     fireEvent.change(klasse, { target: { value: 'proposal' } });
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Neues Motto' } });
     for (const option of ['A', 'B']) {
@@ -1651,14 +1660,23 @@ describe('sammlungen', () => {
     expect(screen.queryByText('Wer darf bearbeiten')).toBeNull();
   });
 
-  it('offers all seven classes to admins and hides option fields for repeatable ones', async () => {
+  it('offers all eight classes to admins and hides option fields for repeatable ones', async () => {
     mount('/sammlungen?neu', admin);
     const klasse = await screen.findByLabelText('Klasse');
     expect(
       within(klasse)
         .getAllByRole('option')
         .map((o) => o.textContent),
-    ).toEqual(['Ideen', 'Zitate', 'Erinnerungen', 'Fotos', 'Personenwahl', 'Vorschlagswahl', 'Wortwolke']);
+    ).toEqual([
+      'Ideen',
+      'Zitate',
+      'Erinnerungen',
+      'Fotos',
+      'Steckbrief',
+      'Personenwahl',
+      'Vorschlagswahl',
+      'Wortwolke',
+    ]);
     expect(screen.queryByLabelText('Antwortoption hinzufügen')).toBeNull();
     fireEvent.change(klasse, { target: { value: 'words' } });
     expect(screen.queryByLabelText('Antwortoption hinzufügen')).toBeNull();

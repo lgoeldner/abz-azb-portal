@@ -624,7 +624,7 @@ describe('Sammlungen person polls', () => {
     expect(repeatable).toBeChecked();
     fireEvent.click(repeatable);
     expect(kind).toHaveValue('photo');
-    expect(kind.querySelectorAll('option')).toHaveLength(7);
+    expect(kind.querySelectorAll('option')).toHaveLength(8);
     fireEvent.click(screen.getByRole('switch', { name: 'Fortlaufend' }));
     fireEvent.click(screen.getByRole('button', { name: '1w' }));
     fireEvent.change(screen.getByLabelText('Uhrzeit'), { target: { value: '12:00' } });

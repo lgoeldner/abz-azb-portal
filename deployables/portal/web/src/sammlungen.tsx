@@ -300,7 +300,14 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
   );
   const [options, setOptions] = useState(sammlung?.options.map((o) => o.label) ?? []);
   const [optionDraft, setOptionDraft] = useState('');
-  const classes = sammlung ? (single ? singleKinds : repeatableKinds) : allKinds;
+  // A Steckbrief keeps its kind; no other collection can become one.
+  const classes: Kind[] = !sammlung
+    ? allKinds
+    : sammlung.kind === 'steckbrief'
+      ? ['steckbrief']
+      : single
+        ? singleKinds
+        : repeatableKinds.filter((k) => k !== 'steckbrief');
   function addOption() {
     const next = optionDraft.trim();
     if (
@@ -372,7 +379,7 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
               name: data.get('name'),
               description: data.get('description'),
               kind,
-              repeatable,
+              repeatable: repeatable && kind !== 'steckbrief',
               ongoing,
               closes_at: deadline,
               allow_self_vote: kind === 'person' && allowSelfVote,
@@ -427,8 +434,8 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
                 className="peer sr-only"
                 type="checkbox"
                 role="switch"
-                checked={repeatable}
-                disabled={!!sammlung || action.busy}
+                checked={repeatable && kind !== 'steckbrief'}
+                disabled={!!sammlung || action.busy || kind === 'steckbrief'}
                 onChange={(event) => {
                   repeatabilityChosen.current = true;
                   setRepeatable(event.target.checked);
@@ -437,9 +444,11 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
               <span className="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full bg-pill transition-colors after:absolute after:left-1 after:size-5 after:rounded-full after:bg-white after:transition-transform peer-checked:bg-ink peer-checked:after:translate-x-5 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink peer-disabled:cursor-not-allowed peer-disabled:opacity-60"></span>
             </label>
             <p className="text-sm text-muted">
-              {repeatable
-                ? 'Mehrere Beiträge oder Abstimmungen pro Person erlauben.'
-                : 'Ein Beitrag oder eine änderbare Stimme pro Person.'}
+              {kind === 'steckbrief'
+                ? 'Jede Person füllt genau einen Steckbrief aus.'
+                : repeatable
+                  ? 'Mehrere Beiträge oder Abstimmungen pro Person erlauben.'
+                  : 'Ein Beitrag oder eine änderbare Stimme pro Person.'}
             </p>
           </div>
           <div className="space-y-2">
@@ -902,7 +911,12 @@ function StudentCollection({ sammlung }: { sammlung: Category }) {
               !own.length ||
               (photoCollection && own.some((entry) => entry.status === 'pending'))) && (
               <Link className={btn.primary} to={`/beitraege/neu?kategorie=${sammlung.id}`}>
-                {photoCollection ? 'Fotos hochladen' : 'Beitrag einreichen'} <Arrow />
+                {photoCollection
+                  ? 'Fotos hochladen'
+                  : sammlung.kind === 'steckbrief'
+                    ? 'Steckbrief ausfüllen'
+                    : 'Beitrag einreichen'}{' '}
+                <Arrow />
               </Link>
             )}
           {sammlung.status === 'closed' && (
