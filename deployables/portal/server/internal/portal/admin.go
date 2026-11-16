@@ -71,13 +71,20 @@ func (a *App) deleteUser(w http.ResponseWriter, r *http.Request) error {
  OR EXISTS(SELECT 1 FROM ballots WHERE user_id=$1)
  OR EXISTS(SELECT 1 FROM ballot_audit WHERE user_id=$1)
  OR EXISTS(SELECT 1 FROM audit_events WHERE actor_id=$1)
- OR EXISTS(SELECT 1 FROM poll_options WHERE user_id=$1)`, id).Scan(&used); e != nil {
+ OR EXISTS(SELECT 1 FROM poll_options WHERE user_id=$1)
+ OR EXISTS(SELECT 1 FROM tickets WHERE created_by=$1 OR assignee_id=$1)
+ OR EXISTS(SELECT 1 FROM ticket_events WHERE actor_id=$1)
+ OR EXISTS(SELECT 1 FROM ticket_reviews WHERE user_id=$1)`, id).Scan(&used); e != nil {
 		return e
 	}
 	if used {
 		return fail(409, "has_content", "Die Person hat bereits Beiträge, Stimmen oder Aktivitäten und kann nicht gelöscht werden. Zugang stattdessen sperren.")
 	}
 	if _, e = tx.Exec(r.Context(), "DELETE FROM sessions WHERE user_id=$1", id); e != nil {
+		return e
+	}
+	// Default-reviewer grants are configuration, not history: they are removed instead of blocking deletion.
+	if _, e = tx.Exec(r.Context(), "DELETE FROM area_reviewers WHERE user_id=$1", id); e != nil {
 		return e
 	}
 	if _, e = tx.Exec(r.Context(), "DELETE FROM users WHERE id=$1", id); e != nil {

@@ -49,6 +49,8 @@ func concretePath(path string) string {
 		"submissions": "20000000-0000-4000-8000-000000000001",
 		"users":       MiaID,
 		"attachments": "50000000-0000-4000-8000-0000000000ff",
+		"tickets":     ticketID(1),
+		"areas":       areaID(1),
 	}
 	parts := strings.Split(path, "/")
 	for i, part := range parts {
@@ -153,6 +155,15 @@ func TestRestrictedOperationsRejectLowerRoles(t *testing.T) {
 		{http.MethodPost, "/api/v1/categories/{id}/status"},
 		{http.MethodGet, "/api/v1/categories/{id}/results"},
 		{http.MethodGet, "/api/v1/categories/{id}/export"},
+		{http.MethodGet, "/api/v1/areas"},
+		{http.MethodGet, "/api/v1/tickets"},
+		{http.MethodPost, "/api/v1/tickets"},
+		{http.MethodGet, "/api/v1/tickets/{id}"},
+		{http.MethodPatch, "/api/v1/tickets/{id}"},
+		{http.MethodPost, "/api/v1/tickets/{id}/status"},
+		{http.MethodPost, "/api/v1/tickets/{id}/claim"},
+		{http.MethodPost, "/api/v1/tickets/{id}/comments"},
+		{http.MethodPut, "/api/v1/tickets/{id}/review"},
 	}
 	adminOnly := []contractOperation{
 		{http.MethodDelete, "/api/v1/categories/{id}"},
@@ -161,6 +172,8 @@ func TestRestrictedOperationsRejectLowerRoles(t *testing.T) {
 		{http.MethodPatch, "/api/v1/admin/users/{id}"},
 		{http.MethodGet, "/api/v1/admin/audit"},
 		{http.MethodGet, "/api/v1/admin/status"},
+		{http.MethodPost, "/api/v1/admin/areas"},
+		{http.MethodPatch, "/api/v1/admin/areas/{id}"},
 	}
 	documented := map[contractOperation]bool{}
 	for _, op := range contractOperations(t) {

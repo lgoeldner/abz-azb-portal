@@ -2107,6 +2107,567 @@
           }
         }
       }
+    },
+    "/api/v1/areas": {
+      "get": {
+        "summary": "List Bereiche with default reviewers (managers and admins)",
+        "operationId": "getAreas",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Area"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/api/v1/admin/areas": {
+      "post": {
+        "summary": "Create a Bereich (admin)",
+        "operationId": "postAdminAreas",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Area"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AreaInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/areas/{id}": {
+      "patch": {
+        "summary": "Rename a Bereich and replace its default reviewers; reviewers must be admitted managers/admins (admin)",
+        "operationId": "patchAdminAreasId",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Area"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AreaEdit"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tickets": {
+      "get": {
+        "summary": "List tickets; finished (done and approved) only with include_finished=true",
+        "operationId": "getTickets",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Ticket"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "area",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "assignee",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "include_finished",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "summary": "Create a ticket; area reviewers/admins may assign anyone, other managers only themselves",
+        "operationId": "postTickets",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ticket"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TicketInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tickets/{id}": {
+      "get": {
+        "summary": "Ticket with its timeline",
+        "operationId": "getTicketsId",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketDetail"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "summary": "Edit ticket fields (assignee, area reviewers, admin); changing area, assignee, size or est_pages starts a new review round",
+        "operationId": "patchTicketsId",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ticket"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TicketEdit"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tickets/{id}/status": {
+      "post": {
+        "summary": "Move a ticket between columns; going back to todo/in_progress starts a new review round",
+        "operationId": "postTicketsIdStatus",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ticket"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TicketStatusInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tickets/{id}/claim": {
+      "post": {
+        "summary": "Claim an unassigned ticket atomically and set it in_progress",
+        "operationId": "postTicketsIdClaim",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ticket"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/tickets/{id}/comments": {
+      "post": {
+        "summary": "Add a markdown comment",
+        "operationId": "postTicketsIdComments",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketEvent"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tickets/{id}/review": {
+      "put": {
+        "summary": "Set own review vote in review/done; only binding votes make a ticket approved",
+        "operationId": "putTicketsIdReview",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ticket"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewInput"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3430,6 +3991,509 @@
         "required": [
           "eligible"
         ]
+      },
+      "UserRef": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "Area": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "reviewers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserRef"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "position",
+          "version",
+          "reviewers"
+        ],
+        "additionalProperties": false
+      },
+      "AreaInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "reviewer_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "reviewer_ids"
+        ],
+        "additionalProperties": false
+      },
+      "AreaEdit": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "reviewer_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "reviewer_ids",
+          "version"
+        ],
+        "additionalProperties": false
+      },
+      "TicketReview": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "changes"
+            ]
+          },
+          "binding": {
+            "type": "boolean"
+          },
+          "self_confirmed": {
+            "type": "boolean"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "user",
+          "verdict",
+          "binding",
+          "self_confirmed",
+          "updated_at"
+        ],
+        "additionalProperties": false
+      },
+      "Ticket": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "integer"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "aufgabe",
+              "artikel"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "area_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "area_name": {
+            "type": "string"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "size": {
+            "type": "string",
+            "enum": [
+              "XS",
+              "S",
+              "M",
+              "L",
+              "XL"
+            ]
+          },
+          "goal": {
+            "type": "string"
+          },
+          "est_pages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "todo",
+              "in_progress",
+              "review",
+              "done"
+            ]
+          },
+          "round": {
+            "type": "integer"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "approved": {
+            "type": "boolean",
+            "description": "True when the current round has a binding approval by a still admitted editor. Derived, never client-written."
+          },
+          "reviews": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TicketReview"
+            },
+            "description": "Votes of the current round."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status_changed_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "type",
+          "title",
+          "body",
+          "area_id",
+          "area_name",
+          "assignee",
+          "created_by",
+          "size",
+          "goal",
+          "est_pages",
+          "status",
+          "round",
+          "version",
+          "approved",
+          "reviews",
+          "created_at",
+          "updated_at",
+          "status_changed_at"
+        ],
+        "additionalProperties": false
+      },
+      "TicketEvent": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "comment",
+              "status",
+              "assign",
+              "review",
+              "edit"
+            ]
+          },
+          "actor": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "body": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "actor",
+          "body",
+          "detail",
+          "created_at"
+        ],
+        "additionalProperties": false
+      },
+      "TicketDetail": {
+        "type": "object",
+        "properties": {
+          "ticket": {
+            "$ref": "#/components/schemas/Ticket"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TicketEvent"
+            }
+          }
+        },
+        "required": [
+          "ticket",
+          "events"
+        ],
+        "additionalProperties": false
+      },
+      "TicketInput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "aufgabe",
+              "artikel"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "area_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "assignee_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "size": {
+            "type": "string",
+            "enum": [
+              "XS",
+              "S",
+              "M",
+              "L",
+              "XL"
+            ]
+          },
+          "goal": {
+            "type": "string"
+          },
+          "est_pages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "body",
+          "area_id",
+          "assignee_id",
+          "size",
+          "goal",
+          "est_pages"
+        ],
+        "additionalProperties": false
+      },
+      "TicketEdit": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "area_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "assignee_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "size": {
+            "type": "string",
+            "enum": [
+              "XS",
+              "S",
+              "M",
+              "L",
+              "XL"
+            ]
+          },
+          "goal": {
+            "type": "string"
+          },
+          "est_pages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "title",
+          "body",
+          "area_id",
+          "assignee_id",
+          "size",
+          "goal",
+          "est_pages",
+          "version"
+        ],
+        "additionalProperties": false
+      },
+      "TicketStatusInput": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "todo",
+              "in_progress",
+              "review",
+              "done"
+            ]
+          }
+        },
+        "required": [
+          "version",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "CommentInput": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "ReviewInput": {
+        "type": "object",
+        "properties": {
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "changes"
+            ]
+          },
+          "round": {
+            "type": "integer",
+            "description": "The ticket round the voter saw; a different current round returns 409 so stale votes never count in a new round."
+          },
+          "self_confirmed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "verdict",
+          "round"
+        ],
+        "additionalProperties": false
       }
     }
   }

@@ -585,6 +585,161 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/areas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Bereiche with default reviewers (managers and admins) */
+        get: operations["getAreas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/areas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a Bereich (admin) */
+        post: operations["postAdminAreas"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/areas/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Rename a Bereich and replace its default reviewers; reviewers must be admitted managers/admins (admin) */
+        patch: operations["patchAdminAreasId"];
+        trace?: never;
+    };
+    "/api/v1/tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List tickets; finished (done and approved) only with include_finished=true */
+        get: operations["getTickets"];
+        put?: never;
+        /** Create a ticket; area reviewers/admins may assign anyone, other managers only themselves */
+        post: operations["postTickets"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tickets/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ticket with its timeline */
+        get: operations["getTicketsId"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Edit ticket fields (assignee, area reviewers, admin); changing area, assignee, size or est_pages starts a new review round */
+        patch: operations["patchTicketsId"];
+        trace?: never;
+    };
+    "/api/v1/tickets/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Move a ticket between columns; going back to todo/in_progress starts a new review round */
+        post: operations["postTicketsIdStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tickets/{id}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Claim an unassigned ticket atomically and set it in_progress */
+        post: operations["postTicketsIdClaim"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tickets/{id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a markdown comment */
+        post: operations["postTicketsIdComments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tickets/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set own review vote in review/done; only binding votes make a ticket approved */
+        put: operations["putTicketsIdReview"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -934,6 +1089,124 @@ export interface components {
         };
         ReminderPreview: {
             eligible: number;
+        };
+        UserRef: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        Area: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            position: number;
+            version: number;
+            reviewers: components["schemas"]["UserRef"][];
+        };
+        AreaInput: {
+            name: string;
+            reviewer_ids: string[];
+        };
+        AreaEdit: {
+            name: string;
+            reviewer_ids: string[];
+            version: number;
+        };
+        TicketReview: {
+            user: components["schemas"]["UserRef"];
+            /** @enum {string} */
+            verdict: "approve" | "changes";
+            binding: boolean;
+            self_confirmed: boolean;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        Ticket: {
+            /** Format: uuid */
+            id: string;
+            number: number;
+            /** @enum {string} */
+            type: "aufgabe" | "artikel";
+            title: string;
+            body: string;
+            /** Format: uuid */
+            area_id: string;
+            area_name: string;
+            assignee: components["schemas"]["UserRef"] | null;
+            created_by: components["schemas"]["UserRef"];
+            /** @enum {string} */
+            size: "XS" | "S" | "M" | "L" | "XL";
+            goal: string;
+            est_pages: number | null;
+            /** @enum {string} */
+            status: "todo" | "in_progress" | "review" | "done";
+            round: number;
+            version: number;
+            /** @description True when the current round has a binding approval by a still admitted editor. Derived, never client-written. */
+            approved: boolean;
+            /** @description Votes of the current round. */
+            reviews: components["schemas"]["TicketReview"][];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            status_changed_at: string;
+        };
+        TicketEvent: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "comment" | "status" | "assign" | "review" | "edit";
+            actor: components["schemas"]["UserRef"];
+            body: string;
+            detail: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        TicketDetail: {
+            ticket: components["schemas"]["Ticket"];
+            events: components["schemas"]["TicketEvent"][];
+        };
+        TicketInput: {
+            /** @enum {string} */
+            type: "aufgabe" | "artikel";
+            title: string;
+            body: string;
+            /** Format: uuid */
+            area_id: string;
+            assignee_id: string | null;
+            /** @enum {string} */
+            size: "XS" | "S" | "M" | "L" | "XL";
+            goal: string;
+            est_pages: number | null;
+        };
+        TicketEdit: {
+            title: string;
+            body: string;
+            /** Format: uuid */
+            area_id: string;
+            assignee_id: string | null;
+            /** @enum {string} */
+            size: "XS" | "S" | "M" | "L" | "XL";
+            goal: string;
+            est_pages: number | null;
+            version: number;
+        };
+        TicketStatusInput: {
+            version: number;
+            /** @enum {string} */
+            status: "todo" | "in_progress" | "review" | "done";
+        };
+        CommentInput: {
+            body: string;
+        };
+        ReviewInput: {
+            /** @enum {string} */
+            verdict: "approve" | "changes";
+            /** @description The ticket round the voter saw; a different current round returns 409 so stale votes never count in a new round. */
+            round: number;
+            self_confirmed?: boolean;
         };
     };
     responses: never;
@@ -2358,6 +2631,389 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReminderPreview"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAreas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Area"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postAdminAreas: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AreaInput"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Area"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    patchAdminAreasId: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AreaEdit"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Area"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getTickets: {
+        parameters: {
+            query?: {
+                area?: string;
+                assignee?: string;
+                type?: string;
+                q?: string;
+                include_finished?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ticket"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postTickets: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TicketInput"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ticket"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getTicketsId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketDetail"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    patchTicketsId: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TicketEdit"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ticket"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postTicketsIdStatus: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TicketStatusInput"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ticket"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postTicketsIdClaim: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ticket"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postTicketsIdComments: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommentInput"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketEvent"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putTicketsIdReview: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewInput"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ticket"];
                 };
             };
             /** @description Error */

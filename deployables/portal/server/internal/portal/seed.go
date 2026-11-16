@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"strings"
 	"time"
@@ -39,6 +40,10 @@ func subjectForSlug(slug string) string {
 
 func pollID(i int) string     { return fmt.Sprintf("30000000-0000-4000-8000-%012d", i) }
 func categoryID(i int) string { return fmt.Sprintf("10000000-0000-4000-8000-%012d", i) }
+
+// areaID addresses the Bereiche created by migration 013 (1 Redaktion ... 8 Orga); ticketID the seeded fixtures.
+func areaID(i int) string   { return fmt.Sprintf("60000000-0000-4000-8000-%012d", i) }
+func ticketID(i int) string { return fmt.Sprintf("70000000-0000-4000-8000-%012d", i) }
 func Seed(ctx context.Context, pool *pgxpool.Pool, environment string) error {
 	return SeedWithIssuer(ctx, pool, environment, "http://localhost:9090")
 }
@@ -131,5 +136,82 @@ func SeedWithIssuer(ctx context.Context, pool *pgxpool.Pool, environment, issuer
 			}
 		}
 	}
+	if e = seedTickets(ctx, tx); e != nil {
+		return e
+	}
 	return tx.Commit(ctx)
+}
+
+// seedTickets adds development fixtures covering all four columns, both types, an approved done ticket and a done
+// ticket still waiting for approval. Existing fixtures are never rewritten; reviewer grants are only added together
+// with the first fixture so later admin changes survive a re-seed.
+func seedTickets(ctx context.Context, tx pgx.Tx) error {
+	for _, area := range []int{1, 4} {
+		if _, e := tx.Exec(ctx, "INSERT INTO area_reviewers(area_id,user_id) SELECT $1::uuid,$2::uuid WHERE NOT EXISTS(SELECT 1 FROM tickets WHERE id=$3::uuid) ON CONFLICT DO NOTHING", areaID(area), ManagerID, ticketID(1)); e != nil {
+			return e
+		}
+	}
+	two, three := 2, 3
+	admin, manager := AdminID, ManagerID
+	fixtures := []struct {
+		Type, Title, Body string
+		Area              int
+		Assignee          *string
+		Creator, Size     string
+		Goal              string
+		Pages             *int
+		Status            string
+		CreatedDays       int
+		ChangedDays       int
+	}{
+		{"aufgabe", "Ideenwand für die Aula auswerten", "Alle Zettel abfotografieren und nach Themen gruppieren.", 2, nil, ManagerID, "S", "Alle Vorschläge sind gesichtet und nach Machbarkeit sortiert.", nil, "todo", 6, 6},
+		{"artikel", "Lehrerzitate: Auswahl und Kürzung", "Aus den eingesendeten Zitaten eine Doppelseite zusammenstellen.", 3, &manager, AdminID, "M", "Zwei Seiten mit den besten Zitaten, geprüft und ohne Namen von Schüler:innen.", &two, "in_progress", 8, 4},
+		{"aufgabe", "Fototermin für die Kursfahrt abstimmen", "Termin mit Kursleitung und Fotograf:in klären.", 4, &admin, ManagerID, "S", "Ein Termin steht fest und alle Beteiligten haben bestätigt.", nil, "in_progress", 5, 3},
+		{"artikel", "Rückblick auf die Oberstufe", "## Entwurf\n\nErster Textentwurf liegt vor, Quellen fehlen noch.", 1, &admin, ManagerID, "M", "Drei Seiten Rückblick, redaktionell abgenommen.", &three, "review", 10, 2},
+		{"aufgabe", "Bildformat für den Druck festlegen", "Auflösung und Farbprofil mit der Druckerei klären.", 4, &admin, ManagerID, "XS", "Das Bildformat ist dokumentiert und der Druckerei bestätigt.", nil, "done", 12, 9},
+		{"aufgabe", "Terminplan für das Redaktionstreffen", "Treffen bis zum Abgabetermin planen.", 8, &manager, AdminID, "XS", "Alle Treffen bis zur Abgabe sind eingetragen.", nil, "done", 9, 7},
+	}
+	// Fotos has Sam as default reviewer, so his vote is binding; Orga has none, so Alex's vote is only advisory.
+	votes := map[int]struct {
+		User    string
+		Binding bool
+	}{5: {ManagerID, true}, 6: {AdminID, false}}
+	for i, f := range fixtures {
+		id := ticketID(i + 1)
+		tag, e := tx.Exec(ctx, `INSERT INTO tickets(id,type,title,body,area_id,assignee_id,created_by,size,goal,est_pages,status,created_at,updated_at,status_changed_at)
+ SELECT $1::uuid,$2::text,$3::text,$4::text,$5::uuid,$6::uuid,$7::uuid,$8::text,$9::text,$10::int,$11::text,now()-$12::int*interval '1 day',now()-$13::int*interval '1 day',now()-$13::int*interval '1 day'
+ WHERE NOT EXISTS(SELECT 1 FROM tickets WHERE id=$1::uuid)`, id, f.Type, f.Title, f.Body, areaID(f.Area), f.Assignee, f.Creator, f.Size, f.Goal, f.Pages, f.Status, f.CreatedDays, f.ChangedDays)
+		if e != nil {
+			return e
+		}
+		if tag.RowsAffected() == 0 {
+			continue
+		}
+		event := func(actor, kind, body, detail string, days, minute int) error {
+			_, e := tx.Exec(ctx, "INSERT INTO ticket_events(id,ticket_id,actor_id,kind,body,detail,created_at) VALUES($1,$2,$3,$4,$5,$6,now()-$7::int*interval '1 day'+$8::int*interval '1 minute')", ID(), id, actor, kind, body, detail, days, minute)
+			return e
+		}
+		if f.Assignee != nil {
+			name := map[string]string{AdminID: "Alex (Administration)", ManagerID: "Sam (Redaktion)"}[*f.Assignee]
+			if e = event(f.Creator, "assign", "", "niemand -> "+name, f.CreatedDays, 1); e != nil {
+				return e
+			}
+		}
+		path := map[string][]string{"in_progress": {"todo->in_progress"}, "review": {"todo->in_progress", "in_progress->review"}, "done": {"todo->in_progress", "in_progress->review", "review->done"}}[f.Status]
+		for j, step := range path {
+			actor := f.Creator
+			if f.Assignee != nil {
+				actor = *f.Assignee
+			}
+			if e = event(actor, "status", "", step, f.ChangedDays, j); e != nil {
+				return e
+			}
+		}
+		if v, ok := votes[i+1]; ok {
+			if _, e = tx.Exec(ctx, "INSERT INTO ticket_reviews(ticket_id,user_id,round,verdict,binding,self_confirmed,updated_at) VALUES($1,$2,1,'approve',$3,false,now()-$4::int*interval '1 day')", id, v.User, v.Binding, f.ChangedDays); e != nil {
+				return e
+			}
+		}
+	}
+	return nil
 }
