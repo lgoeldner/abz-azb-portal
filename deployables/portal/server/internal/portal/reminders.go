@@ -284,7 +284,7 @@ func (m *MailService) dispatchReminder(ctx context.Context, jobID string) error 
 	portalURL := strings.TrimRight(m.config.PublicURL, "/") + "/"
 	category := strings.TrimSpace(d.CategoryName)
 	text := fmt.Sprintf("Die Sammlung %q schließt am %s. Falls du noch teilnehmen möchtest, findest du sie im AbiZeitBetrug-Portal:\n%s", category, date, portalURL)
-	htmlBody := fmt.Sprintf("<p>Die Sammlung <strong>%s</strong> schließt am %s.</p><p>Falls du noch teilnehmen möchtest, findest du sie im <a href=\"%s\">AbiZeitBetrug-Portal</a>.</p>", html.EscapeString(category), html.EscapeString(date), html.EscapeString(portalURL))
+	htmlBody := mailHTML("Eine Sammlung schließt bald", fmt.Sprintf("Die Sammlung <strong>%s</strong> schließt am %s. Falls du noch teilnehmen möchtest, findest du sie im Portal.", html.EscapeString(category), html.EscapeString(date)), "Zum Portal", portalURL, "Du erhältst diese Erinnerung, weil du Erinnerungen aktiviert hast. Du kannst sie im Portal abschalten.")
 	messageID, sendErr := m.send(ctx, mailSendRequest{
 		UserID: d.UserID, Category: &d.Category, JobID: jobID, Kind: "reminder", Recipient: d.Email,
 		Subject: "Erinnerung: eine Sammlung schließt bald",
