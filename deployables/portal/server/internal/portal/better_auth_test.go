@@ -12,12 +12,21 @@ import (
 	"time"
 )
 
+// The browser reaches the portal over HTTPS through a TLS-terminating proxy in both
+// production and the dev Caddy stack, so the portal sees plain HTTP but a https Origin.
 func TestDependencySessionAuthorizationAndCSRF(t *testing.T) {
+	for _, scheme := range []string{"http", "https"} {
+		t.Run(scheme, func(t *testing.T) { dependencySessionScenario(t, scheme) })
+	}
+}
+
+func dependencySessionScenario(t *testing.T, scheme string) {
 	pool := integrationPool(t)
 	ctx := context.Background()
 	if err := Seed(ctx, pool, "development"); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _, _ = pool.Exec(ctx, "UPDATE users SET login_enabled=true WHERE id=$1", MiaID) })
 	var unavailable atomic.Bool
 	var mode atomic.Value
 	mode.Store("better_auth")
@@ -44,7 +53,7 @@ func TestDependencySessionAuthorizationAndCSRF(t *testing.T) {
 	}))
 	defer identity.Close()
 	server := httptest.NewUnstartedServer(nil)
-	cfg := Config{Env: "development", DatabaseURL: "unused", PublicURL: "http://" + server.Listener.Addr().String(), AuthMode: "better_auth", AuthInternalURL: identity.URL, AuthServiceSecret: secret, SessionSecret: secret, UploadDir: t.TempDir(), StaticDir: t.TempDir(), Mail: MailConfig{Provider: "capture", DailyLimit: 300, ReminderLimit: 150, LoginReserve: 150}}
+	cfg := Config{Env: "development", DatabaseURL: "unused", PublicURL: scheme + "://" + server.Listener.Addr().String(), AuthMode: "better_auth", AuthInternalURL: identity.URL, AuthServiceSecret: secret, SessionSecret: secret, UploadDir: t.TempDir(), StaticDir: t.TempDir(), Mail: MailConfig{Provider: "capture", DailyLimit: 300, ReminderLimit: 150, LoginReserve: 150}}
 	cfg.Mail.PublicURL = cfg.PublicURL
 	app, err := New(ctx, cfg, pool)
 	if err != nil {
@@ -59,7 +68,7 @@ func TestDependencySessionAuthorizationAndCSRF(t *testing.T) {
 		req, _ := http.NewRequest(method, server.URL+path, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-CSRF-Token", csrfToken)
-		req.Header.Set("Origin", server.URL)
+		req.Header.Set("Origin", scheme+"://"+server.Listener.Addr().String())
 		req.Header.Set("X-User-Id", AdminID)
 		req.Header.Set("X-User-Role", "admin")
 		res, e := client.Do(req)

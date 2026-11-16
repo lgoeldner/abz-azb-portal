@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Session } from './ui';
 import { EmailAdmin } from './EmailAdmin';
 
@@ -23,9 +24,11 @@ const status = {
 };
 function renderPage(role: 'admin' | 'student' = 'admin') {
   return render(
-    <Session.Provider value={{ ...admin, user: { ...admin.user, role } }}>
-      <EmailAdmin />
-    </Session.Provider>,
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <Session.Provider value={{ ...admin, user: { ...admin.user, role } }}>
+        <EmailAdmin />
+      </Session.Provider>
+    </QueryClientProvider>,
   );
 }
 
@@ -42,6 +45,7 @@ describe('email administration', () => {
     renderPage();
     expect(await screen.findByText('Verfügbar:')).toBeInTheDocument();
     expect(screen.getByText('Verfügbar:').parentElement).toHaveTextContent('—');
+    expect(screen.getByRole('heading', { name: 'Eigene E-Mail-Erinnerungen' })).toBeInTheDocument();
   });
   it('sends policy version, warns on pause all, and distinguishes accepted from delivered', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];

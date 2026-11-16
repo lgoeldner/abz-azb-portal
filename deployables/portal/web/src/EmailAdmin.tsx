@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { components } from './generated/api';
 import { api, json } from './api';
 import { Failure, PageHead, btn, field, useSession } from './ui';
+import { Preference as ReminderPreference } from './ReminderSettings';
 
 type Policy = components['schemas']['EmailPolicy'];
 type Status = components['schemas']['EmailStatus'];
@@ -212,6 +213,10 @@ export function EmailAdmin() {
           </button>
           {eligible !== null && <span role="status">{eligible} berechtigte Empfänger</span>}
         </div>
+      </section>
+      <section className="mb-5 rounded-ui bg-white p-5">
+        <h2 className="text-xl font-bold">Eigene E-Mail-Erinnerungen</h2>
+        <ReminderPreference />
       </section>
       <section className="rounded-ui bg-white p-5">
         <h2 className="text-xl font-bold">Versandprotokoll</h2>

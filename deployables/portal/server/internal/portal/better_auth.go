@@ -87,8 +87,9 @@ func (a *App) dependencyProtected(next http.Handler) http.Handler {
 			}
 		}
 		r = r.WithContext(context.WithValue(r.Context(), contextKey{}, requestUser{User: user}))
-		// The trusted proxy terminates HTTPS; only local development is plaintext.
-		if a.Config.Env == "development" {
+		// The trusted proxy terminates HTTPS, so the library must only expect plain HTTP
+		// (and an http Origin) when the public URL itself is http, i.e. host development.
+		if public, e := url.Parse(a.Config.PublicURL); a.Config.Env == "development" && e == nil && public.Scheme == "http" {
 			r = csrf.PlaintextHTTPRequest(r)
 		}
 		guarded.ServeHTTP(w, r)

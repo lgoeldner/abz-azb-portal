@@ -399,7 +399,8 @@ function Layout() {
           </nav>
           {user.role === 'admin' && view[0] === 'redaktion' && <AdminNav onNavigate={() => setMenu(false)} />}
           <div className="flex flex-none flex-col gap-3 bg-pill px-3 py-4">
-            <ReminderSettings />
+            {/* Admins find this under Verwaltung → E-Mail. */}
+            {user.role !== 'admin' && <ReminderSettings />}
             {editorial(user) && <ViewSwitch onSwitch={() => setMenu(false)} />}
             <div className="flex items-center gap-3 px-1">
               <span

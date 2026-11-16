@@ -11,7 +11,7 @@ export function ReminderSettings() {
     </details>
   );
 }
-function Preference() {
+export function Preference() {
   const preference = useData<{ enabled: boolean }>('/me/email-reminders');
   const action = useAction();
   if (preference.isPending) return <Loading />;
