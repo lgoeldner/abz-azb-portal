@@ -708,6 +708,7 @@ function StudentNav() {
 }
 
 function EditorNav() {
+  const { user } = useSession();
   const categories = useData<Category[]>('/categories');
   const submissions = useData<Submission[]>('/submissions');
   const groups: [Category['status'], string, string][] = [
@@ -715,7 +716,9 @@ function EditorNav() {
     ['draft', 'Entwürfe', 'nav-sammlung-entwuerfe'],
     ['closed', 'Beendet', 'nav-sammlung-beendet'],
   ];
-  const ballots = (categories.data ?? []).filter((c) => isBallot(c.kind));
+  // Sidebar lists only assigned categories; "Alle Sammlungen"/"Alle Beiträge" stay the way to the rest.
+  const writable = (categories.data ?? []).filter((c) => canEdit(user, c.id));
+  const ballots = writable.filter((c) => isBallot(c.kind));
   return (
     <>
       <NavItem to="/tickets" icon={SquareKanban}>
@@ -727,7 +730,7 @@ function EditorNav() {
         ) : categories.error ? (
           <p className={quiet}>Sammlungen nicht erreichbar.</p>
         ) : ballots.length === 0 ? (
-          <p className={quiet}>Noch keine Wahl angelegt.</p>
+          <p className={quiet}>Keine Wahl zugewiesen.</p>
         ) : (
           groups.map(([status, label, id]) => {
             const items = ballots.filter((c) => c.status === status).sort(newestOpened);
@@ -763,8 +766,8 @@ function EditorNav() {
         {categories.isPending ? (
           <p className={quiet}>Einen Moment …</p>
         ) : categories.error ? null : (
-          categories.data
-            ?.filter((c) => isSubmissionCollection(c.kind))
+          writable
+            .filter((c) => isSubmissionCollection(c.kind))
             .map((c) => {
               const mine = (submissions.data ?? []).filter((s) => s.category_id === c.id);
               return (

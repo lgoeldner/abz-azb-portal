@@ -927,7 +927,8 @@ describe('navigation by view', () => {
       expect(tiles.getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent(/3\s*Beiträge/);
       expect(tiles.getByRole('link', { name: /Zitate/ })).toHaveTextContent(/0\s*Beiträge/);
     }
-    expect(within(aside).getByRole('link', { name: /Abimotto/ })).toHaveTextContent('34 Stimmen');
+    if (role === 'admin') expect(within(aside).getByRole('link', { name: /Abimotto/ })).toHaveTextContent('34 Stimmen');
+    else expect(within(aside).queryByRole('link', { name: /Abimotto/ })).toBeNull();
     expect(within(aside).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('3 Beiträge');
     expect(
       within(within(aside).getByRole('group', { name: 'Beiträge' })).getByRole('link', { name: /Erinnerungen/ }),
@@ -1274,6 +1275,15 @@ describe('editor home', () => {
     expect(fetchMock.mock.calls.some(([path]) => String(path).includes('/admin/'))).toBe(false);
   });
 
+  it('lists only writable Sammlungen in the sidebar', async () => {
+    mountEditor();
+    const nav = within(await screen.findByRole('complementary'));
+    expect(await nav.findByRole('link', { name: /Laufende Wahl/ })).toHaveAttribute('href', '/sammlungen/open');
+    expect(nav.getByRole('link', { name: /Erinnerungen/ })).toHaveAttribute('href', '/sammlungen/memory');
+    expect(nav.queryByText('Fremde Wahl')).toBeNull();
+    expect(nav.queryByText('Fremde Erinnerungen')).toBeNull();
+  });
+
   it('shows assignment empty states while keeping all readable collections accessible', async () => {
     mountEditor([]);
     const assigned = await screen.findByRole('region', { name: 'Deine Sammlungen' });
@@ -1513,7 +1523,7 @@ describe('sammlungen', () => {
   });
 
   it('keeps Redaktion active when following a collection from a direct editorial link', async () => {
-    mount('/redaktion', manager, all, 'schueler');
+    mount('/redaktion', { ...manager, category_ids: ['memory'] }, all, 'schueler');
     await screen.findByRole('heading', { level: 1, name: 'Beiträge' });
     const aside = screen.getByRole('complementary', { name: 'Seitenleiste' });
     fireEvent.click(within(aside).getByRole('link', { name: /Erinnerungen/ }));
