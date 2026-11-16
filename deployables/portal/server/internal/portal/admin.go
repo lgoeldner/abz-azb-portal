@@ -12,7 +12,7 @@ func (a *App) users(w http.ResponseWriter, r *http.Request) error {
 	if current(r).Role != "admin" {
 		return forbidden()
 	}
-	rows, e := a.DB.Query(r.Context(), "SELECT "+userCols+" FROM users ORDER BY name,id")
+	rows, e := a.DB.Query(r.Context(), "SELECT "+userCols+" FROM users WHERE erased_at IS NULL ORDER BY name,id")
 	if e != nil {
 		return e
 	}

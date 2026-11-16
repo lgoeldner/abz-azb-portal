@@ -2,6 +2,7 @@ import type { components } from './generated/api';
 
 export type User = components['schemas']['User'];
 export type Me = components['schemas']['Me'];
+export type Consent = components['schemas']['Consent'];
 export type Category = components['schemas']['Category'];
 export type Attachment = components['schemas']['Attachment'];
 export type Submission = components['schemas']['Submission'];

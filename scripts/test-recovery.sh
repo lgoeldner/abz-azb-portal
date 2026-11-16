@@ -84,6 +84,8 @@ dc run --rm -i -v "$uploads_volume:/uploads" alpine:3.22 sh -c \
 dc exec -i "$pg" psql -X -v ON_ERROR_STOP=1 -U portal -d portal \
   -v attachment_id="$attachment_id" -v original_hash="$original_hash" \
   -v original_key="$original_key" -v preview_key="$preview_key" <<'SQL'
+-- Consent proof must survive recovery, or every restored user would be asked again without a record.
+INSERT INTO consents(user_id,version,accepted_at) VALUES ('00000000-0000-4000-8000-000000000003','recovery-fixture','2026-11-01T10:00:00Z');
 -- Independent repeatability and a filled one-off photo slot must survive recovery.
 INSERT INTO categories(id,name,description,kind,repeatable,ongoing,closes_at)
 VALUES ('70000000-0000-4000-8000-000000000001','Ein Foto pro Person','Recovery fixture','photo',false,false,now()+interval '30 days');
@@ -242,6 +244,7 @@ check_count() {
   fi
 }
 check_count 'legacy Go sessions' 'SELECT count(*) FROM sessions' 0
+check_count 'consent proof' "SELECT count(*) FROM consents WHERE user_id='00000000-0000-4000-8000-000000000003' AND version='recovery-fixture' AND accepted_at='2026-11-01T10:00:00Z'" 1
 check_count 'Better Auth sessions' 'SELECT count(*) FROM auth_sessions' 0
 check_count 'Better Auth verification tokens' 'SELECT count(*) FROM auth_verifications' 0
 check_count 'preserved provider account' "SELECT count(*) FROM auth_accounts WHERE id='90000000-0000-4000-8000-000000000012' AND access_token='fixture-token'" 1

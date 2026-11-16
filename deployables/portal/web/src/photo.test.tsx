@@ -91,7 +91,7 @@ function revision(overrides: Partial<Revision> = {}): Revision {
 
 function renderRoutes(path: string, user: Me['user'], view: View, routes: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const me: Me = { user, csrf_token: 'csrf' };
+  const me: Me = { user, consent_required: false, csrf_token: 'csrf' };
   const workspaceView: [View, (next: View) => void] = [view, vi.fn()];
   return render(
     <QueryClientProvider client={client}>

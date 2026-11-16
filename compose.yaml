@@ -1,7 +1,13 @@
 name: abizeitung-portal
 
+# Docker's default json-file driver never rotates; cap each container's logs.
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
 services:
   db:
+    logging: *logging
     image: postgres:18-alpine
     restart: unless-stopped
     environment:
@@ -18,6 +24,7 @@ services:
     networks: [internal]
 
   portal:
+    logging: *logging
     build:
       context: ./deployables/portal
     image: abizeitung-portal:${APP_VERSION:-local}
@@ -34,6 +41,7 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET}
       UPLOAD_DIR: /var/lib/portal/uploads
       STATIC_DIR: /app/static
+      LEGAL_DIR: /legal
       BACKUP_STATUS_FILE: /var/lib/portal/status/status.json
       MAIL_PROVIDER: ${MAIL_PROVIDER:-brevo}
       BREVO_API_KEY: ${BREVO_API_KEY:-}
@@ -48,6 +56,8 @@ services:
     volumes:
       - uploads:/var/lib/portal/uploads
       - backup_status:/var/lib/portal/status:ro
+      # Operator-supplied impressum.html and datenschutz.html; the portal refuses to start without them.
+      - ./legal:/legal:ro
     depends_on:
       db: { condition: service_healthy }
       auth: { condition: service_healthy }
@@ -61,6 +71,7 @@ services:
     networks: [internal, egress]
 
   auth:
+    logging: *logging
     build:
       context: ./deployables/auth
     image: abizeitung-auth:${APP_VERSION:-local}
@@ -86,6 +97,7 @@ services:
     networks: [internal, egress]
 
   reminders:
+    logging: *logging
     image: abizeitung-portal:${APP_VERSION:-local}
     build:
       context: ./deployables/portal
@@ -120,6 +132,7 @@ services:
     networks: [internal, egress]
 
   caddy:
+    logging: *logging
     image: caddy:2.10-alpine
     restart: unless-stopped
     profiles: [production]
@@ -139,6 +152,7 @@ services:
     networks: [internal, egress]
 
   backup:
+    logging: *logging
     build:
       context: ./deployables/backup
     image: abizeitung-portal-backup:${APP_VERSION:-local}

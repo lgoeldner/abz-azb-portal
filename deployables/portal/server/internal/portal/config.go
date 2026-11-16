@@ -14,6 +14,7 @@ type Config struct {
 	DatabaseURL       string
 	PublicURL         string
 	UploadDir         string
+	LegalDir          string
 	StaticDir         string
 	AuthMode          string
 	Issuer            string
@@ -39,7 +40,7 @@ func LoadConfig() (Config, error) { return LoadConfigForCommand("serve") }
 
 // Maintenance commands require database configuration, never a live identity/mail provider.
 func LoadConfigForCommand(command string) (Config, error) {
-	c := Config{Env: env("APP_ENV", "development"), Addr: env("ADDR", ":8080"), DatabaseURL: os.Getenv("DATABASE_URL"), PublicURL: env("PUBLIC_URL", "http://localhost:8080"), UploadDir: env("UPLOAD_DIR", "./data/uploads"), StaticDir: env("STATIC_DIR", "../web/dist"), AuthMode: env("AUTH_MODE", "mock"), Issuer: os.Getenv("OIDC_ISSUER"), BackchannelURL: os.Getenv("OIDC_BACKCHANNEL_URL"), ClientID: os.Getenv("OIDC_CLIENT_ID"), ClientSecret: os.Getenv("OIDC_CLIENT_SECRET"), SessionSecret: os.Getenv("SESSION_SECRET"), BootstrapSubject: os.Getenv("BOOTSTRAP_ADMIN_SUBJECT"), BackupStatusFile: os.Getenv("BACKUP_STATUS_FILE"), AuthInternalURL: os.Getenv("AUTH_INTERNAL_URL"), AuthServiceSecret: os.Getenv("AUTH_SERVICE_SECRET"), TrustedProxyCIDRs: os.Getenv("TRUSTED_PROXY_CIDRS")}
+	c := Config{Env: env("APP_ENV", "development"), Addr: env("ADDR", ":8080"), DatabaseURL: os.Getenv("DATABASE_URL"), PublicURL: env("PUBLIC_URL", "http://localhost:8080"), UploadDir: env("UPLOAD_DIR", "./data/uploads"), LegalDir: env("LEGAL_DIR", "./legal"), StaticDir: env("STATIC_DIR", "../web/dist"), AuthMode: env("AUTH_MODE", "mock"), Issuer: os.Getenv("OIDC_ISSUER"), BackchannelURL: os.Getenv("OIDC_BACKCHANNEL_URL"), ClientID: os.Getenv("OIDC_CLIENT_ID"), ClientSecret: os.Getenv("OIDC_CLIENT_SECRET"), SessionSecret: os.Getenv("SESSION_SECRET"), BootstrapSubject: os.Getenv("BOOTSTRAP_ADMIN_SUBJECT"), BackupStatusFile: os.Getenv("BACKUP_STATUS_FILE"), AuthInternalURL: os.Getenv("AUTH_INTERNAL_URL"), AuthServiceSecret: os.Getenv("AUTH_SERVICE_SECRET"), TrustedProxyCIDRs: os.Getenv("TRUSTED_PROXY_CIDRS")}
 	if c.Env == "development" && c.AuthMode == "mock" && c.AuthInternalURL == "" {
 		c.Issuer = env("OIDC_ISSUER", "http://localhost:9090")
 		c.ClientID = env("OIDC_CLIENT_ID", "portal-dev")

@@ -143,6 +143,13 @@ func New(ctx context.Context, c Config, db *pgxpool.Pool) (*App, error) {
 	if e := os.MkdirAll(c.UploadDir, 0700); e != nil {
 		return nil, e
 	}
+	if c.Env == "production" {
+		for _, name := range legalPages {
+			if _, e := os.Stat(filepath.Join(c.LegalDir, name+".html")); e != nil {
+				return nil, errors.New("LEGAL_DIR must contain impressum.html and datenschutz.html in production")
+			}
+		}
+	}
 	a := &App{DB: db, Config: c, Mail: NewMailService(db, c.Mail), imageSlots: make(chan struct{}, 2)}
 	if e := a.setupAuth(ctx); e != nil {
 		return nil, e
@@ -237,7 +244,10 @@ func (a *App) routes() {
 		api.HandleFunc(rt.Pattern, a.endpoint(rt.Handler))
 	}
 	api.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { respondError(w, missing()) })
-	m.Handle("/api/", a.protected(api))
+	m.Handle("/api/", a.protected(a.consentGate(api)))
+	for _, name := range legalPages {
+		m.HandleFunc("GET /"+name, a.legalPage(name))
+	}
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/dev/") || r.Method != "GET" && r.Method != "HEAD" {
 			respondError(w, missing())
@@ -255,7 +265,11 @@ func (a *App) routes() {
 
 func (a *App) me(w http.ResponseWriter, r *http.Request) error {
 	u := r.Context().Value(contextKey{}).(requestUser)
-	jsonOut(w, 200, Me{User: u.User, CSRFToken: u.CSRF})
+	ok, e := consented(r.Context(), a.DB, u.User.ID)
+	if e != nil {
+		return e
+	}
+	jsonOut(w, 200, Me{User: u.User, CSRFToken: u.CSRF, ConsentRequired: !ok})
 	return nil
 }
 
@@ -263,6 +277,8 @@ func (a *App) me(w http.ResponseWriter, r *http.Request) error {
 func (a *App) apiRoutes() []apiRoute {
 	return []apiRoute{
 		{"GET /api/v1/me", a.me, opDoc{Summary: "Current user and CSRF token", Res: Me{}}},
+		{"GET /api/v1/me/consent", a.consent, opDoc{Summary: "Current consent text and version, with own acceptance time; readable before consenting", Res: Consent{}}},
+		{"POST /api/v1/me/consent", a.consent, opDoc{Summary: "Accept the current consent version (409 consent_outdated for any other version); until then other API routes return 403 consent_required", Req: ConsentInput{}, Res: Consent{}}},
 		{"GET /api/v1/me/ballots", a.myBallots, opDoc{Summary: "Current viewer’s own poll submissions, one per current ballot entry including repeatable and hidden collections; never named history or other voters", Res: []MyBallot{}}},
 		{"GET /api/v1/categories", a.listCategories, opDoc{Summary: "List collections (students: no drafts; ballot_count and participation editors only)", Res: []Category{}}},
 		{"POST /api/v1/categories", a.writeCategory, opDoc{Summary: "Create collection of any kind (admins and managers; manager creator receives a category grant atomically)", Req: CategoryInput{}, Res: Category{}, Status: 201}},
@@ -315,5 +331,20 @@ func (a *App) apiRoutes() []apiRoute {
 		{"POST /api/v1/tickets/{id}/claim", a.claimTicket, opDoc{Summary: "Claim an unassigned ticket atomically and set it in_progress", Res: Ticket{}}},
 		{"POST /api/v1/tickets/{id}/comments", a.commentTicket, opDoc{Summary: "Add a markdown comment", Req: CommentInput{}, Res: TicketEvent{}, Status: 201}},
 		{"PUT /api/v1/tickets/{id}/review", a.reviewTicket, opDoc{Summary: "Set own review vote in review/done; only binding votes make a ticket approved", Req: ReviewInput{}, Res: Ticket{}}},
+	}
+}
+
+// legalPages are operator-supplied HTML files in LEGAL_DIR (<name>.html), public without login. Production refuses to start without them.
+var legalPages = []string{"impressum", "datenschutz"}
+
+func (a *App) legalPage(name string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		p := filepath.Join(a.Config.LegalDir, name+".html")
+		if _, e := os.Stat(p); e != nil {
+			http.Error(w, "Noch nicht hinterlegt.", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-cache")
+		http.ServeFile(w, r, p)
 	}
 }

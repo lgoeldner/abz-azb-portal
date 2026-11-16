@@ -123,6 +123,19 @@ type StatusInput struct {
 type Me struct {
 	User      User   `json:"user"`
 	CSRFToken string `json:"csrf_token"`
+	// ConsentRequired is true until the user accepted the current consent version; other API routes return 403 consent_required meanwhile.
+	ConsentRequired bool `json:"consent_required"`
+}
+
+type Consent struct {
+	Version    string     `json:"version"`
+	Draft      bool       `json:"draft"`
+	Text       []string   `json:"text"`
+	AcceptedAt *time.Time `json:"accepted_at"`
+}
+
+type ConsentInput struct {
+	Version string `json:"version"`
 }
 
 type SystemStatus struct {

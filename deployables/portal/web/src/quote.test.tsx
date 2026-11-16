@@ -42,7 +42,7 @@ function category(id: string, kind: Category['kind'], name: string): Category {
 
 function renderNewContribution(path: string, withNavigation = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const me: Me = { user: student, csrf_token: 'csrf' };
+  const me: Me = { user: student, consent_required: false, csrf_token: 'csrf' };
   const workspaceView: [View, (next: View) => void] = ['schueler', vi.fn()];
   return render(
     <QueryClientProvider client={client}>

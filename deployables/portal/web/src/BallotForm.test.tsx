@@ -75,7 +75,7 @@ function renderForm({
   }
   const view = render(
     <QueryClientProvider client={client}>
-      <Session.Provider value={{ user, csrf_token: 'csrf' }}>
+      <Session.Provider value={{ user, consent_required: false, csrf_token: 'csrf' }}>
         <MemoryRouter>
           <ControlledForm />
         </MemoryRouter>

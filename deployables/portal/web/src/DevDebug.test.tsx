@@ -52,6 +52,7 @@ it('keeps contribution debug metadata outside its navigation link and omits priv
             category_ids: [],
             created_at: '2026-10-01T00:00:00Z',
           },
+          consent_required: false,
           csrf_token: 'secret',
         }}
       >

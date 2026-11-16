@@ -21,7 +21,12 @@ test.beforeEach(async ({ page }) => {
   await page.route('https://fonts.googleapis.com/**', (route) => route.abort());
   await page.route('**/api/v1/**', (route) => {
     const path = new URL(route.request().url()).pathname.replace('/api/v1', '');
-    const data = path === '/me' ? { user: admin, csrf_token: 'csrf' } : path === '/admin/users' ? [admin, guest] : [];
+    const data =
+      path === '/me'
+        ? { user: admin, consent_required: false, csrf_token: 'csrf' }
+        : path === '/admin/users'
+          ? [admin, guest]
+          : [];
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(data) });
   });
 });
@@ -68,7 +73,7 @@ test('Redaktion creates every collection kind in the shared form without admin r
     if (path.startsWith('/admin/')) adminRequests.push(path);
     let data: unknown = [];
     let status = 200;
-    if (path === '/me') data = { user: manager, csrf_token: 'csrf' };
+    if (path === '/me') data = { user: manager, consent_required: false, csrf_token: 'csrf' };
     if (path === '/categories' && request.method() === 'POST') {
       const body = request.postDataJSON();
       writes.push(body);

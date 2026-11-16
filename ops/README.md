@@ -31,3 +31,7 @@ Go workspace: `go.work` at the repository root joins `deployables/portal/server`
 ## Better Auth and Brevo
 
 See [auth and email operations](../docs/auth-email-operations.md) for provisioning, sender/tracking verification, quota controls and reminder rollout. Publish only Caddy; internal service paths are blocked there. Restore must run with portal/worker access stopped and revokes sessions/links while preserving uncertain send reservations and delivery audit.
+
+## Legal pages and erasure requests
+
+Put `impressum.html` and `datenschutz.html` into `./legal` next to `compose.yaml` before starting production; the portal refuses to start without them. Handle a deletion request with one command: `docker compose run --rm portal erase --id <user-uuid>` shows what would be removed, adding `--apply` erases it. It waits for a running backup to finish. Backups keep the data until their snapshots expire; see PRIVACY.md.

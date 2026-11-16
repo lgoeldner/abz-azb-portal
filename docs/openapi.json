@@ -684,6 +684,49 @@
         ],
         "type": "object"
       },
+      "Consent": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_at": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "draft": {
+            "type": "boolean"
+          },
+          "text": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "draft",
+          "text",
+          "accepted_at"
+        ],
+        "type": "object"
+      },
+      "ConsentInput": {
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "type": "object"
+      },
       "Correction": {
         "additionalProperties": false,
         "properties": {
@@ -1060,6 +1103,9 @@
       "Me": {
         "additionalProperties": false,
         "properties": {
+          "consent_required": {
+            "type": "boolean"
+          },
           "csrf_token": {
             "type": "string"
           },
@@ -1069,7 +1115,8 @@
         },
         "required": [
           "user",
-          "csrf_token"
+          "csrf_token",
+          "consent_required"
         ],
         "type": "object"
       },
@@ -2077,6 +2124,80 @@
           }
         },
         "summary": "Current user and CSRF token"
+      }
+    },
+    "/api/v1/me/consent": {
+      "get": {
+        "operationId": "getMeConsent",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Consent"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Current consent text and version, with own acceptance time; readable before consenting"
+      },
+      "post": {
+        "operationId": "postMeConsent",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsentInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Consent"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Accept the current consent version (409 consent_outdated for any other version); until then other API routes return 403 consent_required"
       }
     },
     "/api/v1/me/ballots": {

@@ -6,6 +6,7 @@ import { AreasAdmin } from './AreasAdmin';
 import { Session } from './ui';
 
 const admin: Me = {
+  consent_required: false,
   csrf_token: 'x',
   user: {
     id: 'ada',

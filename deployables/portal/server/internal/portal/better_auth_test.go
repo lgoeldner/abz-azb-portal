@@ -100,6 +100,20 @@ func dependencySessionScenario(t *testing.T, scheme string) {
 	if res = call("PATCH", "/api/v1/me/email-reminders", `{"enabled":false}`, ""); res.StatusCode != 403 {
 		t.Fatalf("missing CSRF: %d", res.StatusCode)
 	}
+	// The production session path enforces consent too, and accepting it still needs CSRF.
+	if _, err = pool.Exec(ctx, "DELETE FROM consents WHERE user_id=$1", MiaID); err != nil {
+		t.Fatal(err)
+	}
+	if res = call("PATCH", "/api/v1/me/email-reminders", `{"enabled":false}`, me.CSRF); res.StatusCode != 403 {
+		t.Fatalf("unconsented write: %d", res.StatusCode)
+	}
+	consentBody := `{"version":"` + ConsentVersion + `"}`
+	if res = call("POST", "/api/v1/me/consent", consentBody, ""); res.StatusCode != 403 {
+		t.Fatalf("consent without CSRF: %d", res.StatusCode)
+	}
+	if res = call("POST", "/api/v1/me/consent", consentBody, me.CSRF); res.StatusCode != 200 {
+		t.Fatalf("consent: %d", res.StatusCode)
+	}
 	if res = call("PATCH", "/api/v1/me/email-reminders", `{"enabled":false}`, me.CSRF); res.StatusCode != 200 {
 		t.Fatalf("valid CSRF: %d", res.StatusCode)
 	}

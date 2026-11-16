@@ -71,7 +71,7 @@ async function useFixtures(page: Page, role: 'student' | 'manager' | 'admin') {
     const url = new URL(route.request().url());
     const path = url.pathname.replace('/api/v1', '');
     let data: unknown = [];
-    if (path === '/me') data = { user, csrf_token: 'local-fixture-token' };
+    if (path === '/me') data = { user, consent_required: false, csrf_token: 'local-fixture-token' };
     else if (path === '/categories') data = [category, role === 'student' ? poll : { ...poll, ballot_count: 3 }];
     else if (path === '/submissions' || path.startsWith('/submissions?')) data = [submission];
     else if (path === '/submissions/long-story') data = submission;

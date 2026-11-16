@@ -14,6 +14,7 @@ const admin = {
     category_ids: [],
     created_at: '2026-10-29T00:00:00Z',
   },
+  consent_required: false,
   csrf_token: 'x',
 };
 const status = {

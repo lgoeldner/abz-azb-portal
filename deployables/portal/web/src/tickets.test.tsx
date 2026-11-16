@@ -120,7 +120,7 @@ function renderAt(path: string, user: Me['user']) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <Session.Provider value={{ user, csrf_token: 'csrf' }}>
+      <Session.Provider value={{ user, consent_required: false, csrf_token: 'csrf' }}>
         <MemoryRouter initialEntries={[path]}>
           <Routes>
             <Route path="/tickets" element={<Board />} />

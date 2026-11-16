@@ -47,6 +47,7 @@ function renderStack(items: Category[], client = new QueryClient({ defaultOption
               category_ids: [],
               created_at: '2026-10-01T00:00:00Z',
             },
+            consent_required: false,
             csrf_token: 'csrf',
           }}
         >

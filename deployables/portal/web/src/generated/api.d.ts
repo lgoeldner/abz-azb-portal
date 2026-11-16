@@ -16,6 +16,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current consent text and version, with own acceptance time; readable before consenting */
+        get: operations["getMeConsent"];
+        put?: never;
+        /** Accept the current consent version (409 consent_outdated for any other version); until then other API routes return 403 consent_required */
+        post: operations["postMeConsent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/ballots": {
         parameters: {
             query?: never;
@@ -921,6 +939,16 @@ export interface components {
         CommentInput: {
             body: string;
         };
+        Consent: {
+            /** Format: date-time */
+            accepted_at: null | string;
+            draft: boolean;
+            text: string[];
+            version: string;
+        };
+        ConsentInput: {
+            version: string;
+        };
         Correction: {
             author_name: string;
             body: string;
@@ -1008,6 +1036,7 @@ export interface components {
             message: string;
         };
         Me: {
+            consent_required: boolean;
             csrf_token: string;
             user: components["schemas"]["User"];
         };
@@ -1285,6 +1314,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Me"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getMeConsent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Consent"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postMeConsent: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsentInput"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Consent"];
                 };
             };
             /** @description Error */

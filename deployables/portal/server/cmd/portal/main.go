@@ -78,11 +78,13 @@ func run() error {
 		return portal.SeedWithIssuer(ctx, pool, c.Env, c.Issuer)
 	case "users":
 		return portal.RunUserCommand(ctx, pool, os.Args[2:], os.Stdout)
+	case "erase":
+		return portal.RunEraseCommand(ctx, pool, c, os.Args[2:], os.Stdout)
 	case "reminders":
 		return portal.RunReminderCommand(ctx, pool, c.Mail, os.Args[2:], os.Stdout)
 	case "serve":
 	default:
-		return errors.New("usage: portal [serve|migrate|seed|users|reminders]")
+		return errors.New("usage: portal [serve|migrate|seed|users|reminders|erase]")
 	}
 	app, e := portal.New(ctx, c, pool)
 	if e != nil {

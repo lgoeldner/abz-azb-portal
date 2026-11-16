@@ -4,7 +4,7 @@
 	@internal path /internal /internal/*
 	respond @internal 404
 
-	@go path /api /api/* /auth /auth/* /healthz /readyz
+	@go path /api /api/* /auth /auth/* /healthz /readyz /impressum /datenschutz
 	handle @go {
 		reverse_proxy portal:8080 {
 		header_up X-Portal-Proxy-Token {$AUTH_SERVICE_SECRET}

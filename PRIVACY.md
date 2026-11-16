@@ -63,11 +63,14 @@ All texts are needed before go-live and must be reachable from the login page wi
 - **DSFA:** probably not required at this scale; write one paragraph saying why.
 - **Data protection officer:** not required below 20 people regularly processing data (§ 38 BDSG).
 
-## 5. Known gaps in the code
+## 5. Implemented, and what is still open
 
-- **Erasure (Art. 17 DSGVO):** `DELETE /api/v1/admin/users/{id}` refuses anyone with submissions, votes or activity (`has_content`). Uploads are immutable and not physically removed in v1 (see `ops/README.md`). A real deletion request therefore needs a manual procedure, or a new erasure feature that also removes upload files. Backups still hold the data until their snapshots expire.
+- **Consent step (not final):** after login every user must accept the current consent version before any other API call works. Text and version live in `consent.go` and are marked as a draft. Before go-live: replace the text with the reviewed one and set a non-draft version (everyone consents again).
+- **Consent withdrawal (Art. 7(3)):** not built. For now a withdrawal is handled as an erasure request.
+- **Erasure (Art. 17 DSGVO):** one command, `docker compose run --rm portal erase --id <uuid>` (dry run), then the same with `--apply`. It deletes own contributions with image files, corrections, votes, person-poll options about the person (and others' votes for them), sessions, credentials and stored addresses. The user row stays as a nameless tombstone so team tickets and edit history keep working; ticket comments written by the person stay (anonymised). Quotes about the person inside other people's contributions must be found and removed by hand. Backups keep the data until their snapshots expire (up to about 12 months).
+- **Legal pages:** `/impressum` and `/datenschutz` serve `legal/impressum.html` and `legal/datenschutz.html` (gitignored, mounted read-only). Production refuses to start without them.
+- **Log rotation:** all containers keep at most 3 x 10 MB of logs.
 - **Data export (Art. 15/20 DSGVO):** no self-service export. Handle requests manually for now.
-- **No Impressum or Datenschutz page** exists yet.
 
 ## Verified in the repo
 

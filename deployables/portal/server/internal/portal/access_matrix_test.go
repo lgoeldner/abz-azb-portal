@@ -69,6 +69,9 @@ func sessionFor(t *testing.T, app *App, userID string) (token, csrf string) {
 	if _, err := app.DB.Exec(context.Background(), "INSERT INTO sessions(token_hash,user_id,csrf,expires_at) VALUES($1,$2,$3,$4)", digest(token), userID, csrf, time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := app.DB.Exec(context.Background(), "INSERT INTO consents(user_id,version) VALUES($1,$2) ON CONFLICT DO NOTHING", userID, ConsentVersion); err != nil {
+		t.Fatal(err)
+	}
 	return token, csrf
 }
 

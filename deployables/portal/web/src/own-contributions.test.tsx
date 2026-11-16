@@ -125,7 +125,7 @@ function mount(
   const { ballotState = 'ok', ballotData = myBallots, user = student, submissionData = submissions } = options;
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input).replace('/api/v1', '');
-    if (url === '/me') return Response.json({ user, csrf_token: 'csrf' });
+    if (url === '/me') return Response.json({ user, consent_required: false, csrf_token: 'csrf' });
     if (url === '/categories') return Response.json(categories);
     if (url === '/submissions') return Response.json(submissionData);
     if (url === '/me/ballots') {

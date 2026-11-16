@@ -99,7 +99,7 @@ function installApi(
     const url = new URL(String(input), window.location.origin);
     const path = url.pathname.replace('/api/v1', '');
     const method = init?.method ?? 'GET';
-    if (path === '/me') return Response.json({ user: student, csrf_token: 'csrf' });
+    if (path === '/me') return Response.json({ user: student, consent_required: false, csrf_token: 'csrf' });
     if (path === '/categories') return Response.json(collections);
     if (path === '/submissions' && method === 'GET') return Response.json(allSubmissions);
     if (path === '/submissions' && method === 'POST') {
@@ -226,7 +226,7 @@ describe('submission collections independent of repeatability', () => {
 
 function renderPortal(path: string, user: Me['user'], view: View = 'redaktion') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const me: Me = { user, csrf_token: 'csrf' };
+  const me: Me = { user, consent_required: false, csrf_token: 'csrf' };
   const workspaceView: [View, (next: View) => void] = [view, vi.fn()];
   return render(
     <QueryClientProvider client={client}>

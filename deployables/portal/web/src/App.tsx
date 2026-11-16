@@ -70,6 +70,7 @@ import { EmailAdmin } from './EmailAdmin';
 import { ContributionDetail, Contributions, Editorial, NewContribution, NotFound } from './pages';
 import { SammlungDetail, Sammlungen } from './sammlungen';
 import { ReminderSettings } from './ReminderSettings';
+import { ConsentStep, LegalLinks } from './Consent';
 import { DevDebug } from './DevDebug';
 import { PollStack } from './PollStack';
 
@@ -110,6 +111,8 @@ export function App() {
         </section>
       </main>
     );
+  if (me.data.consent_required)
+    return <ConsentStep brand={<Brand />} logout={<Logout />} onAccepted={() => me.refetch()} />;
   return (
     <Session.Provider value={me.data}>
       <Routes>
@@ -318,6 +321,7 @@ function Login() {
           <p className="mt-5 text-sm text-muted">
             Privater Bereich für unseren Jahrgang. Beiträge und Bilder sind nur für berechtigte Personen zugänglich.
           </p>
+          <LegalLinks className="mt-4" />
         </div>
       </section>
     </main>
@@ -421,6 +425,7 @@ function Layout() {
             <div className="px-3.5">
               <Logout />
             </div>
+            <LegalLinks className="px-4 text-xs" />
           </div>
         </aside>
         <div className="flex min-h-screen flex-col bg-paper max-[651px]:pt-12 min-[651px]:pl-[260px]">

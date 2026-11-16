@@ -134,6 +134,9 @@ func authenticatedRequest(t *testing.T, app *App, pool *pgxpool.Pool, userID, me
 	if _, err := pool.Exec(context.Background(), "INSERT INTO sessions(token_hash,user_id,csrf,expires_at) VALUES($1,$2,$3,$4)", digest(token), userID, csrf, time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := pool.Exec(context.Background(), "INSERT INTO consents(user_id,version) VALUES($1,$2) ON CONFLICT DO NOTHING", userID, ConsentVersion); err != nil {
+		t.Fatal(err)
+	}
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.AddCookie(&http.Cookie{Name: "portal_session", Value: token})
 	if method != http.MethodGet {
@@ -163,6 +166,9 @@ func authenticatedFileUpload(t *testing.T, app *App, pool *pgxpool.Pool, userID,
 	}
 	token, csrf := randomToken(), randomToken()
 	if _, err := pool.Exec(context.Background(), "INSERT INTO sessions(token_hash,user_id,csrf,expires_at) VALUES($1,$2,$3,$4)", digest(token), userID, csrf, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(), "INSERT INTO consents(user_id,version) VALUES($1,$2) ON CONFLICT DO NOTHING", userID, ConsentVersion); err != nil {
 		t.Fatal(err)
 	}
 	req := httptest.NewRequest(http.MethodPost, path, &body)

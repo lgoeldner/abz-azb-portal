@@ -34,6 +34,14 @@ file `docs/auth-email-implementation-plan.md` :: implemented first-release desig
 file `docs/dev-debug.md` :: DevDebug overlay and its browser checks [debug]
 file `docs/dev-build.md` :: detached make dev builds, Go caches, container reuse and optional host development [dev, docker, cache]
 file `ops/README.md` :: operations, backup, restore, tidy caveat [ops, restore, production]
+file `deployables/portal/server/internal/portal/consent.go` :: versioned consent (draft text, ConsentVersion), GET/POST /me/consent and the API consent gate (403 consent_required) [consent, privacy, dsgvo]
+test `deployables/portal/server/internal/portal/consent_test.go` :: consent gate invariants (stale version, per user, exempt routes) and legal pages incl. production LEGAL_DIR refusal [consent, legal, invariant]
+file `deployables/portal/server/internal/portal/erase.go` :: `portal erase --id <uuid> [--apply]`: GDPR erasure to an identity-free tombstone, removes own content, votes, person options, addresses and upload files under the backup lock [erasure, privacy, cli]
+test `deployables/portal/server/internal/portal/erase_test.go` :: erasure invariants: dry run, last admin, others' data kept, files, tombstone cannot be revived [erasure, invariant]
+file `deployables/portal/server/migrations/014_consent_erasure.sql` :: consents table, users.erased_at and erased-user update guard [schema, consent, erasure]
+file `deployables/portal/web/src/Consent.tsx` :: consent step after login and Impressum/Datenschutz links [consent, legal, ui]
+route GET /impressum, GET /datenschutz :: operator HTML from LEGAL_DIR, public; production refuses to start without both (http.go) [legal, impressum, datenschutz]
+route GET|POST /me/consent :: consent text/version and acceptance; all other API routes gated until accepted (consent.go) [consent]
 file `PRIVACY.md` :: open privacy/legal checklist: operator decisions, AVVs, texts to write, erasure/export gaps, verified facts [privacy, dsgvo, impressum, legal, consent]
 
 ## Scripts

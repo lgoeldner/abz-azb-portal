@@ -72,7 +72,8 @@ test('photo batches share one collection grid and new uploads return to it', asy
       });
       return;
     }
-    if (path === '/me') return route.fulfill({ json: { user, csrf_token: 'browser-fixture' } });
+    if (path === '/me')
+      return route.fulfill({ json: { user, consent_required: false, csrf_token: 'browser-fixture' } });
     if (path === '/categories') return route.fulfill({ json: [category] });
     if (path === '/submissions' && route.request().method() === 'POST') {
       creates++;

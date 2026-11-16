@@ -68,7 +68,7 @@ async function fixtures(page: Page, role = 'student') {
     requests.push(`${route.request().method()} ${path}`);
     const data =
       path === '/me'
-        ? { user: { ...user, role }, csrf_token: 'PRIVATE_CSRF_SENTINEL' }
+        ? { user: { ...user, role }, consent_required: false, csrf_token: 'PRIVATE_CSRF_SENTINEL' }
         : path === '/categories'
           ? [category, poll]
           : path === '/submissions'

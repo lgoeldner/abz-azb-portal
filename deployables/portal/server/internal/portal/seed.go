@@ -72,9 +72,15 @@ func SeedWithIssuer(ctx context.Context, pool *pgxpool.Pool, environment, issuer
 			return e
 		}
 	}
+	// Fixtures start consented so dev and e2e land in the app; delete a consents row to see the consent step.
+	for _, u := range users {
+		if _, e = tx.Exec(ctx, "INSERT INTO consents(user_id,version) SELECT id,$2 FROM users WHERE id=$1 AND erased_at IS NULL ON CONFLICT DO NOTHING", u.ID, ConsentVersion); e != nil {
+			return e
+		}
+	}
 	// Synthetic development mailbox addresses are derived once from the shared roster.
 	for id, slug := range fixtureSlugs {
-		if _, e = tx.Exec(ctx, "UPDATE users SET login_email=$2 WHERE id=$1 AND login_email IS NULL", id, slug+"@example.test"); e != nil {
+		if _, e = tx.Exec(ctx, "UPDATE users SET login_email=$2 WHERE id=$1 AND login_email IS NULL AND erased_at IS NULL", id, slug+"@example.test"); e != nil {
 			return e
 		}
 	}

@@ -156,7 +156,7 @@ function renderCards(tickets: Response, areas: Response, viewer = me) {
     }),
   );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const user: Me = { user: viewer, csrf_token: 'x' };
+  const user: Me = { user: viewer, consent_required: false, csrf_token: 'x' };
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>

@@ -60,7 +60,7 @@ describe('contribution submission', () => {
   it('keeps entered fields visible when the server rejects a stale submission', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.endsWith('/api/v1/me')) return Response.json({ user, csrf_token: 'csrf' });
+      if (url.endsWith('/api/v1/me')) return Response.json({ user, consent_required: false, csrf_token: 'csrf' });
       if (url.endsWith('/api/v1/categories')) return Response.json([category]);
       if (url === '/api/v1/submissions' && init?.method === 'POST')
         return Response.json({ error: { code: 'stale_version', message: 'Bitte erneut prüfen.' } }, { status: 409 });
@@ -92,7 +92,7 @@ describe('contribution submission', () => {
     const closed = sammlung('closed-photo', 'Fotos', 'photo', { repeatable: false, status: 'closed' });
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.endsWith('/api/v1/me')) return Response.json({ user, csrf_token: 'csrf' });
+      if (url.endsWith('/api/v1/me')) return Response.json({ user, consent_required: false, csrf_token: 'csrf' });
       if (url.endsWith('/api/v1/categories')) return Response.json([closed]);
       if (url === '/api/v1/submissions' && init?.method === 'POST') return Response.json({});
       return Response.json([]);
@@ -118,7 +118,7 @@ describe('contribution submission', () => {
     const photos = sammlung('photos', 'Fotos', 'photo');
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);
-      if (url.endsWith('/api/v1/me')) return Response.json({ user, csrf_token: 'csrf' });
+      if (url.endsWith('/api/v1/me')) return Response.json({ user, consent_required: false, csrf_token: 'csrf' });
       if (url.endsWith('/api/v1/categories')) return Response.json([photos]);
       return Response.json([]);
     });
@@ -168,7 +168,7 @@ describe('contribution submission', () => {
     let successfulCreations = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.endsWith('/api/v1/me')) return Response.json({ user, csrf_token: 'csrf' });
+      if (url.endsWith('/api/v1/me')) return Response.json({ user, consent_required: false, csrf_token: 'csrf' });
       if (url.endsWith('/api/v1/categories')) return Response.json([photoCategory]);
       if (url === '/api/v1/submissions' && init?.method === 'POST') {
         const form = init.body as FormData;
@@ -288,7 +288,7 @@ describe('verwaltung', () => {
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input).replace('/api/v1', '');
         const method = init?.method ?? 'GET';
-        if (url === '/me') return Response.json({ user: me, csrf_token: 'csrf' });
+        if (url === '/me') return Response.json({ user: me, consent_required: false, csrf_token: 'csrf' });
         if (method !== 'GET') {
           const c = { url, method, body: init?.body ? JSON.parse(String(init.body)) : undefined };
           calls.push(c);
@@ -651,7 +651,7 @@ describe('navigation by view', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       urls.push(url);
-      if (url.endsWith('/api/v1/me')) return Response.json({ user: who, csrf_token: 'csrf' });
+      if (url.endsWith('/api/v1/me')) return Response.json({ user: who, consent_required: false, csrf_token: 'csrf' });
       if (url.endsWith('/api/v1/categories')) return Response.json([...fixed, ...data.polls]);
       if (url.endsWith('/api/v1/submissions')) {
         if (data.submissions === 'pending') return new Promise<Response>(() => {});
@@ -967,7 +967,8 @@ describe('admin home', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url.endsWith('/api/v1/me')) return Response.json({ user: admin, csrf_token: 'csrf' });
+        if (url.endsWith('/api/v1/me'))
+          return Response.json({ user: admin, consent_required: false, csrf_token: 'csrf' });
         if (url.endsWith('/api/v1/admin/users')) {
           if (users === 'pending') return new Promise<Response>(() => {});
           if (users === 'error') return Response.json({ error: { message: 'Nicht verfügbar.' } }, { status: 503 });
@@ -1099,7 +1100,8 @@ describe('admin home', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url.endsWith('/api/v1/me')) return Response.json({ user: admin, csrf_token: 'csrf' });
+        if (url.endsWith('/api/v1/me'))
+          return Response.json({ user: admin, consent_required: false, csrf_token: 'csrf' });
         if (url.endsWith('/api/v1/admin/users')) return Response.json(people);
         if (url.endsWith('/api/v1/categories')) return Response.json(all);
         if (url.endsWith('/api/v1/submissions'))
@@ -1213,7 +1215,11 @@ describe('editor home', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input).replace('/api/v1', '');
       if (path === '/me')
-        return Response.json({ user: { ...user, role: 'manager', category_ids: grants }, csrf_token: 'csrf' });
+        return Response.json({
+          user: { ...user, role: 'manager', category_ids: grants },
+          consent_required: false,
+          csrf_token: 'csrf',
+        });
       const endpoint = path === '/categories' ? 'categories' : path === '/submissions' ? 'submissions' : null;
       if (endpoint) {
         if (state[endpoint] === 'pending') return new Promise<Response>(() => {});
@@ -1387,7 +1393,7 @@ describe('sammlungen', () => {
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input).replace('/api/v1', '');
         const method = init?.method ?? 'GET';
-        if (url === '/me') return Response.json({ user: me, csrf_token: 'csrf' });
+        if (url === '/me') return Response.json({ user: me, consent_required: false, csrf_token: 'csrf' });
         if (method !== 'GET') {
           const c = { url, method, body: init?.body ? JSON.parse(String(init.body)) : undefined };
           calls.push(c);
