@@ -31,6 +31,7 @@ file `docs/openapi.json` :: generated OpenAPI spec (from Go route table and type
 file `docs/verification.md` :: how the system was verified [verification]
 file `docs/school-login.md` :: school OIDC integration notes [login, oidc, production]
 file `docs/auth-email-implementation-plan.md` :: implemented first-release design: Better Auth/shared UUID users, CLI/SQL provisioning, Brevo quota/delivery audit, dev picker and reminders; optional Google/passkeys later [auth, email, notifications, plan]
+file `docs/passkeys-implementation-plan.md` :: planned passkey login through the Better Auth plugin: schema, endpoint allowlist, revocation rules, tests; not implemented [auth, passkey, webauthn, plan]
 file `docs/dev-debug.md` :: DevDebug overlay and its browser checks [debug]
 file `docs/dev-build.md` :: detached make dev builds, Go caches, container reuse and optional host development [dev, docker, cache]
 file `ops/README.md` :: operations, backup, restore, tidy caveat [ops, restore, production]
