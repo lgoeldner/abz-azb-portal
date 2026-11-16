@@ -60,9 +60,9 @@ func SeedWithIssuer(ctx context.Context, pool *pgxpool.Pool, environment, issuer
 	if _, e = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(74120985)"); e != nil {
 		return e
 	}
-	cats := []struct{ ID, Name, Description, Kind string }{{categoryID(1), "Ideen", "Vorschläge für unsere Abizeitung", "idea"}, {categoryID(2), "Zitate", "Sprüche, die bleiben", "quote"}, {categoryID(3), "Erinnerungen", "Unsere gemeinsame Schulzeit", "memory"}, {categoryID(4), "Fotos", "Eure schönsten Momente in Originalqualität", "photo"}}
+	cats := []struct{ ID, Name, Description, Kind, Template string }{{categoryID(1), "Ideen", "Vorschläge für unsere Abizeitung", "idea", ""}, {categoryID(2), "Zitate", "Sprüche, die bleiben", "quote", ""}, {categoryID(3), "Erinnerungen", "Unsere gemeinsame Schulzeit", "memory", ""}, {categoryID(4), "Fotos", "Eure schönsten Momente in Originalqualität", "photo", ""}, {categoryID(5), "Steckbrief", "Dein Platz in der Abizeitung", "steckbrief", "standard"}}
 	for _, c := range cats {
-		if _, e = tx.Exec(ctx, "INSERT INTO categories(id,name,description,kind,opened_at) VALUES($1,$2,$3,$4,now()) ON CONFLICT(id) DO NOTHING", c.ID, c.Name, c.Description, c.Kind); e != nil {
+		if _, e = tx.Exec(ctx, "INSERT INTO categories(id,name,description,kind,template,opened_at) VALUES($1,$2,$3,$4,$5,now()) ON CONFLICT(id) DO NOTHING", c.ID, c.Name, c.Description, c.Kind, c.Template); e != nil {
 			return e
 		}
 	}

@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"mime"
 	"net/http"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -127,6 +129,42 @@ func validateSubmission(in submissionInput) error {
 	return nil
 }
 
+const steckbriefTitle = "Steckbrief"
+
+var steckbriefKey = regexp.MustCompile(`^[a-z0-9_]{1,40}$`)
+
+// validateSteckbriefBody checks only the shape of a Steckbrief body (JSON object of string to string); the question list lives in the frontend template.
+func validateSteckbriefBody(body string) error {
+	d := json.NewDecoder(strings.NewReader(body))
+	var answers map[string]*string
+	if e := d.Decode(&answers); e != nil || answers == nil || d.Decode(&json.RawMessage{}) != io.EOF || len(answers) > 60 {
+		return bad("Ein Steckbrief besteht aus höchstens 60 Antworten als JSON-Objekt aus Text.")
+	}
+	for k, v := range answers {
+		if !steckbriefKey.MatchString(k) || v == nil || utf8.RuneCountInString(*v) > 2000 {
+			return bad("Ungültige Steckbrief-Antwort (Schlüssel a-z, 0-9, _; Antwort höchstens 2000 Zeichen).")
+		}
+	}
+	return nil
+}
+
+// normalizeSteckbrief forces title and context of a Steckbrief submission and validates its body shape.
+// A category's kind cannot change to or from steckbrief, so the answer holds for the later transaction.
+func normalizeSteckbrief(ctx context.Context, db DB, in *submissionInput) (bool, error) {
+	if !validID(in.CategoryID) {
+		return false, nil
+	}
+	var kind string
+	if e := db.QueryRow(ctx, "SELECT kind FROM categories WHERE id=$1", in.CategoryID).Scan(&kind); e != nil && !errors.Is(e, pgx.ErrNoRows) {
+		return false, e
+	}
+	if kind != "steckbrief" {
+		return false, nil
+	}
+	in.Title, in.Context = steckbriefTitle, ""
+	return true, validateSteckbriefBody(in.Body)
+}
+
 // Serialize one author's creates and category changes before taking row locks.
 func lockSubmissionAuthor(ctx context.Context, tx pgx.Tx, authorID string) error {
 	_, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", authorID)
@@ -155,6 +193,13 @@ func (a *App) createSubmission(w http.ResponseWriter, r *http.Request) error {
 		}
 	} else if e := decode(w, r, &in); e != nil {
 		return e
+	}
+	steckbrief, e := normalizeSteckbrief(r.Context(), a.DB, &in)
+	if e != nil {
+		return e
+	}
+	if steckbrief && upload != nil {
+		return bad("Ein Steckbrief wird ohne Bild angelegt; Bilder folgen danach.")
 	}
 	if e := validateSubmission(in); e != nil {
 		return e
@@ -256,6 +301,9 @@ func (a *App) editSubmission(w http.ResponseWriter, r *http.Request) error {
 	if e := decode(w, r, &in); e != nil {
 		return e
 	}
+	if _, e := normalizeSteckbrief(r.Context(), a.DB, &in); e != nil {
+		return e
+	}
 	if e := validateSubmission(in); e != nil {
 		return e
 	}
@@ -290,6 +338,15 @@ func (a *App) editSubmission(w http.ResponseWriter, r *http.Request) error {
 	var kind string
 	if e = tx.QueryRow(r.Context(), "SELECT kind FROM categories WHERE id=$1 FOR SHARE", in.CategoryID).Scan(&kind); e != nil {
 		return e
+	}
+	if in.CategoryID != s.CategoryID {
+		var from string
+		if e = tx.QueryRow(r.Context(), "SELECT kind FROM categories WHERE id=$1", s.CategoryID).Scan(&from); e != nil {
+			return e
+		}
+		if from == "steckbrief" || kind == "steckbrief" {
+			return bad("Steckbriefe können nicht in andere Sammlungen verschoben werden.")
+		}
 	}
 	if in.CategoryID != s.CategoryID && len(s.Attachments) > 0 && kind != "photo" {
 		return bad("Beiträge mit Bildern können nur in Fotosammlungen verschoben werden.")

@@ -28,7 +28,7 @@ WHERE c.email_reminders_enabled=true AND c.status='open' AND c.ongoing=false
   AND c.closes_at>now() AND c.closes_at<=now()+interval '72 hours'
   AND ((c.kind IN ('person','proposal','words') AND NOT EXISTS (
          SELECT 1 FROM ballots b WHERE b.poll_id=c.id AND b.user_id=u.id))
-    OR (c.kind IN ('idea','quote','memory','photo') AND c.repeatable=false AND NOT EXISTS (
+    OR (c.kind IN ('idea','quote','memory','photo','steckbrief') AND c.repeatable=false AND NOT EXISTS (
          SELECT 1 FROM submissions s WHERE s.category_id=c.id AND s.author_id=u.id AND s.status<>'withdrawn')))
   AND NOT EXISTS (
       SELECT 1 FROM mail_messages m JOIN mail_destinations d ON d.message_id=m.id
@@ -250,7 +250,7 @@ WHERE j.id=$1 AND j.status='leased' AND j.lease_until>now()
  AND (CASE WHEN c.closes_at<=now()+interval '24 hours' THEN 24 ELSE 72 END)=j.milestone
  AND ((c.kind IN ('person','proposal','words') AND NOT EXISTS (
         SELECT 1 FROM ballots b WHERE b.poll_id=c.id AND b.user_id=u.id))
-   OR (c.kind IN ('idea','quote','memory','photo') AND c.repeatable=false AND NOT EXISTS (
+   OR (c.kind IN ('idea','quote','memory','photo','steckbrief') AND c.repeatable=false AND NOT EXISTS (
         SELECT 1 FROM submissions s WHERE s.category_id=c.id AND s.author_id=u.id AND s.status<>'withdrawn')))
  AND NOT EXISTS (
       SELECT 1 FROM mail_messages m JOIN mail_destinations d ON d.message_id=m.id
@@ -363,7 +363,7 @@ var reminderReadySQL = `SELECT EXISTS (
   AND c.closes_at>now() AND c.closes_at<=now()+interval '72 hours'
   AND (CASE WHEN c.closes_at<=now()+interval '24 hours' THEN 24 ELSE 72 END)=j.milestone
   AND ((c.kind IN ('person','proposal','words') AND NOT EXISTS (SELECT 1 FROM ballots b WHERE b.poll_id=c.id AND b.user_id=u.id))
-    OR (c.kind IN ('idea','quote','memory','photo') AND c.repeatable=false AND NOT EXISTS
+    OR (c.kind IN ('idea','quote','memory','photo','steckbrief') AND c.repeatable=false AND NOT EXISTS
         (SELECT 1 FROM submissions s WHERE s.category_id=c.id AND s.author_id=u.id AND s.status<>'withdrawn')))
   AND NOT EXISTS (SELECT 1 FROM mail_messages m JOIN mail_destinations d ON d.message_id=m.id
     WHERE m.kind='reminder' AND m.user_id=u.id AND m.category_id=c.id AND lower(d.recipient_snapshot)=lower(u.login_email)

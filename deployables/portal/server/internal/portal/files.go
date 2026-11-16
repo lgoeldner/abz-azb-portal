@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -215,10 +216,21 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) error {
 	if e = tx.QueryRow(r.Context(), "SELECT kind FROM categories WHERE id=$1 FOR SHARE", s.CategoryID).Scan(&kind); e != nil {
 		return e
 	}
-	if kind != "photo" {
+	if kind == "steckbrief" {
+		var template string
+		if e = tx.QueryRow(r.Context(), "SELECT template FROM categories WHERE id=$1", s.CategoryID).Scan(&template); e != nil {
+			return e
+		}
+		if !slices.Contains(steckbriefSlots[template], upload.Caption) {
+			return bad("Unbekannter Bildplatz für diesen Steckbrief.")
+		}
+		// A slot holds one live image: replace it in the same transaction and version bump.
+		if _, e = tx.Exec(r.Context(), "UPDATE attachments SET deleted=true WHERE submission_id=$1 AND caption=$2 AND NOT deleted", s.ID, upload.Caption); e != nil {
+			return e
+		}
+	} else if kind != "photo" {
 		return bad("Bilder können nur in Fotosammlungen hochgeladen werden.")
-	}
-	if len(s.Attachments) >= 10 {
+	} else if len(s.Attachments) >= 10 {
 		return bad("Maximal 10 Bilder je Beitrag.")
 	}
 	if e = a.storeImage(r.Context(), tx, s.ID, upload); e != nil {
@@ -308,6 +320,13 @@ func (a *App) editAttachment(w http.ResponseWriter, r *http.Request) error {
 	}
 	if s.Version != in.Version {
 		return conflict()
+	}
+	var kind string
+	if e = tx.QueryRow(r.Context(), "SELECT kind FROM categories WHERE id=$1 FOR SHARE", s.CategoryID).Scan(&kind); e != nil {
+		return e
+	}
+	if kind == "steckbrief" {
+		return bad("Bildplätze eines Steckbriefs sind nicht bearbeitbar.")
 	}
 	id := r.PathValue("attachmentID")
 	if !validID(id) {

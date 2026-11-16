@@ -384,6 +384,7 @@
               "quote",
               "memory",
               "photo",
+              "steckbrief",
               "person",
               "proposal",
               "words"
@@ -463,6 +464,14 @@
             ],
             "type": "string"
           },
+          "template": {
+            "description": "Steckbrief collections only: which hardcoded Steckbrief form this collection uses, fixed after creation. Empty for every other kind.",
+            "enum": [
+              "",
+              "standard"
+            ],
+            "type": "string"
+          },
           "version": {
             "type": "integer"
           }
@@ -532,6 +541,7 @@
               "quote",
               "memory",
               "photo",
+              "steckbrief",
               "person",
               "proposal",
               "words"
@@ -561,6 +571,14 @@
           "repeatable": {
             "description": "Allow multiple contributions per person independently of kind. Omission defaults from kind on create and preserves the stored flag on edit.",
             "type": "boolean"
+          },
+          "template": {
+            "description": "Fixed after creation: omitted preserves the stored value, a different value is rejected.",
+            "enum": [
+              "",
+              "standard"
+            ],
+            "type": "string"
           },
           "version": {
             "type": "integer"
@@ -598,6 +616,7 @@
               "quote",
               "memory",
               "photo",
+              "steckbrief",
               "person",
               "proposal",
               "words"
@@ -627,6 +646,14 @@
           "repeatable": {
             "description": "Allow multiple contributions per person independently of kind. Omission defaults from kind on create and preserves the stored flag on edit.",
             "type": "boolean"
+          },
+          "template": {
+            "description": "Steckbrief collections only; defaults to standard on creation and is fixed afterwards. Other kinds require it empty or omitted.",
+            "enum": [
+              "",
+              "standard"
+            ],
+            "type": "string"
           }
         },
         "required": [
@@ -2907,7 +2934,7 @@
             "description": "Error"
           }
         },
-        "summary": "Attach image to own pending contribution in a photo collection only; other collection types return 400"
+        "summary": "Attach image to own pending contribution: photo collections, or a Steckbrief with caption naming a template slot (replaces that slot); other collection types return 400"
       }
     },
     "/api/v1/submissions/{id}/attachments/{attachmentID}": {
@@ -3033,7 +3060,7 @@
             "description": "Error"
           }
         },
-        "summary": "Edit photo caption on own pending contribution with optimistic concurrency"
+        "summary": "Edit photo caption on own pending contribution with optimistic concurrency; 400 for Steckbrief slots"
       }
     },
     "/api/v1/attachments/{id}": {

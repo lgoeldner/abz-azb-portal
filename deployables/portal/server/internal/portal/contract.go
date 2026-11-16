@@ -13,7 +13,8 @@ import (
 type CategoryInput struct {
 	Name          string           `json:"name"`
 	Description   string           `json:"description"`
-	Kind          string           `json:"kind" enum:"idea,quote,memory,photo,person,proposal,words"`
+	Kind          string           `json:"kind" enum:"idea,quote,memory,photo,steckbrief,person,proposal,words"`
+	Template      string           `json:"template" required:"false" enum:",standard" description:"Steckbrief collections only; defaults to standard on creation and is fixed afterwards. Other kinds require it empty or omitted."`
 	Ongoing       bool             `json:"ongoing" required:"false" description:"No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability."`
 	ClosesAt      *time.Time       `json:"closes_at" required:"false" description:"Automatic closing instant for bounded collections; null when ongoing. Open collections are effectively closed at this instant."`
 	Repeatable    bool             `json:"repeatable" required:"false" description:"Allow multiple contributions per person independently of kind. Omission defaults from kind on create and preserves the stored flag on edit."`
@@ -50,7 +51,8 @@ type UserEdit struct {
 type CategoryEdit struct {
 	Name          string           `json:"name" required:"false"`
 	Description   string           `json:"description" required:"false"`
-	Kind          string           `json:"kind" required:"false" enum:"idea,quote,memory,photo,person,proposal,words"`
+	Kind          string           `json:"kind" required:"false" enum:"idea,quote,memory,photo,steckbrief,person,proposal,words"`
+	Template      string           `json:"template" required:"false" enum:",standard" description:"Fixed after creation: omitted preserves the stored value, a different value is rejected."`
 	Ongoing       bool             `json:"ongoing" required:"false" description:"No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability."`
 	ClosesAt      *time.Time       `json:"closes_at" required:"false" description:"Future closing instant. For existing bounded polls, a sparse request containing only version and closes_at changes the deadline in any lifecycle state without changing definitions, votes, history or stored status. Omitted deadlines are preserved exactly; contribution deadlines remain fixed. Extending an expired stored-open poll makes it open again; manually closed or hidden polls stay closed or hidden."`
 	Repeatable    bool             `json:"repeatable" required:"false" description:"Allow multiple contributions per person independently of kind. Omission defaults from kind on create and preserves the stored flag on edit."`

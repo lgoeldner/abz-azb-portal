@@ -15,7 +15,8 @@ type Category struct {
 	ID            string               `json:"id"`
 	Name          string               `json:"name"`
 	Description   string               `json:"description"`
-	Kind          string               `json:"kind" enum:"idea,quote,memory,photo,person,proposal,words"`
+	Kind          string               `json:"kind" enum:"idea,quote,memory,photo,steckbrief,person,proposal,words"`
+	Template      string               `json:"template" required:"false" enum:",standard" description:"Steckbrief collections only: which hardcoded Steckbrief form this collection uses, fixed after creation. Empty for every other kind."`
 	Repeatable    bool                 `json:"repeatable" description:"Allow multiple contributions or independent ballot entries per person, independently of kind. False ballots retain one changeable current selection."`
 	Ongoing       bool                 `json:"ongoing" description:"No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability."`
 	ClosesAt      *time.Time           `json:"closes_at" description:"Automatic closing instant for bounded collections; null when ongoing. Open collections are effectively closed at this instant."`

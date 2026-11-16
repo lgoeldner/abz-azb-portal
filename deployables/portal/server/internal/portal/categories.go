@@ -12,20 +12,24 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const categoryCols = "id::text,name,description,kind,repeatable,ongoing,closes_at,status,allow_self_vote,all_people,max_choices,version,created_at,opened_at"
+const categoryCols = "id::text,name,description,kind,template,repeatable,ongoing,closes_at,status,allow_self_vote,all_people,max_choices,version,created_at,opened_at"
 
 func validKind(k string) bool {
-	return k == "idea" || k == "quote" || k == "memory" || k == "photo" || k == "person" || k == "proposal" || k == "words"
+	return k == "idea" || k == "quote" || k == "memory" || k == "photo" || k == "steckbrief" || k == "person" || k == "proposal" || k == "words"
 }
 func contributionKind(k string) bool {
-	return k == "idea" || k == "quote" || k == "memory" || k == "photo"
+	return k == "idea" || k == "quote" || k == "memory" || k == "photo" || k == "steckbrief"
 }
+
+// steckbriefSlots is the single source of valid Steckbrief templates and, per template, the image slots
+// (the attachment caption names the slot). Templates are code, not data: the question list lives in the frontend.
+var steckbriefSlots = map[string][]string{"standard": {"foto", "kinderfoto"}}
 
 func ballotKind(k string) bool { return k == "person" || k == "proposal" || k == "words" }
 
 func scanCategory(row pgx.Row) (Category, error) {
 	c := Category{Options: []PollOption{}, MyWords: []string{}, MyOptionIDs: []string{}}
-	e := row.Scan(&c.ID, &c.Name, &c.Description, &c.Kind, &c.Repeatable, &c.Ongoing, &c.ClosesAt, &c.Status, &c.AllowSelfVote, &c.AllPeople, &c.MaxChoices, &c.Version, &c.CreatedAt, &c.OpenedAt)
+	e := row.Scan(&c.ID, &c.Name, &c.Description, &c.Kind, &c.Template, &c.Repeatable, &c.Ongoing, &c.ClosesAt, &c.Status, &c.AllowSelfVote, &c.AllPeople, &c.MaxChoices, &c.Version, &c.CreatedAt, &c.OpenedAt)
 	if e == nil && c.Status == "open" && c.ClosesAt != nil && !c.ClosesAt.After(time.Now()) {
 		c.Status = "closed"
 	}
@@ -215,6 +219,7 @@ type categoryInput struct {
 	Name          string     `json:"name"`
 	Description   string     `json:"description"`
 	Kind          string     `json:"kind"`
+	Template      string     `json:"template"`
 	Repeatable    *bool      `json:"repeatable"`
 	Ongoing       *bool      `json:"ongoing"`
 	ClosesAt      *time.Time `json:"closes_at"`
@@ -255,6 +260,16 @@ func validateCategory(in categoryInput) error {
 	}
 	if in.MaxChoices != nil && (*in.MaxChoices < 1 || *in.MaxChoices > 500 || contributionKind(in.Kind) && *in.MaxChoices != 1) {
 		return bad("Maximale Auswahl muss 1 bis 500 betragen; Beitragssammlungen haben keine Mehrfachauswahl.")
+	}
+	if in.Kind == "steckbrief" {
+		if steckbriefSlots[in.Template] == nil {
+			return bad("Ungültige Steckbrief-Vorlage.")
+		}
+		if in.Repeatable != nil && *in.Repeatable {
+			return bad("Ein Steckbrief ist pro Person nur einmal möglich.")
+		}
+	} else if in.Template != "" {
+		return bad("Vorlagen gibt es nur für Steckbriefe.")
 	}
 	if in.Kind != "person" && in.AllPeople != nil && *in.AllPeople {
 		return bad("Alle Personen ist nur für Personenabstimmungen erlaubt.")
@@ -362,6 +377,9 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 			repeatable := old.Repeatable
 			in.Repeatable = &repeatable
 		}
+		if in.Template == "" {
+			in.Template = old.Template
+		}
 		if in.Ongoing == nil {
 			ongoing := old.Ongoing
 			in.Ongoing = &ongoing
@@ -376,8 +394,11 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 		if e = validateCategory(in); e != nil {
 			return e
 		}
-		if contributionKind(in.Kind) != contributionKind(old.Kind) {
+		if contributionKind(in.Kind) != contributionKind(old.Kind) || (in.Kind == "steckbrief") != (old.Kind == "steckbrief") {
 			return bad("Der Typ darf nur innerhalb seiner Gruppe geändert werden.")
+		}
+		if in.Template != old.Template {
+			return bad("Die Steckbrief-Vorlage kann nach dem Anlegen nicht geändert werden.")
 		}
 		if in.Version != old.Version || ballotKind(old.Kind) && (old.Status != "draft" || old.OpenedAt != nil) {
 			return conflict()
@@ -425,8 +446,11 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 		}
 	} else {
 		if in.Repeatable == nil {
-			repeatable := contributionKind(in.Kind)
+			repeatable := contributionKind(in.Kind) && in.Kind != "steckbrief"
 			in.Repeatable = &repeatable
+		}
+		if in.Kind == "steckbrief" && in.Template == "" {
+			in.Template = "standard"
 		}
 		if in.Ongoing == nil {
 			ongoing := true
@@ -465,7 +489,7 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 		if contributionKind(in.Kind) && ongoing {
 			status = "open"
 		}
-		_, e = tx.Exec(r.Context(), "INSERT INTO categories(id,name,description,kind,repeatable,ongoing,closes_at,status,allow_self_vote,all_people,max_choices,opened_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,CASE WHEN $8='open' THEN now() END)", id, name, in.Description, in.Kind, rep, ongoing, closesAt, status, selfVote, allPeople, maxChoices)
+		_, e = tx.Exec(r.Context(), "INSERT INTO categories(id,name,description,kind,template,repeatable,ongoing,closes_at,status,allow_self_vote,all_people,max_choices,opened_at) VALUES($1,$2,$3,$4,$12,$5,$6,$7,$8,$9,$10,$11,CASE WHEN $8='open' THEN now() END)", id, name, in.Description, in.Kind, rep, ongoing, closesAt, status, selfVote, allPeople, maxChoices, in.Template)
 		if e == nil && u.Role == "manager" {
 			_, e = tx.Exec(r.Context(), "UPDATE users SET category_ids=array_append(category_ids,$2::uuid) WHERE id=$1", u.ID, id)
 		}
