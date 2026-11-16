@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -32,6 +33,15 @@ func RunEraseCommand(ctx context.Context, pool *pgxpool.Pool, c Config, args []s
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 || !validID(id) {
 		return errors.New("usage: portal erase --id <user UUID> [--apply]")
 	}
+	if apply {
+		// Hold the backup lock before taking any database lock, so a running backup never pairs a pre-erase dump with
+		// post-erase uploads and identity changes are not blocked while waiting for it.
+		unlock, err := lockBackup(c.BackupStatusFile)
+		if err != nil {
+			return err
+		}
+		defer unlock()
+	}
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return errors.New("cannot start erase transaction")
@@ -43,9 +53,6 @@ func RunEraseCommand(ctx context.Context, pool *pgxpool.Pool, c Config, args []s
 	}
 	removed, failed := 0, []string(nil)
 	if apply {
-		// Hold the backup lock so a running backup never pairs a pre-erase dump with post-erase uploads.
-		unlock := lockBackup(c.BackupStatusFile)
-		defer unlock()
 		if err = tx.Commit(ctx); err != nil {
 			return errors.New("erasure could not be committed")
 		}
@@ -148,7 +155,11 @@ func eraseUser(ctx context.Context, tx pgx.Tx, id string) (map[string]int, []str
 	if _, err = tx.Exec(ctx, `UPDATE users SET name=$2, subject=NULL, login_email=NULL, image=NULL, email_verified=false,
  role='student', admitted=false, cohort_member=false, login_enabled=false, category_ids='{}', email_reminders_enabled=false, erased_at=now()
  WHERE id=$1`, id, erasedName); err != nil {
-		return nil, nil, errors.New("erasure rejected; no changes committed (the last usable administrator cannot be erased)")
+		var pe *pgconn.PgError
+		if errors.As(err, &pe) && strings.Contains(pe.Message, "last usable administrator") {
+			return nil, nil, errors.New("erasure rejected; no changes committed (the last usable administrator cannot be erased)")
+		}
+		return nil, nil, err
 	}
 	// The revoke trigger quarantines the old address; an erased person's address must not stay behind.
 	if _, err = tx.Exec(ctx, "DELETE FROM retired_login_emails WHERE user_id=$1", id); err != nil {
@@ -161,18 +172,21 @@ func eraseUser(ctx context.Context, tx pgx.Tx, id string) (map[string]int, []str
 	return counts, keys, nil
 }
 
-// lockBackup takes the backup script's flock when the status volume is mounted; without it there is no backup to race.
-func lockBackup(statusFile string) func() {
+// lockBackup takes the backup script's flock. Without a status file or lock file no backup has run, so there is nothing to race.
+func lockBackup(statusFile string) (func(), error) {
 	if statusFile == "" {
-		return func() {}
+		return func() {}, nil
 	}
 	f, err := os.Open(statusFile + ".lock")
+	if errors.Is(err, os.ErrNotExist) {
+		return func() {}, nil
+	}
 	if err != nil {
-		return func() {}
+		return nil, errors.New("cannot open backup lock; no changes made")
 	}
-	if syscall.Flock(int(f.Fd()), syscall.LOCK_EX) != nil {
+	if err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
 		f.Close()
-		return func() {}
+		return nil, errors.New("cannot take backup lock; no changes made")
 	}
-	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }
+	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
 }

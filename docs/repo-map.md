@@ -38,6 +38,7 @@ file `deployables/portal/server/internal/portal/consent.go` :: versioned consent
 test `deployables/portal/server/internal/portal/consent_test.go` :: consent gate invariants (stale version, per user, exempt routes) and legal pages incl. production LEGAL_DIR refusal [consent, legal, invariant]
 file `deployables/portal/server/internal/portal/erase.go` :: `portal erase --id <uuid> [--apply]`: GDPR erasure to an identity-free tombstone, removes own content, votes, person options, addresses and upload files under the backup lock [erasure, privacy, cli]
 test `deployables/portal/server/internal/portal/erase_test.go` :: erasure invariants: dry run, last admin, others' data kept, files, tombstone cannot be revived [erasure, invariant]
+file `deployables/portal/server/migrations/015_erased_write_guard.sql` :: rejects late submissions, corrections and votes for erased users (in-flight requests during erasure) [schema, erasure, invariant]
 file `deployables/portal/server/migrations/014_consent_erasure.sql` :: consents table, users.erased_at and erased-user update guard [schema, consent, erasure]
 file `deployables/portal/web/src/Consent.tsx` :: consent step after login and Impressum/Datenschutz links [consent, legal, ui]
 route GET /impressum, GET /datenschutz :: operator HTML from LEGAL_DIR, public; production refuses to start without both (http.go) [legal, impressum, datenschutz]

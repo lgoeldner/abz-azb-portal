@@ -117,4 +117,11 @@ func TestEraseUserInvariants(t *testing.T) {
 	if _, err := run("--id", MiaID, "--apply"); err == nil {
 		t.Error("second erase succeeded")
 	}
+	// A request that was already running cannot add new data for the erased person.
+	if _, err := pool.Exec(ctx, "INSERT INTO submissions(id,category_id,author_id,title,body,context,idempotency_key,request_hash) VALUES('00000000-0000-4000-8000-00000000e003',$1,$2,'t','b','c','late-write','h')", categoryID(1), MiaID); err == nil {
+		t.Error("late contribution for erased user was stored")
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO ballots(poll_id,user_id,option_id) VALUES($1,$2,$3)", pollID(2), MiaID, leon); err == nil {
+		t.Error("late vote for erased user was stored")
+	}
 }
