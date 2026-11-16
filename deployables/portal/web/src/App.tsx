@@ -10,6 +10,7 @@ import {
   Plus,
   ScrollText,
   Settings,
+  SquareKanban,
   UserCheck,
   Users,
   Vote,
@@ -62,6 +63,9 @@ import {
   type View,
 } from './ui';
 import { ActivityLog, People } from './admin';
+import { AreasAdmin } from './AreasAdmin';
+import { Board, NewTicket, TicketPage } from './tickets';
+import { TicketCards } from './TicketCards';
 import { EmailAdmin } from './EmailAdmin';
 import { ContributionDetail, Contributions, Editorial, NewContribution, NotFound } from './pages';
 import { SammlungDetail, Sammlungen } from './sammlungen';
@@ -165,6 +169,38 @@ export function App() {
             element={
               <RoleGuard admin>
                 <EmailAdmin />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="tickets"
+            element={
+              <RoleGuard>
+                <Board />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="tickets/neu"
+            element={
+              <RoleGuard>
+                <NewTicket />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="tickets/:id"
+            element={
+              <RoleGuard>
+                <TicketPage />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="verwaltung/bereiche"
+            element={
+              <RoleGuard admin>
+                <AreasAdmin />
               </RoleGuard>
             }
           />
@@ -300,7 +336,7 @@ function Layout() {
   const location = useLocation();
   const [preferredView, setView] = preference;
   const editorialRoute =
-    (editorial(user) && location.pathname.startsWith('/redaktion')) ||
+    (editorial(user) && (location.pathname.startsWith('/redaktion') || location.pathname.startsWith('/tickets'))) ||
     (user.role === 'admin' && location.pathname.startsWith('/verwaltung/'));
   // Normalize on route entry; pending navigation must not overwrite an explicit mode switch.
   useEffect(() => {
@@ -510,6 +546,9 @@ function AdminNav({ onNavigate }: { onNavigate: () => void }) {
           <NavItem to="/verwaltung/protokoll" icon={ScrollText}>
             Aktivitätsprotokoll
           </NavItem>
+          <NavItem to="/verwaltung/bereiche" icon={SquareKanban}>
+            Bereiche
+          </NavItem>
           <NavItem to="/verwaltung/email" icon={Settings}>
             E-Mail
           </NavItem>
@@ -678,6 +717,9 @@ function EditorNav() {
   const ballots = (categories.data ?? []).filter((c) => isBallot(c.kind));
   return (
     <>
+      <NavItem to="/tickets" icon={SquareKanban}>
+        Tickets
+      </NavItem>
       <NavGroup id="nav-sammlungen" label="Sammlungen">
         {categories.isPending ? (
           <p className={quiet}>Einen Moment …</p>
@@ -896,7 +938,8 @@ function StudentHome() {
 }
 
 function EditorialHome() {
-  const { user } = useSession();
+  const session = useSession();
+  const { user } = session;
   const isAdmin = user.role === 'admin';
   const users = useData<User[]>('/admin/users', isAdmin);
   const categories = useData<Category[]>('/categories');
@@ -1013,6 +1056,9 @@ function EditorialHome() {
           </ul>
         )}
       </section>
+      <div className="mb-4 grid items-start gap-4 sm:grid-cols-2">
+        <TicketCards user={session} />
+      </div>
       <div className="grid items-start gap-4 lg:grid-cols-[5fr_7fr]">
         {isAdmin ? (
           <section aria-labelledby="home-personen" className={card}>

@@ -220,3 +220,23 @@ rule One UUID user directory; authentication dependency owns real/dev sessions; 
 rule Mail uses one persisted shared budget; callbacks never log/store login links in audits; reminder suppression follows recipient address across collections [email, privacy, quota]
 
 test `deployables/portal/web/e2e/email.spec.ts` :: real development dependency login/logout, admin quota versioned settings and student reminder opt-out with denied admin API [email, auth, e2e]
+
+## Ticket board (Kanban, replaces the Notion workflow)
+
+file `deployables/portal/server/migrations/013_tickets.sql` :: areas (Bereiche, 8 seeded) with area_reviewers grants, tickets, ticket_events timeline, per-round ticket_reviews [schema, tickets, kanban, reviewers]
+file `deployables/portal/server/internal/portal/tickets.go` :: area/ticket handlers: binding review rules, derived approved flag, review rounds, atomic claim, role checks at action time [tickets, permissions, review, area]
+test `deployables/portal/server/internal/portal/tickets_test.go` :: binding rules 1-3, round bumps, demotion, assignee limits, atomic claim, stale versions, validation, student denial, user delete rules [tickets, invariant, permissions]
+route GET /areas, POST /admin/areas, PATCH /admin/areas/{id} :: Bereiche with default reviewers; writes admin-only (tickets.go) [tickets, area, admin]
+route GET|POST /tickets, GET|PATCH /tickets/{id} :: list/create/read/edit tickets, managers and admins only (tickets.go) [tickets, kanban]
+route POST /tickets/{id}/status, POST /tickets/{id}/claim, POST /tickets/{id}/comments, PUT /tickets/{id}/review :: column moves, atomic claim, markdown comments, review votes (tickets.go) [tickets, review]
+file `deployables/portal/web/src/tickets.tsx` :: Board (drag and drop plus status select), TicketPage (GitHub-like timeline, review panel), NewTicket with Notion checklist tooltips [tickets, kanban, board, ui]
+test `deployables/portal/web/src/tickets.test.tsx` :: columns, moves with version, approval badges, review panel visibility, form validation [tickets, test]
+file `deployables/portal/web/src/Editor.tsx` :: lazy Milkdown Crepe markdown editor without image/LaTeX, cheap read-only mode [editor, markdown, wysiwyg, csp]
+file `deployables/portal/web/src/Editor.css` :: Crepe theme mapped to workspace tokens without remote fonts [editor, style]
+file `deployables/portal/web/src/AreasAdmin.tsx` :: admin Bereiche page: create/rename areas, default reviewers, no-reviewer warning [admin, area, reviewers]
+test `deployables/portal/web/src/AreasAdmin.test.tsx` :: reviewer eligibility, warning chip, versioned PATCH, stale conflict [admin, area, test]
+file `deployables/portal/web/src/TicketCards.tsx` :: Redaktion home cards: own tickets, waiting for my approval, pages done against 100, stale tickets [dashboard, widgets, tickets]
+test `deployables/portal/web/src/TicketCards.test.tsx` :: card summaries, 7-day stale boundary, reviewer-only waiting card [dashboard, test]
+page /tickets, /tickets/neu, /tickets/:id :: board, new ticket, ticket detail; managers and admins [tickets, kanban]
+page /verwaltung/bereiche :: admin-only Bereiche and default reviewers [verwaltung, area]
+rule Tickets: managers/admins only; default reviewers of the Bereich make an approval binding (any other editor's vote is advisory); assignee-reviewer tickets accept any other editor's approval or a confirmed self-approval for XS/S aufgaben; round bumps on moving back, area, assignee, size, est_pages [tickets, permissions, review]

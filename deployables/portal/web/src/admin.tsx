@@ -474,6 +474,14 @@ function actionName(action: string) {
     'category.updated': 'Sammlung geändert',
     'correction.created': 'Korrektur angefragt',
     'correction.resolved': 'Korrektur erledigt',
+    'ticket.created': 'Ticket erstellt',
+    'ticket.updated': 'Ticket geändert',
+    'ticket.status': 'Ticketstatus geändert',
+    'ticket.claimed': 'Ticket übernommen',
+    'ticket.commented': 'Kommentar zu Ticket',
+    'ticket.reviewed': 'Ticket abgenommen',
+    'area.created': 'Bereich erstellt',
+    'area.updated': 'Bereich geändert',
   };
   return names[action] ?? action.replaceAll('_', ' ').replaceAll('.', ' ');
 }
