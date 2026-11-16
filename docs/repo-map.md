@@ -34,6 +34,7 @@ file `docs/auth-email-implementation-plan.md` :: implemented first-release desig
 file `docs/dev-debug.md` :: DevDebug overlay and its browser checks [debug]
 file `docs/dev-build.md` :: detached make dev builds, Go caches, container reuse and optional host development [dev, docker, cache]
 file `ops/README.md` :: operations, backup, restore, tidy caveat [ops, restore, production]
+file `PRIVACY.md` :: open privacy/legal checklist: operator decisions, AVVs, texts to write, erasure/export gaps, verified facts [privacy, dsgvo, impressum, legal, consent]
 
 ## Scripts
 
