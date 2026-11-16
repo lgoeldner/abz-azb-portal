@@ -31,6 +31,7 @@ Requires a Docker engine. Optional host development also requires Go and Node/np
 ```sh
 make doctor   # optional: check Docker and host development tools
 make dev      # build/start containers, wait until ready, then exit
+make dev:auth # same, but the real Better Auth container and Brevo replace the mock login
 make down     # stop all development containers (keeps data)
 ```
 

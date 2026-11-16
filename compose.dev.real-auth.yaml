@@ -1,0 +1,25 @@
+# Dev override: the real Better Auth container replaces the mock and Brevo sends real mail.
+# Used by `make dev:auth`; plain `make dev` goes back to the mock.
+services:
+  auth:
+    build:
+      target: production
+    environment: !override
+      APP_ENV: development
+      AUTH_MODE: better_auth
+      DATABASE_URL: postgres://portal:portal-dev@db:5432/portal?sslmode=disable
+      AUTH_SERVICE_SECRET: dev-only-service-secret-at-least-32-bytes
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-development-better-auth-secret-change-for-production}
+      BETTER_AUTH_URL: ${PUBLIC_URL:-https://localhost}
+      PORTAL_INTERNAL_URL: http://portal:8080
+      PORT: "3000"
+
+  portal:
+    environment:
+      AUTH_MODE: better_auth
+      MAIL_PROVIDER: brevo
+      BREVO_API_KEY: ${BREVO_API_KEY:?Set BREVO_API_KEY in .env.dev}
+      MAIL_FROM: ${MAIL_FROM:?Set MAIL_FROM in .env.dev to a sender verified in Brevo}
+      MAIL_REPLY_TO: ${MAIL_REPLY_TO:-}
+      # Attests that open/click tracking is off in the Brevo account; required by the portal.
+      BREVO_TRACKING_DISABLED: ${BREVO_TRACKING_DISABLED:-false}

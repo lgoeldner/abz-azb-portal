@@ -21,6 +21,8 @@ start_dev_services() {
   local services=(db auth portal frontend caddy)
   # Shell env beats --env-file; drop the host-dev PUBLIC_URL so .env.dev reaches the containers.
   local compose=(env -u PUBLIC_URL docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml)
+  # DEV_AUTH=real: the real auth container replaces the mock (make dev:auth).
+  if [[ "${DEV_AUTH:-mock}" == real ]]; then compose+=(-f compose.dev.real-auth.yaml); fi
   if [[ "${BACKUP_DEV:-false}" == true ]]; then
     services+=(backup)
   else

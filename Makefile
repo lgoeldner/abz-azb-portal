@@ -1,7 +1,7 @@
 COMPOSE := docker compose
 DEV_COMPOSE := docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml
 
-.PHONY: env doctor dev dev\:frontend dev\:backend down check lint audit backup restore migrate
+.PHONY: env doctor dev dev\:auth allowlist dev\:frontend dev\:backend down check lint audit backup restore migrate
 
 dev:
 	bash scripts/dev.sh
@@ -9,10 +9,18 @@ dev:
 env:
 	bash scripts/env.sh
 
-doctor dev dev\:frontend dev\:backend down: env
+doctor dev dev\:auth dev\:frontend dev\:backend down: env
 
 doctor:
 	bash scripts/doctor.sh
+
+dev\:auth:
+	DEV_AUTH=real bash scripts/dev.sh
+
+# Allowlist: add or update logins from a private CSV (default roster.csv, gitignored). Dry run unless APPLY=1.
+# Columns: id,email,name,role,admitted,cohort_member,login_enabled. See docs/auth-email-operations.md.
+allowlist:
+	MAIL_FROM=$${MAIL_FROM:-unused@example.test} BREVO_TRACKING_DISABLED=true $(DEV_COMPOSE) -f compose.dev.real-auth.yaml run --rm --no-deps -v "$(abspath $(or $(FILE),roster.csv))":/run/roster.csv:ro portal users import --file /run/roster.csv --allow-elevated $(if $(APPLY),--apply,--dry-run)
 
 dev\:frontend:
 	bash scripts/dev-frontend.sh
@@ -21,7 +29,7 @@ dev\:backend:
 	bash scripts/dev-backend.sh
 
 down:
-	$(DEV_COMPOSE) --profile production down
+	$(DEV_COMPOSE) -f compose.dev.real-auth.yaml --profile production down
 
 check:
 	bash -n scripts/*.sh deployables/backup/*.sh deployables/portal/entrypoint.sh
