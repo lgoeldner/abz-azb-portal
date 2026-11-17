@@ -376,11 +376,26 @@ export function Steckbrief({
   const [picked, setPicked] = useState<Record<string, { file: File; url: string } | null>>({});
   const [dirty, setDirty] = useState(false);
   const [top, setTop] = useState({ index: 0, left: -1, forward: true });
+  const [empty, setEmpty] = useState(0);
+  const form = useRef<HTMLFormElement>(null);
+  const last = top.index === count - 1;
   const go = (index: number) =>
     index !== top.index &&
     index >= 0 &&
     index < count &&
     setTop({ index, left: top.index, forward: index > top.index });
+
+  // ponytail: counts empty fields from the DOM so templates need no field registry; photos are optional and not counted.
+  useEffect(() => {
+    const el = form.current;
+    if (!el) return;
+    const text = [...el.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input.sb-input, textarea.sb-ruled')];
+    const picks = [...el.querySelectorAll('fieldset.sb-pick')];
+    setEmpty(
+      text.filter((field) => !field.value.trim()).length +
+        picks.filter((pick) => !pick.querySelector(':checked')).length,
+    );
+  }, [answers]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -457,6 +472,7 @@ export function Steckbrief({
   return (
     <PaperContext.Provider value={paper}>
       <form
+        ref={form}
         className={'sb' + (readOnly ? ' sb-read' : '')}
         onSubmit={(e) => {
           e.preventDefault();
@@ -535,23 +551,30 @@ export function Steckbrief({
                   type="button"
                   className="sb-flip"
                   aria-label="Nächstes Blatt"
-                  disabled={top.index === count - 1}
+                  disabled={last}
                   onClick={() => go(top.index + 1)}
                 >
                   <ChevronRight aria-hidden="true" />
                 </button>
               </span>
-              <button className={btn.primary} disabled={action.busy || (!!current && !dirty)}>
-                {action.busy
-                  ? 'Wird gespeichert …'
-                  : !current
-                    ? 'Steckbrief abgeben'
-                    : dirty
-                      ? 'Änderungen speichern'
-                      : 'Gespeichert'}{' '}
-                <Arrow />
-              </button>
+              {last && (
+                <button className={btn.primary} disabled={action.busy || (!!current && !dirty)}>
+                  {action.busy
+                    ? 'Wird gespeichert …'
+                    : !current
+                      ? 'Steckbrief abgeben'
+                      : dirty
+                        ? 'Änderungen speichern'
+                        : 'Gespeichert'}{' '}
+                  <Arrow />
+                </button>
+              )}
             </div>
+            {last && empty > 0 && (
+              <p role="alert" className="mt-3 text-sm font-medium">
+                {empty === 1 ? 'Ein Feld ist' : empty + ' Felder sind'} noch leer. Du kannst trotzdem speichern.
+              </p>
+            )}
             <p className="mt-3 text-sm text-muted">
               Du musst nicht alles auf einmal ausfüllen. Solange dein Steckbrief eingereicht ist, kannst du ihn
               jederzeit ergänzen. Nur du und die Redaktion sehen ihn.

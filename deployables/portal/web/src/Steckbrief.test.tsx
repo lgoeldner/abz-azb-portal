@@ -54,7 +54,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+const toLastSheet = () => {
+  const tabs = screen.getAllByRole('tab');
+  fireEvent.click(tabs[tabs.length - 1]);
+};
+
 describe('Steckbrief', () => {
+  it('offers saving only on the last sheet and warns about empty fields there', () => {
+    stubApi(() => record());
+    show();
+    const save = () => screen.queryByRole('button', { name: /Steckbrief abgeben/ });
+    expect(save()).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    toLastSheet();
+    expect(save()).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/noch leer/);
+  });
+
   it('creates one submission with only the filled answers as a JSON body', async () => {
     const calls = stubApi(() => record());
     const view = show();
@@ -89,8 +105,8 @@ describe('Steckbrief', () => {
     URL.revokeObjectURL = vi.fn();
     const calls = stubApi(() => record({ version: 5 }));
     show(record({ version: 4 }));
-    const save = screen.getByRole('button', { name: /Gespeichert/ });
-    expect(save).toBeDisabled();
+    toLastSheet();
+    expect(screen.getByRole('button', { name: /Gespeichert/ })).toBeDisabled();
     fireEvent.change(screen.getByLabelText('Damals wählen'), {
       target: { files: [new File(['x'], 'kind.png', { type: 'image/png' })] },
     });
