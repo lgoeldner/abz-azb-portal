@@ -209,7 +209,7 @@ test `deployables/portal/server/internal/portal/poll_deadline_test.go` :: grant/
 
 dir `deployables/auth/` :: maintained Better Auth 1.7.14 service and dependency-backed synthetic development picker, complete image context [auth, node, mock]
 file `deployables/auth/auth-config.mjs` :: dependency user/credential mappings, closed signup, eligibility hooks, hashed magic links, fixed sessions, passkey plugin (RP ID from BETTER_AUTH_URL, auth_passkeys mapping, 1-hour freshAge) [auth, schema, permissions, passkey]
-file `deployables/auth/server-core.mjs` :: same-origin endpoint allowlist, scanner-safe confirmation and private minimal session lookup, identity lock, persistent request limits; passkey routes: POST-only same-origin, rebuilt bodies, minimal responses, verify under the lock, update-passkey 404 [auth, routes, csrf, proxy, passkey]
+file `deployables/auth/server-core.mjs` :: same-origin endpoint allowlist, scanner-safe confirmation and private minimal session lookup, identity lock, persistent request limits; passkey routes: POST-only same-origin, rebuilt bodies, minimal responses, verify under the lock, update-passkey 404; login page suggests passkeys (autofill via conditional mediation, automatic prompt on browsers that used one) [auth, routes, csrf, proxy, passkey]
 file `deployables/auth/server.mjs` :: production entrypoint with lazy schema initialization and dedicated identity-lock pool [auth, runtime]
 file `deployables/auth/mock-server.mjs` :: development-only UUID picker using dependency test helpers; excluded from production image [auth, mock]
 file `deployables/auth/policy.mjs` :: runtime mode, secrets, canonical origin and service bearer validation [auth, config]
@@ -230,7 +230,7 @@ file `deployables/portal/web/src/EmailAdmin.tsx` :: admitted-admin quota/setting
 test `deployables/portal/web/src/EmailAdmin.test.tsx` :: denied-role no fetch, unknown provider quota, versioned settings/pause warning and request retry [admin, email]
 file `deployables/portal/web/src/ReminderSettings.tsx` :: reminder opt-out `Preference` (account settings and EmailAdmin), preserving essential login mail [email, account]
 file `deployables/portal/web/src/Settings.tsx` :: /einstellungen account page for every role: reminder preference and passkeys [account, email, passkey]
-file `deployables/portal/web/src/Passkeys.tsx` :: passkey list/add/remove section of the account settings page [account, passkey, webauthn]
+file `deployables/portal/web/src/Passkeys.tsx` :: passkey list/add/remove section of the account settings page, plus the one-time offer banner shown after an email-link login (localStorage flags abizeit-passkey / abizeit-passkey-offer) [account, passkey, webauthn]
 test `deployables/portal/web/src/ReminderSettings.test.tsx` :: authenticated preference update contract [email, account]
 file `docs/auth-email-operations.md` :: sender/tracking setup, CLI/SQL roster management, quota controls, reminders and safe restore [auth, email, ops]
 route GET|PATCH /me/email-reminders :: own reminder preference, independent of login delivery (reminders.go) [email, account]

@@ -9,6 +9,63 @@ const day = (value: string) => new Intl.DateTimeFormat('de-DE', { dateStyle: 'me
 const supported = () =>
   typeof PublicKeyCredential !== 'undefined' && 'parseCreationOptionsFromJSON' in PublicKeyCredential;
 
+export const hintKey = 'abizeit-passkey';
+export const offerKey = 'abizeit-passkey-offer';
+
+async function register() {
+  const options = await api<PublicKeyCredentialCreationOptionsJSON>(`${base}/generate-register-options`, json('POST'));
+  const credential = await navigator.credentials.create({
+    publicKey: PublicKeyCredential.parseCreationOptionsFromJSON(options),
+  });
+  if (!credential) return false;
+  await api(`${base}/verify-registration`, json('POST', { response: (credential as PublicKeyCredential).toJSON() }));
+  localStorage.setItem(hintKey, '1'); // the login page then asks for this passkey right away
+  return true;
+}
+
+// Shown once after an email-link login on a browser without a passkey.
+export function PasskeyOffer() {
+  const passkeys = useData<Passkey[]>(`${base}/list-user-passkeys`);
+  const action = useAction();
+  const [hidden, setHidden] = useState(false);
+  const close = () => {
+    localStorage.removeItem(offerKey);
+    setHidden(true);
+  };
+  if (hidden || !supported() || passkeys.isPending || passkeys.error || passkeys.data.length > 0) {
+    if (passkeys.data && passkeys.data.length > 0) localStorage.removeItem(offerKey);
+    return null;
+  }
+  const create = () =>
+    action.run(async () => {
+      try {
+        if (await register()) close();
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'NotAllowedError') return;
+        throw e;
+      }
+    });
+  return (
+    <section className={`${panel} mb-6 space-y-3`} aria-labelledby="passkey-offer">
+      <h2 id="passkey-offer" className="text-lg font-extrabold tracking-tight">
+        Schneller anmelden mit Passkey
+      </h2>
+      <p className="text-[15px] text-muted">
+        Beim nächsten Mal genügt Fingerabdruck, Gesichtserkennung oder Geräte-PIN statt eines E-Mail-Links.
+      </p>
+      <div className="flex flex-wrap items-center gap-4">
+        <button type="button" className={btn.secondary} disabled={action.busy} onClick={create}>
+          Passkey erstellen
+        </button>
+        <button type="button" className={btn.text} onClick={close}>
+          Nicht jetzt
+        </button>
+      </div>
+      {action.feedback}
+    </section>
+  );
+}
+
 export function Passkeys() {
   const passkeys = useData<Passkey[]>(`${base}/list-user-passkeys`);
   const action = useAction();
@@ -18,18 +75,7 @@ export function Passkeys() {
     action.run(async () => {
       setStatus('');
       try {
-        const options = await api<PublicKeyCredentialCreationOptionsJSON>(
-          `${base}/generate-register-options`,
-          json('POST'),
-        );
-        const credential = await navigator.credentials.create({
-          publicKey: PublicKeyCredential.parseCreationOptionsFromJSON(options),
-        });
-        if (!credential) return;
-        await api(
-          `${base}/verify-registration`,
-          json('POST', { response: (credential as PublicKeyCredential).toJSON() }),
-        );
+        if (!(await register())) return;
         setStatus('Passkey hinzugefügt.');
       } catch (e) {
         if (e instanceof DOMException && e.name === 'NotAllowedError') return; // dialog cancelled or timed out

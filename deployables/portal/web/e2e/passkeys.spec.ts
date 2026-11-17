@@ -29,8 +29,7 @@ test('student adds a passkey, signs in with it and removes it', async ({ page, c
 
   await page.getByRole('button', { name: /Abmelden/ }).click();
   await expect(page.getByRole('link', { name: /^Anmelden$/ })).toBeVisible();
-  await page.goto('/auth/login');
-  await page.getByRole('button', { name: 'Mit Passkey anmelden' }).click();
+  await page.goto('/auth/login'); // this browser has used a passkey: the login page asks for it by itself
   await page.waitForURL((url) => url.pathname === '/');
   await expect(page.getByRole('main').getByRole('heading', { level: 1 })).toBeVisible();
   expect(await me()).toBe(userId);

@@ -1,13 +1,21 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
-import { Passkeys } from './Passkeys';
+import { hintKey, offerKey, PasskeyOffer, Passkeys } from './Passkeys';
 
 const base = '/api/auth/passkey';
 const created = '2026-11-03T10:00:00Z';
 
-function setup(options: { supported?: boolean; verify?: Response; create?: () => Promise<unknown> } = {}) {
-  let keys = [{ id: 'k1', name: null, created_at: created }];
+function setup(
+  options: {
+    supported?: boolean;
+    verify?: Response;
+    create?: () => Promise<unknown>;
+    component?: React.ReactNode;
+    keys?: { id: string; name: null; created_at: string }[];
+  } = {},
+) {
+  let keys = options.keys ?? [{ id: 'k1', name: null, created_at: created }];
   const calls: string[] = [];
   const fetcher = vi.fn(async (url: unknown, init?: RequestInit) => {
     const path = String(url).replace(base + '/', '');
@@ -34,7 +42,7 @@ function setup(options: { supported?: boolean; verify?: Response; create?: () =>
   }
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <Passkeys />
+      {options.component ?? <Passkeys />}
     </QueryClientProvider>,
   );
   return { fetcher, calls };
@@ -97,4 +105,29 @@ it('removes a passkey after confirmation and refreshes the list', async () => {
   const del = fetcher.mock.calls.find(([u]) => String(u).endsWith('delete-passkey'))!;
   expect(JSON.parse(String(del[1]?.body))).toEqual({ id: 'k1' });
   expect(screen.getByText('Du hast noch keinen Passkey.')).toBeInTheDocument();
+});
+
+it('offers a passkey after email login, remembers the device on success and goes away', async () => {
+  localStorage.setItem(offerKey, '1');
+  const { calls } = setup({ component: <PasskeyOffer />, keys: [] });
+  fireEvent.click(await screen.findByRole('button', { name: 'Passkey erstellen' }));
+  await waitFor(() => expect(localStorage.getItem(hintKey)).toBe('1'));
+  expect(calls).toContain('verify-registration');
+  expect(localStorage.getItem(offerKey)).toBeNull();
+  await waitFor(() => expect(screen.queryByText('Schneller anmelden mit Passkey')).toBeNull());
+});
+
+it('offer: "Nicht jetzt" clears the flag without registering; an existing passkey hides it', async () => {
+  localStorage.setItem(offerKey, '1');
+  const { calls } = setup({ component: <PasskeyOffer />, keys: [] });
+  fireEvent.click(await screen.findByRole('button', { name: 'Nicht jetzt' }));
+  expect(localStorage.getItem(offerKey)).toBeNull();
+  expect(calls).not.toContain('generate-register-options');
+});
+
+it('offer: stays hidden when the account already has a passkey', async () => {
+  localStorage.setItem(offerKey, '1');
+  setup({ component: <PasskeyOffer /> });
+  await waitFor(() => expect(localStorage.getItem(offerKey)).toBeNull());
+  expect(screen.queryByText('Schneller anmelden mit Passkey')).toBeNull();
 });

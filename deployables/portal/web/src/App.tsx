@@ -70,6 +70,7 @@ import { TicketCards } from './TicketCards';
 import { EmailAdmin } from './EmailAdmin';
 import { ContributionDetail, Contributions, Editorial, NewContribution, NotFound } from './pages';
 import { SammlungDetail, Sammlungen } from './sammlungen';
+import { offerKey, PasskeyOffer } from './Passkeys';
 import { Settings as AccountSettings } from './Settings';
 import { ConsentStep, LegalLinks } from './Consent';
 import { DevDebug } from './DevDebug';
@@ -433,6 +434,7 @@ function Layout() {
         </aside>
         <div className="flex min-h-screen flex-col bg-paper max-[651px]:pt-12 min-[651px]:pl-[260px]">
           <main id="inhalt" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-8 sm:py-10">
+            {localStorage.getItem(offerKey) && <PasskeyOffer />}
             <Outlet />
             {import.meta.env.DEV && (
               <div className="mt-8">
