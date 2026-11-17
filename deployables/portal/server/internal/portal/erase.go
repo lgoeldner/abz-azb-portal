@@ -127,6 +127,8 @@ func eraseUser(ctx context.Context, tx pgx.Tx, id string) (map[string]int, []str
 		{"mail_addresses", "DELETE FROM mail_destinations WHERE message_id IN (SELECT id FROM mail_messages WHERE user_id=$1)"},
 		{"", "UPDATE mail_messages SET user_id=NULL WHERE user_id=$1"},
 		{"", "DELETE FROM auth_verifications WHERE CASE WHEN value IS JSON OBJECT THEN lower(value::jsonb->>'email')=(SELECT login_email FROM users WHERE id=$1) ELSE false END"},
+		// An abandoned passkey enrollment keeps the login email in its challenge row.
+		{"", "DELETE FROM auth_verifications WHERE CASE WHEN value IS JSON OBJECT THEN value::jsonb->'userData'->>'id'=$1::text ELSE false END"},
 		{"", "DELETE FROM auth_accounts WHERE user_id=$1"},
 		{"", "DELETE FROM auth_passkeys WHERE user_id=$1"},
 		{"", "DELETE FROM auth_sessions WHERE user_id=$1"},

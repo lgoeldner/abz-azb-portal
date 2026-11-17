@@ -275,6 +275,8 @@ export function createAuthHTTPServer({
     if (!credential || typeof credential !== "object" || Array.isArray(credential)) {
       return sendJSON(res, registering ? 400 : 401, { error: "invalid_passkey" });
     }
+    // No challenge cookie, no verification: refuse before taking the shared identity lock.
+    if (!/better-auth-passkey=/u.test(req.headers.cookie || "")) return sendJSON(res, registering ? 400 : 401, { error: "invalid_passkey" });
     const response = await withIdentityLock(identityLockPool, () => passkeyCall(runtime, "POST", name, req, { body: { response: credential } }));
     if (response.ok) return sendJSON(res, 204, null, registering ? {} : { setCookie: cookies(response) });
     if (registering && (response.status === 401 || response.status === 403)) return sessionFailure(res, response.status);

@@ -119,6 +119,8 @@ export async function createAuth({
 
   const auth = betterAuth({
     appName: "AbiZeitBetrug",
+    // Message only: plugin error objects can carry credential ids and challenges.
+    logger: { log: (level, message) => console.error(level, message) },
     baseURL: config.authOrigin,
     basePath: "/api/auth",
     secret,

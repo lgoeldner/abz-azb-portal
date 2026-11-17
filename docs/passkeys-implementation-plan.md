@@ -1,6 +1,6 @@
 # Passkey implementation plan
 
-Status: planned, 16 November 2026. Not implemented. Follows the "Google and passkeys" section of [auth-email-implementation-plan.md](auth-email-implementation-plan.md).
+Status: implemented, 17 November 2026. Follows the "Google and passkeys" section of [auth-email-implementation-plan.md](auth-email-implementation-plan.md).
 
 ## Approach
 
@@ -31,6 +31,17 @@ Use `@better-auth/passkey` 1.7.14 in the existing auth service. No Go WebAuthn c
    - Go: extend the erase and cutover tests.
    - Playwright: one journey with a Chromium virtual authenticator.
 9. **Docs and completion.** Update the implementation contract, operations doc, plan status, `PRIVACY.md` and the repo map. Run `make check` and the recovery drill. Independent architecture-tier review of the auth changes.
+
+## Deviations from the plan
+
+- The wrapper exposes both `generate-*-options` endpoints as same-origin POST. The plugin itself uses GET internally.
+- Deleting another user's passkey returns 404, not 403, so a foreign id is not revealed.
+- The plugin's fresh-session middleware enforces the 1-hour enrollment window. The wrapper adds no own check.
+- Passkeys are managed on the account page `/einstellungen`, not as a separate sidebar page.
+- Migration `018_passkey_challenge_revoke.sql` was added after the independent review: a started enrollment stores the login email in its challenge row, so revocation and erasure delete those rows too.
+- Both verify endpoints refuse requests without the challenge cookie before taking the identity lock.
+- Better Auth logs messages only, without error objects, so credential ids and challenges stay out of logs.
+- The signature counter column is `integer`. An authenticator whose counter exceeds 2^31−1 cannot register. Synced passkeys report 0.
 
 ## Decisions
 

@@ -50,6 +50,7 @@ func TestEraseUserInvariants(t *testing.T) {
 	exec("INSERT INTO mail_messages(id,user_id,kind,status) VALUES('00000000-0000-4000-8000-00000000e100',$1,'login','delivered')", MiaID)
 	exec("INSERT INTO mail_destinations(message_id,recipient_snapshot) VALUES('00000000-0000-4000-8000-00000000e100','mia_weber@example.test')")
 	exec("INSERT INTO sessions(token_hash,user_id,csrf,expires_at) VALUES('erase-test',$1,'c',now()+interval '1 hour')", MiaID)
+	exec(`INSERT INTO auth_verifications(identifier,value,expires_at) VALUES('erase-challenge','{"type":"registration","expectedChallenge":"c","userData":{"id":"'||$1::text||'","name":"mia_weber@example.test","displayName":"mia_weber@example.test"},"context":null}',now()+interval '5 minutes')`, MiaID)
 	exec("INSERT INTO auth_passkeys(user_id,credential_id,public_key,counter,device_type,backed_up) VALUES($1,'erase-mia','pk',0,'singleDevice',false),($2,'erase-leon','pk',0,'singleDevice',false)", MiaID, LeonID)
 
 	run := func(args ...string) (string, error) {
@@ -90,6 +91,7 @@ func TestEraseUserInvariants(t *testing.T) {
 		{"quarantined address", "SELECT count(*) FROM retired_login_emails WHERE user_id=$1", 0},
 		{"sessions", "SELECT count(*) FROM sessions WHERE user_id=$1", 0},
 		{"passkeys", "SELECT count(*) FROM auth_passkeys WHERE user_id=$1", 0},
+		{"passkey enrollment challenge", "SELECT count(*) FROM auth_verifications WHERE value LIKE '%mia_weber%' AND $1::uuid IS NOT NULL", 0},
 		{"consent", "SELECT count(*) FROM consents WHERE user_id=$1", 0},
 		{"name in ticket history", "SELECT count(*) FROM ticket_events WHERE detail LIKE '%Mia Weber%' AND $1::uuid IS NOT NULL", 0},
 		{"operator audit", "SELECT count(*) FROM user_operator_audit WHERE user_id=$1 AND action='user.erased'", 1},

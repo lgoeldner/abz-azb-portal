@@ -66,6 +66,10 @@ func TestProvisioningStableIDsRollbackAndCredentialInvalidation(t *testing.T) {
 	if _, err = pool.Exec(ctx, "INSERT INTO auth_passkeys(user_id,credential_id,public_key,counter,device_type,backed_up) VALUES($1,'synthetic','pk',0,'singleDevice',false)", MiaID); err != nil {
 		t.Fatal(err)
 	}
+	// An abandoned passkey enrollment challenge names the user; revocation removes it.
+	if _, err = pool.Exec(ctx, `INSERT INTO auth_verifications(identifier,value,expires_at) VALUES('challenge','{"type":"registration","expectedChallenge":"c","userData":{"id":"'||$1::text||'","name":"mia_weber@example.test","displayName":"mia_weber@example.test"},"context":null}',now()+interval '5 minutes')`, MiaID); err != nil {
+		t.Fatal(err)
+	}
 	_, err = pool.Exec(ctx, `INSERT INTO auth_verifications(id,identifier,value,expires_at) VALUES($1,'synthetic',$2,now()+interval '15 minutes')`, ID(), `{"type":"magic-link","email":"mia-new@example.test"}`)
 	if err != nil {
 		t.Fatal(err)
