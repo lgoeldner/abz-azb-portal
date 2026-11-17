@@ -90,4 +90,12 @@ Run `make check` with TEST_DATABASE_URL pointing only at a disposable PostgreSQL
 
 Restore with application/worker access stopped. The restore command revokes legacy/dependency sessions and verifications, cancels pending reminder work, marks interrupted sends uncertain and preserves delivery audit plus conservative quota reservations before restarting. A restored backup must not resurrect a consumed link or resend an old job. Keep secrets outside recovery volumes and restore the configuration separately.
 
-Google and passkeys remain optional follow-up features, as in the approved plan. Enable them through Better Auth, preserving the same UUID and Go authorization. Do not enable automatic registration/linking, a second admin-role system or a separate Go WebAuthn implementation.
+Google remains an optional follow-up feature, as in the approved plan. Enable it through Better Auth, preserving the same UUID and Go authorization. Do not enable automatic registration/linking, a second admin-role system or a separate Go WebAuthn implementation.
+
+## Passkeys
+
+- Users add a passkey under "Einstellungen", section "Passkeys", within 1 hour after logging in. After that they log in again first. They sign in later with "Mit Passkey anmelden" on the login page.
+- The magic link stays as recovery. A passkey combined with email recovery is not phishing-resistant.
+- The RP ID is the hostname of `BETTER_AUTH_URL`. Changing the production domain invalidates all passkeys. Users then log in by magic link and enroll again.
+- A restore, a login email change, an erasure and an auth-mode cutover delete passkeys. Affected users enroll again after a magic-link login.
+- Passkeys also work in mock mode (for tests). The cutover to real mode deletes them.

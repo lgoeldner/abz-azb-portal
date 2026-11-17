@@ -1,6 +1,6 @@
 # Email and authentication implementation plan
 
-Status: first release implemented, 30 October 2026. Better Auth, provisioning, Brevo, admin quota/audit and opt-in reminders are available; Google and passkeys remain optional later additions. See [operating instructions](auth-email-operations.md) and implementation-contract.md for the runtime contract. Provider credentials/sender verification are required before real delivery.
+Status: first release implemented, 30 October 2026. Better Auth, provisioning, Brevo, admin quota/audit and opt-in reminders are available; Google remains an optional later addition; passkeys are implemented (see [passkeys-implementation-plan.md](passkeys-implementation-plan.md)). See [operating instructions](auth-email-operations.md) and implementation-contract.md for the runtime contract. Provider credentials/sender verification are required before real delivery.
 
 ## Decisions
 

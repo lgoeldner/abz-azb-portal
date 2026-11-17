@@ -144,3 +144,25 @@ A Steckbrief is one ordinary Submission per author, so permissions, versions, re
 Images use the existing attachment endpoints with the multipart `caption` as the slot name. Each template has a fixed slot set (`standard`: `foto`, `kinderfoto`); any other caption is 400. Uploading to an occupied slot replaces the previous image in the same transaction and version bump, so at most one live image exists per slot. `PATCH .../attachments/{attachmentID}` is 400 for this kind (slots are not editable); DELETE empties a slot. Uploads stay rejected for every other non-photo kind.
 
 The frontend renders this kind only through its template component (create, edit and read-only), never through the generic title/body form or the caption-editing photo views.
+
+## Passkey login
+
+Passkeys are served by the auth service (Better Auth plugin), not by Go, so these routes are not in `docs/openapi.json`. Magic links stay as recovery. Sessions, UUID users and Go authorization are unchanged. The RP ID is the hostname of `BETTER_AUTH_URL`.
+
+| Route | Result |
+| --- | --- |
+| POST `/api/auth/passkey/generate-register-options` | 200 options; needs a session at most 1 hour old; 401 `unauthorized`, 403 `session_not_fresh` |
+| POST `/api/auth/passkey/verify-registration` `{response}` | 204; 400 `invalid_passkey` |
+| POST `/api/auth/passkey/generate-authenticate-options` | 200 options |
+| POST `/api/auth/passkey/verify-authentication` `{response}` | 204 plus session cookies; 401 `invalid_passkey` |
+| GET `/api/auth/passkey/list-user-passkeys` | 200 `[{id,name,created_at}]` for the session user |
+| POST `/api/auth/passkey/delete-passkey` `{id}` | 204; 404 for an unknown id or another user's passkey |
+
+Invariants:
+
+- Every POST requires same origin; otherwise 403 `origin_denied`. Request bodies are rebuilt from the allowed fields.
+- `update-passkey` and every other `/api/auth/passkey/*` path return 404.
+- Responses contain no profile data and no public keys.
+- Both verify calls run under identity lock 74120984.
+- A disabled or non-admitted user is refused at session creation, also when signing in with a passkey.
+- Passkeys are deleted on login email change, on erasure, on auth-mode cutover and on restore.
