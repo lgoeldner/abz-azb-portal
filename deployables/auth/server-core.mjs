@@ -8,6 +8,14 @@ const IP_WINDOW_SECONDS = 60;
 const IP_WINDOW_MAX = 10;
 const EMAIL_WINDOW_SECONDS = 15 * 60;
 const EMAIL_WINDOW_MAX = 3;
+const PASSKEY_METHODS = {
+  "generate-register-options": "POST",
+  "verify-registration": "POST",
+  "generate-authenticate-options": "POST",
+  "verify-authentication": "POST",
+  "list-user-passkeys": "GET",
+  "delete-passkey": "POST",
+};
 
 export function createAuthHTTPServer({
   auth,
@@ -202,8 +210,75 @@ export function createAuthHTTPServer({
       }
     }
 
+    const passkeyName = url.pathname.startsWith("/api/auth/passkey/") ? url.pathname.slice("/api/auth/passkey/".length) : "";
+    if (Object.hasOwn(PASSKEY_METHODS, passkeyName) && PASSKEY_METHODS[passkeyName] === method) {
+      if (method === "POST" && !isSameOrigin(req, origin)) return sendJSON(res, 403, { error: "origin_denied" });
+      try {
+        return await passkeyRoute(passkeyName, req, res, await getRuntime());
+      } catch (error) {
+        if (error?.message === "body too large") throw error;
+        onTestFailure?.("passkey_" + passkeyName, error);
+        return sendJSON(res, 503, { error: "auth_unavailable" });
+      }
+    }
+
     if (url.pathname.startsWith("/api/auth/")) return sendJSON(res, 404, { error: "not_found" });
     return sendJSON(res, 404, { error: "not_found" });
+  }
+
+  // Passkey calls are rebuilt from validated fields only: fixed headers, fixed paths, no query, and a body
+  // containing nothing but the credential response or the passkey id.
+  function passkeyCall(runtime, httpMethod, path, req, { cookie = true, body } = {}) {
+    const headers = new Headers({ origin });
+    for (const key of ["x-forwarded-for", "user-agent"]) if (req.headers[key]) headers.set(key, req.headers[key]);
+    if (cookie && req.headers.cookie) headers.set("cookie", req.headers.cookie);
+    if (body) headers.set("content-type", "application/json");
+    return runtime.auth.handler(new Request(origin + "/api/auth/passkey/" + path, {
+      method: httpMethod,
+      headers,
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    }));
+  }
+
+  function sessionFailure(res, status) {
+    if (status === 401) return sendJSON(res, 401, { error: "unauthorized" });
+    if (status === 403) return sendJSON(res, 403, { error: "session_not_fresh" });
+    return sendJSON(res, 503, { error: "auth_unavailable" });
+  }
+
+  async function passkeyRoute(name, req, res, runtime) {
+    const cookies = (response) => response.headers.getSetCookie?.() || [];
+    if (name === "generate-register-options" || name === "generate-authenticate-options") {
+      const registering = name === "generate-register-options";
+      const response = await passkeyCall(runtime, "GET", name, req, { cookie: registering });
+      if (!response.ok) return registering ? sessionFailure(res, response.status) : sendJSON(res, 503, { error: "auth_unavailable" });
+      return sendJSON(res, 200, await response.json(), { setCookie: cookies(response) });
+    }
+    if (name === "list-user-passkeys") {
+      const response = await passkeyCall(runtime, "GET", name, req);
+      if (!response.ok) return sessionFailure(res, response.status);
+      const rows = await response.json();
+      return sendJSON(res, 200, rows.map((row) => ({ id: row.id, name: row.name ?? null, created_at: row.createdAt })));
+    }
+    const body = await readJSON(req);
+    if (name === "delete-passkey") {
+      if (!isUUID(body?.id)) return sendJSON(res, 404, { error: "not_found" });
+      const listed = await passkeyCall(runtime, "GET", "list-user-passkeys", req);
+      if (!listed.ok) return sessionFailure(res, listed.status);
+      if (!(await listed.json()).some((row) => row.id === body.id)) return sendJSON(res, 404, { error: "not_found" });
+      const response = await passkeyCall(runtime, "POST", name, req, { body: { id: body.id } });
+      if (response.ok) return sendJSON(res, 204, null);
+      return response.status === 401 ? sessionFailure(res, 401) : sendJSON(res, 404, { error: "not_found" });
+    }
+    const registering = name === "verify-registration";
+    const credential = body?.response;
+    if (!credential || typeof credential !== "object" || Array.isArray(credential)) {
+      return sendJSON(res, registering ? 400 : 401, { error: "invalid_passkey" });
+    }
+    const response = await withIdentityLock(identityLockPool, () => passkeyCall(runtime, "POST", name, req, { body: { response: credential } }));
+    if (response.ok) return sendJSON(res, 204, null, registering ? {} : { setCookie: cookies(response) });
+    if (registering && (response.status === 401 || response.status === 403)) return sessionFailure(res, response.status);
+    return sendJSON(res, registering ? 400 : 401, { error: "invalid_passkey" });
   }
 
   return server;
@@ -370,6 +445,7 @@ input:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-co
 .btn{display:block;width:100%;margin-top:14px;padding:13px 18px;border:2px solid var(--ink);border-radius:999px;background:var(--ink);color:var(--paper);font:inherit;font-weight:700;cursor:pointer;transition:transform .12s,box-shadow .12s}
 .btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 4px 0 var(--accent)}
 .btn:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+[hidden]{display:none!important}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .msg{min-height:1.5em;margin:16px 0 0;color:var(--muted);font-size:.95rem}
 .msg.ok{padding:12px 14px;border-radius:14px;background:var(--pop);color:#15181f;font-weight:600}
@@ -387,12 +463,12 @@ input:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-co
 function loginPage(mode) {
   if (mode === "mock") {
     return makePage(
-      "<!doctype html><html lang=\"de\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Anmelden · AbiZeitBetrug</title><style nonce=\"__NONCE__\">" + pageCSS + "</style><main  class=\"wide\"><div class=\"panel\"><div class=\"brand\"><span class=\"mark\" aria-hidden=\"true\">27</span>AbiZeitBetrug</div><span class=\"badge\">Nur Entwicklung</span><h1>Entwicklungsanmeldung</h1><p class=\"hint\">Testkonto auswählen. Dies ist ein lokaler Mock ohne echte Konten.</p><div class=\"grid\" id=\"accounts\" aria-live=\"polite\">Lade Konten …</div><p id=\"message\" class=\"msg\" role=\"status\"></p><p class=\"small legal\"><a href=\"/impressum\">Impressum</a><a href=\"/datenschutz\">Datenschutz</a></p></div></main><script nonce=\"__NONCE__\">const root=document.querySelector(\"#accounts\");const message=document.querySelector(\"#message\");fetch(\"/auth/mock-users\",{credentials:\"same-origin\"}).then(r=>{if(!r.ok)throw new Error();return r.json()}).then(users=>{root.replaceChildren();for(const user of users){const button=document.createElement(\"button\");button.className=\"card\";button.type=\"button\";button.dataset.userId=user.id;const avatar=document.createElement(\"span\");avatar.className=\"avatar\";avatar.setAttribute(\"aria-hidden\",\"true\");avatar.textContent=(Array.from(user.name)[0]||\"?\").toUpperCase();const name=document.createElement(\"span\");name.className=\"name\";name.textContent=user.name;button.append(avatar,name);button.addEventListener(\"click\",async()=>{message.textContent=\"\";message.className=\"msg\";const response=await fetch(\"/auth/mock-login\",{method:\"POST\",credentials:\"same-origin\",headers:{\"content-type\":\"application/json\"},body:JSON.stringify({user_id:user.id})});if(response.ok){location.assign(\"/\")}else{message.textContent=\"Anmeldung derzeit nicht möglich.\";message.className=\"msg err\"}});root.append(button)}}).catch(()=>{root.textContent=\"Konten konnten nicht geladen werden.\"});</script></html>",
+      "<!doctype html><html lang=\"de\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Anmelden · AbiZeitBetrug</title><style nonce=\"__NONCE__\">" + pageCSS + "</style><main  class=\"wide\"><div class=\"panel\"><div class=\"brand\"><span class=\"mark\" aria-hidden=\"true\">27</span>AbiZeitBetrug</div><span class=\"badge\">Nur Entwicklung</span><h1>Entwicklungsanmeldung</h1><p class=\"hint\">Testkonto auswählen. Dies ist ein lokaler Mock ohne echte Konten.</p><div class=\"grid\" id=\"accounts\" aria-live=\"polite\">Lade Konten …</div><button id=\"passkey\" class=\"btn\" type=\"button\" hidden>Mit Passkey anmelden</button><p id=\"message\" class=\"msg\" role=\"status\"></p><p class=\"small legal\"><a href=\"/impressum\">Impressum</a><a href=\"/datenschutz\">Datenschutz</a></p></div></main><script nonce=\"__NONCE__\">const root=document.querySelector(\"#accounts\");const message=document.querySelector(\"#message\");fetch(\"/auth/mock-users\",{credentials:\"same-origin\"}).then(r=>{if(!r.ok)throw new Error();return r.json()}).then(users=>{root.replaceChildren();for(const user of users){const button=document.createElement(\"button\");button.className=\"card\";button.type=\"button\";button.dataset.userId=user.id;const avatar=document.createElement(\"span\");avatar.className=\"avatar\";avatar.setAttribute(\"aria-hidden\",\"true\");avatar.textContent=(Array.from(user.name)[0]||\"?\").toUpperCase();const name=document.createElement(\"span\");name.className=\"name\";name.textContent=user.name;button.append(avatar,name);button.addEventListener(\"click\",async()=>{message.textContent=\"\";message.className=\"msg\";const response=await fetch(\"/auth/mock-login\",{method:\"POST\",credentials:\"same-origin\",headers:{\"content-type\":\"application/json\"},body:JSON.stringify({user_id:user.id})});if(response.ok){location.assign(\"/\")}else{message.textContent=\"Anmeldung derzeit nicht möglich.\";message.className=\"msg err\"}});root.append(button)}}).catch(()=>{root.textContent=\"Konten konnten nicht geladen werden.\"});" + passkeyScript + "</script></html>",
       pageCSP,
     );
   }
   return makePage(
-    "<!doctype html><html lang=\"de\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Anmelden · AbiZeitBetrug</title><style nonce=\"__NONCE__\">" + pageCSS + "</style><main><div class=\"panel\"><div class=\"brand\"><span class=\"mark\" aria-hidden=\"true\">27</span>AbiZeitBetrug</div><h1>Schön, dass du da bist.</h1><p class=\"hint\">Gib deine E-Mail-Adresse ein. Wir schicken dir einen Anmeldelink.</p><form id=\"login\"><label for=\"email\">E-Mail-Adresse</label><input id=\"email\" name=\"email\" type=\"email\" autocomplete=\"email\" required maxlength=\"254\" placeholder=\"name@beispiel.de\"><button id=\"submit\" class=\"btn\" type=\"submit\">Anmeldelink anfordern</button></form><p id=\"message\" class=\"msg\" role=\"status\" aria-live=\"polite\"></p><p class=\"small\">Privater Bereich für den Jahrgang LMGU 2027. Nur zugelassene Konten erhalten einen Link.</p><p class=\"small legal\"><a href=\"/impressum\">Impressum</a><a href=\"/datenschutz\">Datenschutz</a></p></div></main><script nonce=\"__NONCE__\">document.querySelector(\"#login\").addEventListener(\"submit\",async event=>{event.preventDefault();const message=document.querySelector(\"#message\");const submit=document.querySelector(\"#submit\");const email=document.querySelector(\"#email\").value;message.className=\"msg\";message.textContent=\"Bitte warten …\";submit.disabled=true;try{const response=await fetch(\"/api/auth/sign-in/magic-link\",{method:\"POST\",credentials:\"same-origin\",headers:{\"content-type\":\"application/json\"},body:JSON.stringify({email})});if(response.status===503){message.className=\"msg err\";message.textContent=\"Der Anmeldedienst ist gerade nicht verfügbar.\";submit.disabled=false}else{message.className=\"msg ok\";message.textContent=\"Falls das Konto zugelassen ist, erhältst du einen Anmeldelink per E-Mail.\"}}catch{message.className=\"msg err\";message.textContent=\"Der Anmeldedienst ist gerade nicht verfügbar.\";submit.disabled=false}});</script></html>",
+    "<!doctype html><html lang=\"de\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Anmelden · AbiZeitBetrug</title><style nonce=\"__NONCE__\">" + pageCSS + "</style><main><div class=\"panel\"><div class=\"brand\"><span class=\"mark\" aria-hidden=\"true\">27</span>AbiZeitBetrug</div><h1>Schön, dass du da bist.</h1><p class=\"hint\">Gib deine E-Mail-Adresse ein. Wir schicken dir einen Anmeldelink.</p><form id=\"login\"><label for=\"email\">E-Mail-Adresse</label><input id=\"email\" name=\"email\" type=\"email\" autocomplete=\"email\" required maxlength=\"254\" placeholder=\"name@beispiel.de\"><button id=\"submit\" class=\"btn\" type=\"submit\">Anmeldelink anfordern</button></form><button id=\"passkey\" class=\"btn\" type=\"button\" hidden>Mit Passkey anmelden</button><p id=\"message\" class=\"msg\" role=\"status\" aria-live=\"polite\"></p><p class=\"small\">Privater Bereich für den Jahrgang LMGU 2027. Nur zugelassene Konten erhalten einen Link.</p><p class=\"small legal\"><a href=\"/impressum\">Impressum</a><a href=\"/datenschutz\">Datenschutz</a></p></div></main><script nonce=\"__NONCE__\">document.querySelector(\"#login\").addEventListener(\"submit\",async event=>{event.preventDefault();const message=document.querySelector(\"#message\");const submit=document.querySelector(\"#submit\");const email=document.querySelector(\"#email\").value;message.className=\"msg\";message.textContent=\"Bitte warten …\";submit.disabled=true;try{const response=await fetch(\"/api/auth/sign-in/magic-link\",{method:\"POST\",credentials:\"same-origin\",headers:{\"content-type\":\"application/json\"},body:JSON.stringify({email})});if(response.status===503){message.className=\"msg err\";message.textContent=\"Der Anmeldedienst ist gerade nicht verfügbar.\";submit.disabled=false}else{message.className=\"msg ok\";message.textContent=\"Falls das Konto zugelassen ist, erhältst du einen Anmeldelink per E-Mail.\"}}catch{message.className=\"msg err\";message.textContent=\"Der Anmeldedienst ist gerade nicht verfügbar.\";submit.disabled=false}});" + passkeyScript + "</script></html>",
     pageCSP,
   );
 }
@@ -403,6 +479,9 @@ function magicLinkPage() {
     pageCSP,
   );
 }
+
+// Native WebAuthn only; the button stays hidden in browsers without JSON option parsing.
+const passkeyScript = `{const b=document.querySelector("#passkey");const m=document.querySelector("#message");if(window.PublicKeyCredential&&PublicKeyCredential.parseRequestOptionsFromJSON){b.hidden=false;b.addEventListener("click",async()=>{b.disabled=true;m.className="msg";m.textContent="";try{const o=await fetch("/api/auth/passkey/generate-authenticate-options",{method:"POST",credentials:"same-origin"});if(!o.ok)throw new Error();const c=await navigator.credentials.get({publicKey:PublicKeyCredential.parseRequestOptionsFromJSON(await o.json())});const r=await fetch("/api/auth/passkey/verify-authentication",{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:JSON.stringify({response:c.toJSON()})});if(r.status===204){location.replace("/");return}throw new Error()}catch{m.className="msg err";m.textContent="Anmeldung mit Passkey nicht möglich."}b.disabled=false})}}`;
 
 function formatMockCookie(cookie) {
   const parts = [cookie.name + "=" + cookie.value, "Path=" + (cookie.path || "/"), "HttpOnly", "SameSite=Lax", "Max-Age=86400"];

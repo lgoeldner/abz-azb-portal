@@ -128,6 +128,7 @@ func eraseUser(ctx context.Context, tx pgx.Tx, id string) (map[string]int, []str
 		{"", "UPDATE mail_messages SET user_id=NULL WHERE user_id=$1"},
 		{"", "DELETE FROM auth_verifications WHERE CASE WHEN value IS JSON OBJECT THEN lower(value::jsonb->>'email')=(SELECT login_email FROM users WHERE id=$1) ELSE false END"},
 		{"", "DELETE FROM auth_accounts WHERE user_id=$1"},
+		{"", "DELETE FROM auth_passkeys WHERE user_id=$1"},
 		{"", "DELETE FROM auth_sessions WHERE user_id=$1"},
 		{"", "DELETE FROM sessions WHERE user_id=$1"},
 	}

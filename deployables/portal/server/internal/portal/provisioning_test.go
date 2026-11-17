@@ -63,14 +63,24 @@ func TestProvisioningStableIDsRollbackAndCredentialInvalidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err = pool.Exec(ctx, "INSERT INTO auth_passkeys(user_id,credential_id,public_key,counter,device_type,backed_up) VALUES($1,'synthetic','pk',0,'singleDevice',false)", MiaID); err != nil {
+		t.Fatal(err)
+	}
 	_, err = pool.Exec(ctx, `INSERT INTO auth_verifications(id,identifier,value,expires_at) VALUES($1,'synthetic',$2,now()+interval '15 minutes')`, ID(), `{"type":"magic-link","email":"mia-new@example.test"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Disabling login keeps the passkey (login is refused at session creation); only an email change removes it.
+	if err = RunUserCommand(ctx, pool, []string{"disable", "--id", MiaID, "--apply"}, &output); err != nil {
+		t.Fatal(err)
+	}
+	if err = pool.QueryRow(ctx, "SELECT count(*) FROM auth_passkeys WHERE user_id=$1", MiaID).Scan(&count); err != nil || count != 1 {
+		t.Fatal("disabling login removed the passkey")
+	}
 	if err = RunUserCommand(ctx, pool, []string{"set-email", "--id", MiaID, "--email", "another@example.test", "--apply"}, &output); err != nil {
 		t.Fatal(err)
 	}
-	if err = pool.QueryRow(ctx, "SELECT (SELECT count(*) FROM auth_sessions WHERE user_id=$1)+(SELECT count(*) FROM auth_verifications)", MiaID).Scan(&count); err != nil || count != 0 {
+	if err = pool.QueryRow(ctx, "SELECT (SELECT count(*) FROM auth_sessions WHERE user_id=$1)+(SELECT count(*) FROM auth_verifications)+(SELECT count(*) FROM auth_passkeys WHERE user_id=$1)", MiaID).Scan(&count); err != nil || count != 0 {
 		t.Fatal("email change left usable credentials")
 	}
 	if _, err = pool.Exec(ctx, "SELECT portal_set_user_email($1,'mia-new@example.test')", LeonID); err == nil {

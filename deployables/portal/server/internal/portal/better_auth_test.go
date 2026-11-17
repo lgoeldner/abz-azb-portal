@@ -178,6 +178,9 @@ func TestAuthModeChangesRevokeSessionsPermanently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err = pool.Exec(ctx, "INSERT INTO auth_passkeys(user_id,credential_id,public_key,counter,device_type,backed_up) VALUES($1,'synthetic','pk',0,'singleDevice',false)", MiaID); err != nil {
+		t.Fatal(err)
+	}
 	app.Config.AuthMode = "mock"
 	if err = app.syncAuthMode(ctx); err != nil {
 		t.Fatal(err)
@@ -189,6 +192,9 @@ func TestAuthModeChangesRevokeSessionsPermanently(t *testing.T) {
 	var count int
 	if err = pool.QueryRow(ctx, "SELECT count(*) FROM auth_sessions").Scan(&count); err != nil || count != 0 {
 		t.Fatal("away/back revived session")
+	}
+	if err = pool.QueryRow(ctx, "SELECT count(*) FROM auth_passkeys").Scan(&count); err != nil || count != 0 {
+		t.Fatal("mode change kept a passkey")
 	}
 }
 

@@ -15,9 +15,10 @@ export async function createAuth({
     throw new Error("Test magic-link delivery is only available with APP_ENV=test");
   }
 
-  const [{ betterAuth }, { magicLink }] = await Promise.all([
+  const [{ betterAuth }, { magicLink }, { passkey }] = await Promise.all([
     import("better-auth"),
     import("better-auth/plugins"),
+    import("@better-auth/passkey"),
   ]);
   const secret = mode === "mock" ? env.MOCK_AUTH_SECRET : env.BETTER_AUTH_SECRET;
   const secureCookies = config.authURL.protocol === "https:";
@@ -96,6 +97,26 @@ export async function createAuth({
     },
   });
 
+  const passkeyPlugin = passkey({
+    rpID: config.authURL.hostname,
+    rpName: "AbiZeitBetrug",
+    origin: config.authOrigin,
+    authenticatorSelection: { residentKey: "required", userVerification: "preferred" },
+    schema: {
+      passkey: {
+        modelName: "auth_passkeys",
+        fields: {
+          publicKey: "public_key",
+          userId: "user_id",
+          credentialID: "credential_id",
+          deviceType: "device_type",
+          backedUp: "backed_up",
+          createdAt: "created_at",
+        },
+      },
+    },
+  });
+
   const auth = betterAuth({
     appName: "AbiZeitBetrug",
     baseURL: config.authOrigin,
@@ -126,6 +147,7 @@ export async function createAuth({
         userAgent: "user_agent",
       },
       expiresIn: 24 * 60 * 60,
+      freshAge: 60 * 60,
       updateAge: 24 * 60 * 60,
       disableSessionRefresh: true,
       cookieCache: { enabled: false },
@@ -190,7 +212,7 @@ export async function createAuth({
         },
       },
     },
-    plugins: [...extraPlugins, plugin],
+    plugins: [...extraPlugins, plugin, passkeyPlugin],
   });
 
   const context = await auth.$context;

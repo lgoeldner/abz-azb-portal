@@ -50,6 +50,7 @@ func TestEraseUserInvariants(t *testing.T) {
 	exec("INSERT INTO mail_messages(id,user_id,kind,status) VALUES('00000000-0000-4000-8000-00000000e100',$1,'login','delivered')", MiaID)
 	exec("INSERT INTO mail_destinations(message_id,recipient_snapshot) VALUES('00000000-0000-4000-8000-00000000e100','mia_weber@example.test')")
 	exec("INSERT INTO sessions(token_hash,user_id,csrf,expires_at) VALUES('erase-test',$1,'c',now()+interval '1 hour')", MiaID)
+	exec("INSERT INTO auth_passkeys(user_id,credential_id,public_key,counter,device_type,backed_up) VALUES($1,'erase-mia','pk',0,'singleDevice',false),($2,'erase-leon','pk',0,'singleDevice',false)", MiaID, LeonID)
 
 	run := func(args ...string) (string, error) {
 		var out bytes.Buffer
@@ -88,6 +89,7 @@ func TestEraseUserInvariants(t *testing.T) {
 		{"stored addresses", "SELECT count(*) FROM mail_destinations WHERE recipient_snapshot LIKE 'mia_weber%' AND $1::uuid IS NOT NULL", 0},
 		{"quarantined address", "SELECT count(*) FROM retired_login_emails WHERE user_id=$1", 0},
 		{"sessions", "SELECT count(*) FROM sessions WHERE user_id=$1", 0},
+		{"passkeys", "SELECT count(*) FROM auth_passkeys WHERE user_id=$1", 0},
 		{"consent", "SELECT count(*) FROM consents WHERE user_id=$1", 0},
 		{"name in ticket history", "SELECT count(*) FROM ticket_events WHERE detail LIKE '%Mia Weber%' AND $1::uuid IS NOT NULL", 0},
 		{"operator audit", "SELECT count(*) FROM user_operator_audit WHERE user_id=$1 AND action='user.erased'", 1},
@@ -103,6 +105,9 @@ func TestEraseUserInvariants(t *testing.T) {
 	}
 	if count("SELECT count(*) FROM submissions WHERE id='00000000-0000-4000-8000-00000000e002'") != 1 || count("SELECT count(*) FROM poll_options WHERE id=$1", leon) != 1 {
 		t.Error("other people's data was removed")
+	}
+	if count("SELECT count(*) FROM auth_passkeys WHERE user_id=$1", LeonID) != 1 {
+		t.Error("other people's passkeys were removed")
 	}
 	if exists("mia-original") || exists("mia-preview") || !exists("leon-original") || !exists("leon-preview") {
 		t.Error("wrong upload files removed")
@@ -123,5 +128,8 @@ func TestEraseUserInvariants(t *testing.T) {
 	}
 	if _, err := pool.Exec(ctx, "INSERT INTO ballots(poll_id,user_id,option_id) VALUES($1,$2,$3)", pollID(2), MiaID, leon); err == nil {
 		t.Error("late vote for erased user was stored")
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO auth_passkeys(user_id,credential_id,public_key,counter,device_type,backed_up) VALUES($1,'late','pk',0,'singleDevice',false)", MiaID); err == nil {
+		t.Error("late passkey for erased user was stored")
 	}
 }

@@ -63,6 +63,9 @@ BEGIN
   IF to_regclass('public.auth_verifications') IS NOT NULL THEN
     EXECUTE 'DELETE FROM public.auth_verifications';
   END IF;
+  IF to_regclass('public.auth_passkeys') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.auth_passkeys';
+  END IF;
   IF to_regclass('public.mail_attempts') IS NOT NULL THEN
     EXECUTE $sql$
       UPDATE public.mail_attempts

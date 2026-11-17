@@ -136,6 +136,8 @@ INSERT INTO auth_sessions(id,expires_at,token,user_id)
 VALUES ('90000000-0000-4000-8000-000000000010',now()+interval '1 day','restore-auth-session','00000000-0000-4000-8000-000000000003');
 INSERT INTO auth_verifications(id,identifier,value,expires_at)
 VALUES ('90000000-0000-4000-8000-000000000011','restore@example.invalid','restore-verification',now()+interval '1 day');
+INSERT INTO auth_passkeys(id,user_id,credential_id,public_key,counter,device_type,backed_up)
+VALUES ('90000000-0000-4000-8000-000000000013','00000000-0000-4000-8000-000000000003','restore-passkey','fixture-public-key',0,'singleDevice',false);
 INSERT INTO auth_accounts(id,account_id,provider_id,user_id,access_token)
 VALUES ('90000000-0000-4000-8000-000000000012','restore-account','test-provider','00000000-0000-4000-8000-000000000003','fixture-token');
 INSERT INTO mail_policy(id) VALUES (1);
@@ -247,6 +249,7 @@ check_count 'legacy Go sessions' 'SELECT count(*) FROM sessions' 0
 check_count 'consent proof' "SELECT count(*) FROM consents WHERE user_id='00000000-0000-4000-8000-000000000003' AND version='recovery-fixture' AND accepted_at='2026-11-01T10:00:00Z'" 1
 check_count 'Better Auth sessions' 'SELECT count(*) FROM auth_sessions' 0
 check_count 'Better Auth verification tokens' 'SELECT count(*) FROM auth_verifications' 0
+check_count 'passkeys' 'SELECT count(*) FROM auth_passkeys' 0
 check_count 'preserved provider account' "SELECT count(*) FROM auth_accounts WHERE id='90000000-0000-4000-8000-000000000012' AND access_token='fixture-token'" 1
 check_count 'queued message cancellation' "SELECT count(*) FROM mail_messages WHERE id='90000000-0000-4000-8000-000000000020' AND status='cancelled'" 1
 check_count 'accepted message preservation' "SELECT count(*) FROM mail_messages WHERE id='90000000-0000-4000-8000-000000000021' AND status='accepted'" 1
