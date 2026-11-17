@@ -1,6 +1,6 @@
 # S3 upload storage plan
 
-Status: proposed. Nothing here is implemented.
+Status: steps 1-6 and 8 implemented (`blobs.go`, dev S3Mock, CI run against S3Mock, opt-in `TestS3SmokeOptIn` with `S3_SMOKE_*`). Step 7 is open: production refuses S3 config until the backup decision is made and `scripts/test-recovery.sh` proves restore. Dev uses S3Mock; the optional dev backup container still copies only `UPLOAD_DIR`. A failed upload removes its own objects; objects orphaned by a later failure before commit are not collected (same as disk before).
 
 ## Goal
 

@@ -97,6 +97,10 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 20
+      s3mock:
+        image: adobe/s3mock:4.11.0
+        ports:
+          - 9090:9090
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -117,6 +121,8 @@ jobs:
           TEST_DATABASE_URL: postgres://portal:portal_test@localhost:5432/portal_test?sslmode=disable
         run: |
           cd deployables/portal/server && go test -race ./... && go vet ./...
+          # Upload invariants again with S3Mock as the blob store.
+          TEST_S3_ENDPOINT=http://localhost:9090 go test -race -count=1 -run 'Blob|Photo|Steckbrief|Attachment|Erase' ./internal/portal
           cd ../../auth-mock && go test -race ./... && go vet ./...
       - name: Frontend tests and production build
         run: cd deployables/portal/web && npm ci && npm test -- --run && npm run build

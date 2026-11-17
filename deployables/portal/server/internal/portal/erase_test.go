@@ -3,8 +3,7 @@ package portal
 import (
 	"bytes"
 	"context"
-	"os"
-	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -15,8 +14,8 @@ func TestEraseUserInvariants(t *testing.T) {
 	if err := Seed(ctx, pool, "development"); err != nil {
 		t.Fatal(err)
 	}
-	uploads := t.TempDir()
-	cfg := Config{UploadDir: uploads}
+	cfg := testStoreConfig(t)
+	store := NewBlobStore(cfg)
 	exec := func(sql string, args ...any) {
 		t.Helper()
 		if _, err := pool.Exec(ctx, sql, args...); err != nil {
@@ -38,7 +37,7 @@ func TestEraseUserInvariants(t *testing.T) {
 		exec("INSERT INTO submissions(id,category_id,author_id,title,body,context,idempotency_key,request_hash) VALUES($1,$2,$3,'t','b','c',$4,'h')", sub, categoryID(1), id, "erase-"+sub)
 		exec("INSERT INTO attachments(id,submission_id,filename,mime_type,size_bytes,sha256,storage_key,preview_key) VALUES($1,$2,'f.jpg','image/jpeg',1,'x',$3,$4)", strings.Replace(sub, "e", "a", 1), sub, prefix+"-original", prefix+"-preview")
 		for _, key := range []string{prefix + "-original", prefix + "-preview"} {
-			if err := os.WriteFile(filepath.Join(uploads, key), []byte("x"), 0o600); err != nil {
+			if err := store.Put(ctx, key, []byte("x")); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -58,7 +57,7 @@ func TestEraseUserInvariants(t *testing.T) {
 		err := RunEraseCommand(ctx, pool, cfg, args, &out)
 		return out.String(), err
 	}
-	exists := func(key string) bool { _, err := os.Stat(filepath.Join(uploads, key)); return err == nil }
+	exists := func(key string) bool { return slices.Contains(storedKeys(t, cfg), key) }
 
 	// A dry run reports but changes nothing and keeps the files.
 	ownBefore := count("SELECT count(*) FROM submissions WHERE author_id=$1", MiaID)

@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
@@ -240,8 +239,8 @@ func TestSteckbriefRejectsMultipartCreationAndMoves(t *testing.T) {
 	if n := countRows(t, pool, "SELECT count(*) FROM submissions WHERE category_id=$1", category.ID) + countRows(t, pool, "SELECT count(*) FROM attachments"); n != 0 {
 		t.Fatalf("rejected multipart creation persisted %d rows", n)
 	}
-	if files, err := os.ReadDir(app.Config.UploadDir); err != nil || len(files) != 0 {
-		t.Fatalf("rejected multipart creation wrote files: %d err=%v", len(files), err)
+	if files := storedKeys(t, app.Config); len(files) != 0 {
+		t.Fatalf("rejected multipart creation wrote files: %v", files)
 	}
 
 	steck := decodeSubmission(t, createSteckbrief(t, app, pool, MiaID, category.ID, "steck-move-0001", "", steckbriefBody("a", "b")))
@@ -289,8 +288,8 @@ func TestSteckbriefImageSlots(t *testing.T) {
 	if n := countRows(t, pool, "SELECT count(*) FROM attachments WHERE submission_id=$1", sub.ID); n != 0 {
 		t.Fatalf("rejected slots persisted %d attachments", n)
 	}
-	if files, err := os.ReadDir(app.Config.UploadDir); err != nil || len(files) != 0 {
-		t.Fatalf("rejected slots wrote files: %d err=%v", len(files), err)
+	if files := storedKeys(t, app.Config); len(files) != 0 {
+		t.Fatalf("rejected slots wrote files: %v", files)
 	}
 	if res := authenticatedRequest(t, app, pool, LeonID, http.MethodGet, "/api/v1/submissions/"+sub.ID, ""); res.Code != 404 {
 		t.Fatalf("other student read: %d", res.Code)

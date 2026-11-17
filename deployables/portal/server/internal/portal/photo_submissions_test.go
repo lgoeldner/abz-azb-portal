@@ -12,7 +12,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -91,19 +90,18 @@ func TestPhotoCreateAtomicValidationAndReplay(t *testing.T) {
 	}
 	fields["caption"] = "Unser erster Tag"
 	// File persistence must succeed before the transaction can expose a submission.
-	originalDir := app.Config.UploadDir
-	app.Config.UploadDir = originalDir + "/missing"
+	realStore := app.Blobs
+	app.Blobs = failingStore{realStore}
 	if res := photoRequest(t, app, pool, MiaID, "/api/v1/submissions", fields, "pic.jpg", data); res.Code != 500 {
 		t.Fatalf("failed persistence: %d %s", res.Code, res.Body)
 	}
-	app.Config.UploadDir = originalDir
+	app.Blobs = realStore
 	var count int
 	if err := pool.QueryRow(context.Background(), "SELECT count(*) FROM submissions WHERE category_id=$1", category.ID).Scan(&count); err != nil || count != 0 {
 		t.Fatalf("invalid upload left submission count %d: %v", count, err)
 	}
-	entries, err := os.ReadDir(app.Config.UploadDir)
-	if err != nil || len(entries) != 0 {
-		t.Fatalf("invalid upload left files: %d %v", len(entries), err)
+	if entries := storedKeys(t, app.Config); len(entries) != 0 {
+		t.Fatalf("invalid upload left files: %v", entries)
 	}
 	created := photoRequest(t, app, pool, MiaID, "/api/v1/submissions", fields, "pic.jpg", data)
 	if created.Code != 201 {
@@ -121,9 +119,8 @@ func TestPhotoCreateAtomicValidationAndReplay(t *testing.T) {
 	if res := photoRequest(t, app, pool, MiaID, "/api/v1/submissions", fields, "pic.jpg", data); res.Code != 409 {
 		t.Fatalf("changed caption retry: %d %s", res.Code, res.Body)
 	}
-	entries, err = os.ReadDir(app.Config.UploadDir)
-	if err != nil || len(entries) != 2 {
-		t.Fatalf("retry wrote extra files: %d %v", len(entries), err)
+	if entries := storedKeys(t, app.Config); len(entries) != 2 {
+		t.Fatalf("retry wrote extra files: %v", entries)
 	}
 	// The existing JSON route remains available for nonphoto contributions.
 	if res := createContribution(t, app, pool, MiaID, categoryID(1), "ordinary-text-0001", "Idea"); res.Code != 201 {
@@ -261,9 +258,8 @@ func TestPhotoMovesAndLegacyEmptySubmission(t *testing.T) {
 	if err := pool.QueryRow(context.Background(), "SELECT version FROM submissions WHERE id=$1", legacyPhoto.ID).Scan(&version); err != nil || attachmentCount != 1 || revisionCount != 3 || version != legacyPhoto.Version {
 		t.Fatalf("rejected legacy upload changed rows: attachments=%d revisions=%d version=%d want version=%d err=%v", attachmentCount, revisionCount, version, legacyPhoto.Version, err)
 	}
-	files, err := os.ReadDir(app.Config.UploadDir)
-	if err != nil || len(files) != 4 {
-		t.Fatalf("rejected legacy upload wrote files: count=%d err=%v", len(files), err)
+	if files := storedKeys(t, app.Config); len(files) != 4 {
+		t.Fatalf("rejected legacy upload wrote files: %v", files)
 	}
 	legacyPhoto = decodeSubmission(t, authenticatedRequest(t, app, pool, LeonID, http.MethodDelete, captionPath, fmt.Sprintf(`{"version":%d}`, legacyPhoto.Version)))
 	if len(legacyPhoto.Attachments) != 0 {
@@ -301,9 +297,8 @@ func TestAttachmentsOnlyUploadToPhotoCollections(t *testing.T) {
 		if err := pool.QueryRow(context.Background(), "SELECT version FROM submissions WHERE id=$1", nonphoto.ID).Scan(&version); err != nil || attachments != 0 || revisions != 1 || auditEvents != 1 || version != nonphoto.Version {
 			t.Fatalf("rejected upload changed database state for category %s: attachments=%d revisions=%d audit=%d version=%d err=%v", collectionID, attachments, revisions, auditEvents, version, err)
 		}
-		files, err := os.ReadDir(app.Config.UploadDir)
-		if err != nil || len(files) != 0 {
-			t.Fatalf("rejected upload wrote files for category %s: count=%d err=%v", collectionID, len(files), err)
+		if files := storedKeys(t, app.Config); len(files) != 0 {
+			t.Fatalf("rejected upload wrote files for category %s: %v", collectionID, files)
 		}
 	}
 

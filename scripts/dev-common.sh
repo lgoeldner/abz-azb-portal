@@ -13,6 +13,8 @@ unset OIDC_BACKCHANNEL_URL
 export PUBLIC_URL=http://localhost:5173
 export DATABASE_URL='postgres://portal:portal-dev@localhost:5432/portal?sslmode=disable'
 export UPLOAD_DIR="$ROOT_DIR/deployables/portal/server/data/uploads"
+# Host-run portal talks to the compose S3Mock (published on 127.0.0.1 only).
+export S3_ENDPOINT=http://localhost:9090 S3_REGION=eu-central-3 S3_BUCKET=portal-dev S3_ACCESS_KEY=dev-only S3_SECRET_KEY=dev-only
 export SESSION_SECRET=development-only-secret-change-for-production
 export MAIL_PROVIDER=capture
 export REMINDERS_ENABLED=false

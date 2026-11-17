@@ -7,7 +7,6 @@ import (
 	"flag"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -56,8 +55,9 @@ func RunEraseCommand(ctx context.Context, pool *pgxpool.Pool, c Config, args []s
 		if err = tx.Commit(ctx); err != nil {
 			return errors.New("erasure could not be committed")
 		}
+		blobs := NewBlobStore(c)
 		for _, key := range keys {
-			if e := os.Remove(filepath.Join(c.UploadDir, filepath.Clean("/"+key))); e == nil || errors.Is(e, os.ErrNotExist) {
+			if e := blobs.Remove(ctx, key); e == nil {
 				removed++
 			} else {
 				failed = append(failed, key)
@@ -75,7 +75,7 @@ func RunEraseCommand(ctx context.Context, pool *pgxpool.Pool, c Config, args []s
 		return err
 	}
 	if len(failed) > 0 {
-		return errors.New("erasure committed, but some upload files could not be removed; delete failed_files from UPLOAD_DIR manually")
+		return errors.New("erasure committed, but some upload files could not be removed; delete failed_files from the upload store (UPLOAD_DIR or S3 bucket) manually")
 	}
 	return nil
 }

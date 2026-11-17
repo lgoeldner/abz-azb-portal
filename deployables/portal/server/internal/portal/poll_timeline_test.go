@@ -27,7 +27,8 @@ func timelineApp(t *testing.T) (*App, *pgxpool.Pool) {
 func appForPool(t *testing.T, pool *pgxpool.Pool, issuer string) *App {
 	t.Helper()
 	ctx := context.Background()
-	c := Config{Env: "development", DatabaseURL: "postgres://unused", PublicURL: "http://localhost:8080", UploadDir: t.TempDir(), StaticDir: t.TempDir(), AuthMode: "mock", Issuer: issuer, ClientID: "portal-dev", ClientSecret: "dev-only", SessionSecret: strings.Repeat("s", 32)}
+	c := testStoreConfig(t)
+	c.Env, c.DatabaseURL, c.PublicURL, c.StaticDir, c.AuthMode, c.Issuer, c.ClientID, c.ClientSecret, c.SessionSecret = "development", "postgres://unused", "http://localhost:8080", t.TempDir(), "mock", issuer, "portal-dev", "dev-only", strings.Repeat("s", 32)
 	app, err := New(ctx, c, pool)
 	if err != nil {
 		t.Fatal(err)

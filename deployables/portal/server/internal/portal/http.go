@@ -25,6 +25,7 @@ type App struct {
 	Mail       *MailService
 	auth       *authState
 	handler    http.Handler
+	Blobs      BlobStore
 	imageSlots chan struct{}
 }
 type requestUser struct {
@@ -140,8 +141,10 @@ func New(ctx context.Context, c Config, db *pgxpool.Pool) (*App, error) {
 	if e := c.Validate(); e != nil {
 		return nil, e
 	}
-	if e := os.MkdirAll(c.UploadDir, 0700); e != nil {
-		return nil, e
+	if !c.S3.configured() {
+		if e := os.MkdirAll(c.UploadDir, 0700); e != nil {
+			return nil, e
+		}
 	}
 	if c.Env == "production" {
 		for _, name := range legalPages {
@@ -150,7 +153,7 @@ func New(ctx context.Context, c Config, db *pgxpool.Pool) (*App, error) {
 			}
 		}
 	}
-	a := &App{DB: db, Config: c, Mail: NewMailService(db, c.Mail), imageSlots: make(chan struct{}, 2)}
+	a := &App{DB: db, Config: c, Mail: NewMailService(db, c.Mail), Blobs: NewBlobStore(c), imageSlots: make(chan struct{}, 2)}
 	if e := a.setupAuth(ctx); e != nil {
 		return nil, e
 	}

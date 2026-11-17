@@ -168,13 +168,25 @@ func readImageUpload(w http.ResponseWriter, r *http.Request, allowedFields ...st
 func (a *App) storeImage(ctx context.Context, tx pgx.Tx, submissionID string, upload imageUpload) error {
 	id := ID()
 	originalKey, previewKey := id+".original", id+".preview.jpg"
-	if e := immutableWrite(filepath.Join(a.Config.UploadDir, originalKey), upload.Data); e != nil {
+	// A failed pair of writes or insert must not leave objects behind (cleanup uses a fresh context: ctx may be cancelled).
+	undo := func() {
+		bg, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		_ = a.Blobs.Remove(bg, originalKey)
+		_ = a.Blobs.Remove(bg, previewKey)
+	}
+	if e := a.Blobs.Put(ctx, originalKey, upload.Data); e != nil {
+		undo()
 		return e
 	}
-	if e := immutableWrite(filepath.Join(a.Config.UploadDir, previewKey), upload.Preview); e != nil {
+	if e := a.Blobs.Put(ctx, previewKey, upload.Preview); e != nil {
+		undo()
 		return e
 	}
 	_, e := tx.Exec(ctx, "INSERT INTO attachments(id,submission_id,filename,mime_type,size_bytes,sha256,storage_key,preview_key,caption) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)", id, submissionID, upload.Filename, upload.MimeType, len(upload.Data), digest(string(upload.Data)), originalKey, previewKey, upload.Caption)
+	if e != nil {
+		undo()
+	}
 	return e
 }
 
@@ -365,19 +377,15 @@ func (a *App) download(w http.ResponseWriter, r *http.Request) error {
 		filename = "preview.jpg"
 		disposition = "inline"
 	}
-	f, e := os.Open(filepath.Join(a.Config.UploadDir, key))
+	f, modTime, e := a.Blobs.Open(r.Context(), key)
 	if e != nil {
 		return e
 	}
-	defer f.Close()
-	st, e := f.Stat()
-	if e != nil {
-		return e
-	}
+	defer func() { _ = f.Close() }()
 	w.Header().Set("Content-Type", mimeType)
 	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": filename}))
 	w.Header().Set("Cache-Control", "private, no-store")
-	http.ServeContent(w, r, filename, st.ModTime(), f)
+	http.ServeContent(w, r, filename, modTime, f)
 	return nil
 }
 func csvCell(s string) string {
@@ -487,12 +495,12 @@ func (a *App) exportCategory(w http.ResponseWriter, r *http.Request) error {
 			if e != nil {
 				return e
 			}
-			original, e := os.Open(filepath.Join(a.Config.UploadDir, key))
+			original, _, e := a.Blobs.Open(r.Context(), key)
 			if e != nil {
 				return e
 			}
 			_, e = io.Copy(entry, original)
-			original.Close()
+			_ = original.Close()
 			if e != nil {
 				return e
 			}
