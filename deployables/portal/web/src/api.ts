@@ -16,8 +16,9 @@ export function setCsrf(value: string) {
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
-  if (init.method && !['GET', 'HEAD'].includes(init.method)) headers.set('X-CSRF-Token', csrf);
-  const response = await fetch(path.startsWith('/auth/') ? path : `/api/v1${path}`, {
+  const betterAuth = path.startsWith('/api/auth/'); // same origin is its only CSRF check
+  if (init.method && !['GET', 'HEAD'].includes(init.method) && !betterAuth) headers.set('X-CSRF-Token', csrf);
+  const response = await fetch(betterAuth || path.startsWith('/auth/') ? path : `/api/v1${path}`, {
     ...init,
     headers,
     credentials: 'same-origin',
@@ -26,7 +27,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     const data = await response.json().catch(() => null);
     throw new ApiError(
       response.status,
-      data?.error?.code ?? 'request_failed',
+      (typeof data?.error === 'string' ? data.error : data?.error?.code) ?? 'request_failed',
       data?.error?.message ?? 'Die Anfrage konnte nicht abgeschlossen werden.',
     );
   }

@@ -12,6 +12,7 @@ import {
   Settings,
   SquareKanban,
   UserCheck,
+  UserCog,
   Users,
   Vote,
   type LucideIcon,
@@ -69,7 +70,7 @@ import { TicketCards } from './TicketCards';
 import { EmailAdmin } from './EmailAdmin';
 import { ContributionDetail, Contributions, Editorial, NewContribution, NotFound } from './pages';
 import { SammlungDetail, Sammlungen } from './sammlungen';
-import { ReminderSettings } from './ReminderSettings';
+import { Settings as AccountSettings } from './Settings';
 import { ConsentStep, LegalLinks } from './Consent';
 import { DevDebug } from './DevDebug';
 import { PollStack } from './PollStack';
@@ -118,6 +119,7 @@ export function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<Overview />} />
+          <Route path="einstellungen" element={<AccountSettings />} />
           <Route path="beitraege" element={<Contributions />} />
           <Route path="beitraege/neu" element={<NewContribution />} />
           <Route path="beitraege/:id" element={<ContributionDetail />} />
@@ -403,8 +405,9 @@ function Layout() {
           </nav>
           {user.role === 'admin' && view[0] === 'redaktion' && <AdminNav onNavigate={() => setMenu(false)} />}
           <div className="flex flex-none flex-col gap-3 bg-pill px-3 py-4">
-            {/* Admins find this under Verwaltung → E-Mail. */}
-            {user.role !== 'admin' && <ReminderSettings />}
+            <NavItem to="/einstellungen" icon={UserCog}>
+              Einstellungen
+            </NavItem>
             {editorial(user) && <ViewSwitch onSwitch={() => setMenu(false)} />}
             <div className="flex items-center gap-3 px-1">
               <span

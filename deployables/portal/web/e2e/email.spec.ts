@@ -34,7 +34,7 @@ test('admin manages quota and student controls own reminders', async ({ page }, 
   await expect(page.getByRole('link', { name: /^Anmelden$/ })).toBeVisible();
   await login(page, '3');
   expect((await page.request.get('/api/v1/admin/email/status')).status()).toBe(403);
-  await page.getByText('E-Mail-Erinnerungen', { exact: true }).click();
+  await page.getByRole('link', { name: 'Einstellungen' }).click();
   await expect(page.getByText(/Erinnerungen an offene Abgaben:/)).toBeVisible();
   const activate = page.getByRole('button', { name: 'Erinnerungen aktivieren' });
   if (await activate.isVisible()) {

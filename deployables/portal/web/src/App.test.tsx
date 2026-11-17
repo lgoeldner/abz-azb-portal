@@ -319,6 +319,20 @@ describe('verwaltung', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Personen' })).toBeInTheDocument();
   });
 
+  it.each([
+    ['admin', admin],
+    ['editor', editor],
+    ['guest', guest],
+  ])('offers the account settings page to every role (%s)', async (_role, me) => {
+    mount('/', me);
+    const link = await within(await screen.findByRole('complementary')).findByRole('link', { name: 'Einstellungen' });
+    expect(link).toHaveAttribute('href', '/einstellungen');
+    fireEvent.click(link);
+    expect(await screen.findByRole('heading', { level: 1, name: 'Einstellungen' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Passkeys' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'E-Mail-Benachrichtigungen' })).toBeInTheDocument();
+  });
+
   it.each(['personen', 'sammlungen', 'protokoll'])('keeps non-admins away from /verwaltung/%s', async (page) => {
     mount(`/verwaltung/${page}`, editor);
     expect(await screen.findByRole('heading', { level: 1, name: 'Redaktion' })).toBeInTheDocument();
