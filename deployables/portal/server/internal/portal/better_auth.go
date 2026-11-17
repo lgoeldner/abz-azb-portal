@@ -197,7 +197,7 @@ func (a *App) syncAuthMode(ctx context.Context) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		_, err = tx.Exec(ctx, "INSERT INTO auth_runtime_state(singleton,mode) VALUES(true,$1)", a.Config.AuthMode)
 	} else if err == nil && mode != a.Config.AuthMode {
-		_, err = tx.Exec(ctx, "DELETE FROM sessions; DELETE FROM auth_sessions; DELETE FROM auth_verifications; DELETE FROM auth_passkeys")
+		_, err = tx.Exec(ctx, "DELETE FROM sessions; DELETE FROM auth_sessions; DELETE FROM auth_verifications")
 		if err == nil {
 			_, err = tx.Exec(ctx, "UPDATE auth_runtime_state SET mode=$1 WHERE singleton", a.Config.AuthMode)
 		}

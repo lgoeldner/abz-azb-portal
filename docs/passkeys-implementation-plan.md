@@ -23,7 +23,7 @@ Use `@better-auth/passkey` 1.7.14 in the existing auth service. No Go WebAuthn c
    - Both verify calls run under identity lock 74120984.
    - Minimal responses: 204 plus cookies on sign-in, `{id, name, created_at}` for the list. No profile data, no public keys.
    - "Mit Passkey anmelden" button on both login pages, using native `PublicKeyCredential.parseRequestOptionsFromJSON` with no client library. Hidden when the browser lacks support.
-5. **Go.** `erase.go` deletes the user's passkeys. The mode cutover in `better_auth.go` deletes all passkeys. No new Go routes, so OpenAPI is unchanged.
+5. **Go.** `erase.go` deletes the user's passkeys. The mode cutover in `better_auth.go` keeps passkeys (the dev mock has none). No new Go routes, so OpenAPI is unchanged.
 6. **Restore.** `restore.sh` deletes all passkeys, so a restore cannot resurrect a removed one. Update `test-restore-safety.sh` and `scripts/test-recovery.sh`.
 7. **Web.** New `Passkeys.tsx` in the sidebar for all roles: list, add, remove. `api.ts` passes `/api/auth/` paths through.
 8. **Tests.**
@@ -45,7 +45,7 @@ Use `@better-auth/passkey` 1.7.14 in the existing auth service. No Go WebAuthn c
 
 ## Decisions
 
-- **Passkeys also work in mock mode.** This lets the Playwright test run in CI. The cutover wipe stops a mock-enrolled passkey from reaching real mode.
+- **The dev mock has no passkeys.** It is only an account picker. An earlier version enrolled passkeys in the mock for a Playwright test and wiped them at every auth-mode cutover, which also deleted real-mode passkeys on a `make dev` / `make dev:auth` switch; both were removed.
 - **Enrollment window is 1 hour after login.** After that the UI says to log in again. The plugin default would be the full 24-hour session.
 - **Restore and email change delete passkeys.** Users re-enroll through a magic link. Keeping them would leave the wrong person with access after a corrected wrong-email assignment.
 - **No passkey naming or rename UI.** The list shows "Passkey vom <Datum>".

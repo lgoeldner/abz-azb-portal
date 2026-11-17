@@ -12,7 +12,7 @@ The server performs migrations before serving. For an existing OIDC deployment, 
 
 ## Real login in development
 
-`make dev:auth` layers `compose.dev.real-auth.yaml` over the dev stack. The same `auth` service runs the production image in `better_auth` mode instead of the mock picker, and the portal sends through Brevo. Plain `make dev` returns to the mock; either switch revokes existing sessions and deletes all passkeys (mode cutover), so enroll again afterwards. Never change `AUTH_MODE` on a production deployment for this reason. Put these in `.env.dev` first: `BREVO_API_KEY`, `MAIL_FROM` (a sender verified in Brevo; without a domain use a single verified sender address, which may land in spam), `BREVO_TRACKING_DISABLED=true` after disabling tracking in Brevo. `MAIL_FROM` needs a display name (`AbiZeitBetrug <you@example.org>`); Brevo rejects an empty sender name.
+`make dev:auth` layers `compose.dev.real-auth.yaml` over the dev stack. The same `auth` service runs the production image in `better_auth` mode instead of the mock picker, and the portal sends through Brevo. Plain `make dev` returns to the mock. Either switch is an auth-mode cutover: it revokes existing sessions and verifications but keeps passkeys, because the mock has none. Never change `AUTH_MODE` on a production deployment. Put these in `.env.dev` first: `BREVO_API_KEY`, `MAIL_FROM` (a sender verified in Brevo; without a domain use a single verified sender address, which may land in spam), `BREVO_TRACKING_DISABLED=true` after disabling tracking in Brevo. `MAIL_FROM` needs a display name (`AbiZeitBetrug <you@example.org>`); Brevo rejects an empty sender name.
 
 **Allowlist:** only provisioned users with `login_enabled` and `admitted` can request a link; unlisted addresses get the same response and no mail. Edit the list with `make allowlist FILE=roster.csv` (dry run; add `APPLY=1` to write), with the CLI/SQL below, or in the admin UI. `roster*.csv` is gitignored; never commit a real roster. Seeded dev users have synthetic addresses.
 
@@ -97,5 +97,5 @@ Google remains an optional follow-up feature, as in the approved plan. Enable it
 - Users add a passkey under "Einstellungen", section "Passkeys", within 1 hour after logging in. After that they log in again first. They sign in later with "Mit Passkey anmelden" on the login page.
 - The magic link stays as recovery. A passkey combined with email recovery is not phishing-resistant.
 - The RP ID is the hostname of `BETTER_AUTH_URL`. Changing the production domain invalidates all passkeys. Users then log in by magic link and enroll again.
-- A restore, a login email change, an erasure and an auth-mode cutover delete passkeys. Affected users enroll again after a magic-link login.
-- Passkeys also work in mock mode (for tests). The cutover to real mode deletes them.
+- A restore, a login email change and an erasure delete passkeys. Affected users enroll again after a magic-link login.
+- The development mock is only an account picker and has no passkeys; switching between `make dev` and `make dev:auth` keeps passkeys.

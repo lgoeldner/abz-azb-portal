@@ -178,6 +178,7 @@ func TestAuthModeChangesRevokeSessionsPermanently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Passkeys exist only in real mode, so switching to the dev mock and back must keep them.
 	if _, err = pool.Exec(ctx, "INSERT INTO auth_passkeys(user_id,credential_id,public_key,counter,device_type,backed_up) VALUES($1,'synthetic','pk',0,'singleDevice',false)", MiaID); err != nil {
 		t.Fatal(err)
 	}
@@ -193,8 +194,8 @@ func TestAuthModeChangesRevokeSessionsPermanently(t *testing.T) {
 	if err = pool.QueryRow(ctx, "SELECT count(*) FROM auth_sessions").Scan(&count); err != nil || count != 0 {
 		t.Fatal("away/back revived session")
 	}
-	if err = pool.QueryRow(ctx, "SELECT count(*) FROM auth_passkeys").Scan(&count); err != nil || count != 0 {
-		t.Fatal("mode change kept a passkey")
+	if err = pool.QueryRow(ctx, "SELECT count(*) FROM auth_passkeys").Scan(&count); err != nil || count != 1 {
+		t.Fatal("mode change deleted a passkey")
 	}
 }
 

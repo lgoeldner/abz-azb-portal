@@ -310,7 +310,7 @@ test("passkeys register, sign in, and stay inside the allowlist and identity rul
     assert.equal(await passkeyCount(alice.id), 0);
     assert.equal((await signIn(aliceKey)).verified.status, 401);
 
-    // The login page offers the native passkey button (the mock picker is checked in the mock test).
+    // The login page offers the native passkey button (the mock picker has none, see the mock test).
     const html = await (await fetch(serviceURL + "/auth/login")).text();
     assert.match(html, /Mit Passkey anmelden/u);
     assert.match(html, /parseRequestOptionsFromJSON/u);
@@ -321,19 +321,13 @@ test("passkeys register, sign in, and stay inside the allowlist and identity rul
   }
 });
 
-test("passkeys also work in mock mode", { skip: skipReason }, async () => {
+test("the development mock offers no passkeys", { skip: skipReason }, async () => {
   const { createAuth } = await import("../auth-config.mjs");
   const { createAuthHTTPServer } = await import("../server-core.mjs");
   const { testUtils } = await import("better-auth/plugins");
   const { pool, identityLockPool, env, config, close } = await openSchema("mock");
-  const userId = randomUUID();
   let server;
   try {
-    await pool.query(
-      `INSERT INTO users (id, subject, name, role, admitted, cohort_member, login_email, email_verified, login_enabled)
-       VALUES ($1, NULL, 'Synthetic mock user', 'student', false, true, NULL, false, true)`,
-      [userId],
-    );
     const runtime = await createAuth({ mode: "mock", pool, env, extraPlugins: [testUtils()] });
     server = createAuthHTTPServer({ getAuthRuntime: async () => ({ auth: runtime.auth, hasSessionAccess: runtime.hasSessionAccess }), pool, identityLockPool, mode: "mock", authOrigin: config.authOrigin, serviceSecret: env.AUTH_SERVICE_SECRET });
     await new Promise((resolve, reject) => {
@@ -341,21 +335,10 @@ test("passkeys also work in mock mode", { skip: skipReason }, async () => {
       server.listen(0, "127.0.0.1", resolve);
     });
     const serviceURL = "http://127.0.0.1:" + server.address().port;
-    const { send, sessionFor, enroll, signIn } = client(serviceURL, config.authOrigin, env.AUTH_SERVICE_SECRET);
-    const jar = new Map((await runtime.context.test.login({ userId })).cookies.map((cookie) => [cookie.name, cookie.value]));
-    const authenticator = createAuthenticator(config.authOrigin, "localhost");
-    assert.equal((await enroll(jar, authenticator)).verified.status, 204);
-    const signedIn = await signIn(authenticator);
-    assert.equal(signedIn.verified.status, 204);
-    absorb(signedIn.jar, signedIn.verified);
-    assert.equal(await sessionFor(signedIn.jar), userId);
-    const list = await (await send("GET", "list-user-passkeys", { jar: signedIn.jar })).json();
-    assert.equal((await send("POST", "delete-passkey", { jar: signedIn.jar, body: { id: list[0].id } })).status, 204);
-    assert.equal((await signIn(authenticator)).verified.status, 401);
-
+    const route = await fetch(serviceURL + "/api/auth/passkey/generate-authenticate-options", { method: "POST", headers: { origin: config.authOrigin } });
+    assert.equal(route.status, 404);
     const page = await (await fetch(serviceURL + "/auth/login")).text();
-    assert.match(page, /Mit Passkey anmelden/u);
-    assertScriptsParse(page);
+    assert.doesNotMatch(page, /Passkey/u);
   } finally {
     if (server) await new Promise((resolve) => server.close(resolve));
     await close();

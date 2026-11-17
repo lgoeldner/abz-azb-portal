@@ -211,7 +211,8 @@ export function createAuthHTTPServer({
     }
 
     const passkeyName = url.pathname.startsWith("/api/auth/passkey/") ? url.pathname.slice("/api/auth/passkey/".length) : "";
-    if (Object.hasOwn(PASSKEY_METHODS, passkeyName) && PASSKEY_METHODS[passkeyName] === method) {
+    // The development mock is only an account picker: no passkeys, so none can reach real mode.
+    if (mode !== "mock" && Object.hasOwn(PASSKEY_METHODS, passkeyName) && PASSKEY_METHODS[passkeyName] === method) {
       if (method === "POST" && !isSameOrigin(req, origin)) return sendJSON(res, 403, { error: "origin_denied" });
       try {
         return await passkeyRoute(passkeyName, req, res, await getRuntime());
@@ -465,7 +466,7 @@ input:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-co
 function loginPage(mode) {
   if (mode === "mock") {
     return makePage(
-      "<!doctype html><html lang=\"de\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Anmelden · AbiZeitBetrug</title><style nonce=\"__NONCE__\">" + pageCSS + "</style><main  class=\"wide\"><div class=\"panel\"><div class=\"brand\"><span class=\"mark\" aria-hidden=\"true\">27</span>AbiZeitBetrug</div><span class=\"badge\">Nur Entwicklung</span><h1>Entwicklungsanmeldung</h1><p class=\"hint\">Testkonto auswählen. Dies ist ein lokaler Mock ohne echte Konten.</p><div class=\"grid\" id=\"accounts\" aria-live=\"polite\">Lade Konten …</div><button id=\"passkey\" class=\"btn\" type=\"button\" hidden>Mit Passkey anmelden</button><p id=\"message\" class=\"msg\" role=\"status\"></p><p class=\"small legal\"><a href=\"/impressum\">Impressum</a><a href=\"/datenschutz\">Datenschutz</a></p></div></main><script nonce=\"__NONCE__\">const root=document.querySelector(\"#accounts\");const message=document.querySelector(\"#message\");fetch(\"/auth/mock-users\",{credentials:\"same-origin\"}).then(r=>{if(!r.ok)throw new Error();return r.json()}).then(users=>{root.replaceChildren();for(const user of users){const button=document.createElement(\"button\");button.className=\"card\";button.type=\"button\";button.dataset.userId=user.id;const avatar=document.createElement(\"span\");avatar.className=\"avatar\";avatar.setAttribute(\"aria-hidden\",\"true\");avatar.textContent=(Array.from(user.name)[0]||\"?\").toUpperCase();const name=document.createElement(\"span\");name.className=\"name\";name.textContent=user.name;button.append(avatar,name);button.addEventListener(\"click\",async()=>{message.textContent=\"\";message.className=\"msg\";const response=await fetch(\"/auth/mock-login\",{method:\"POST\",credentials:\"same-origin\",headers:{\"content-type\":\"application/json\"},body:JSON.stringify({user_id:user.id})});if(response.ok){location.assign(\"/\")}else{message.textContent=\"Anmeldung derzeit nicht möglich.\";message.className=\"msg err\"}});root.append(button)}}).catch(()=>{root.textContent=\"Konten konnten nicht geladen werden.\"});" + passkeyScript + "</script></html>",
+      "<!doctype html><html lang=\"de\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Anmelden · AbiZeitBetrug</title><style nonce=\"__NONCE__\">" + pageCSS + "</style><main  class=\"wide\"><div class=\"panel\"><div class=\"brand\"><span class=\"mark\" aria-hidden=\"true\">27</span>AbiZeitBetrug</div><span class=\"badge\">Nur Entwicklung</span><h1>Entwicklungsanmeldung</h1><p class=\"hint\">Testkonto auswählen. Dies ist ein lokaler Mock ohne echte Konten.</p><div class=\"grid\" id=\"accounts\" aria-live=\"polite\">Lade Konten …</div><p id=\"message\" class=\"msg\" role=\"status\"></p><p class=\"small legal\"><a href=\"/impressum\">Impressum</a><a href=\"/datenschutz\">Datenschutz</a></p></div></main><script nonce=\"__NONCE__\">const root=document.querySelector(\"#accounts\");const message=document.querySelector(\"#message\");fetch(\"/auth/mock-users\",{credentials:\"same-origin\"}).then(r=>{if(!r.ok)throw new Error();return r.json()}).then(users=>{root.replaceChildren();for(const user of users){const button=document.createElement(\"button\");button.className=\"card\";button.type=\"button\";button.dataset.userId=user.id;const avatar=document.createElement(\"span\");avatar.className=\"avatar\";avatar.setAttribute(\"aria-hidden\",\"true\");avatar.textContent=(Array.from(user.name)[0]||\"?\").toUpperCase();const name=document.createElement(\"span\");name.className=\"name\";name.textContent=user.name;button.append(avatar,name);button.addEventListener(\"click\",async()=>{message.textContent=\"\";message.className=\"msg\";const response=await fetch(\"/auth/mock-login\",{method:\"POST\",credentials:\"same-origin\",headers:{\"content-type\":\"application/json\"},body:JSON.stringify({user_id:user.id})});if(response.ok){location.assign(\"/\")}else{message.textContent=\"Anmeldung derzeit nicht möglich.\";message.className=\"msg err\"}});root.append(button)}}).catch(()=>{root.textContent=\"Konten konnten nicht geladen werden.\"});</script></html>",
       pageCSP,
     );
   }
@@ -489,7 +490,7 @@ function magicLinkPage() {
 const passkeyScript = `{
   const button = document.querySelector("#passkey");
   const message = document.querySelector("#message");
-  const email = document.querySelector("#email"); // absent on the mock picker
+  const email = document.querySelector("#email");
   const HINT = "abizeit-passkey";
 
   if (window.PublicKeyCredential && PublicKeyCredential.parseRequestOptionsFromJSON) {
@@ -527,7 +528,7 @@ const passkeyScript = `{
     }
 
     async function suggestInEmailField() {
-      if (!email || !(await PublicKeyCredential.isConditionalMediationAvailable?.())) return;
+      if (!(await PublicKeyCredential.isConditionalMediationAvailable?.())) return;
       try {
         await signIn("conditional");
       } catch (error) {

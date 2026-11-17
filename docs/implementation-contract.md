@@ -165,4 +165,4 @@ Invariants:
 - Responses contain no profile data and no public keys.
 - Both verify calls run under identity lock 74120984.
 - A disabled or non-admitted user is refused at session creation, also when signing in with a passkey.
-- Passkeys are deleted on login email change, on erasure, on auth-mode cutover and on restore.
+- Passkeys are deleted on login email change, on erasure and on restore. The development mock has no passkey routes or button, so an auth-mode cutover keeps them.
