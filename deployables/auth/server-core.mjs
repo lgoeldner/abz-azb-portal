@@ -483,7 +483,85 @@ function magicLinkPage() {
 }
 
 // Native WebAuthn only; the button stays hidden in browsers without JSON option parsing.
-const passkeyScript = `{const b=document.querySelector("#passkey"),m=document.querySelector("#message"),e=document.querySelector("#email"),K="abizeit-passkey";if(window.PublicKeyCredential&&PublicKeyCredential.parseRequestOptionsFromJSON){b.hidden=false;let ctl;const post=(p,body)=>fetch("/api/auth/passkey/"+p,{method:"POST",credentials:"same-origin",...(body&&{headers:{"content-type":"application/json"},body:JSON.stringify(body)})});const fail=()=>{m.className="msg err";m.textContent="Anmeldung mit Passkey nicht möglich."};async function go(mediation){const s=new AbortController();ctl?.abort();ctl=s;const o=await post("generate-authenticate-options");if(!o.ok)throw new Error();const c=await navigator.credentials.get({publicKey:PublicKeyCredential.parseRequestOptionsFromJSON(await o.json()),mediation,signal:s.signal});const r=await post("verify-authentication",{response:c.toJSON()});if(r.status!==204)throw new Error();localStorage.setItem(K,"1");location.replace("/")}async function suggest(){if(!e||!(await PublicKeyCredential.isConditionalMediationAvailable?.()))return;try{await go("conditional")}catch(x){if(x.name!=="AbortError"&&x.name!=="NotAllowedError")fail()}}b.addEventListener("click",async()=>{b.disabled=true;m.className="msg";m.textContent="";try{await go()}catch{fail();suggest()}b.disabled=false});(async()=>{if(localStorage.getItem(K)){try{await go();return}catch{localStorage.removeItem(K)}}suggest()})()}}`;
+// Client script shared by the login pages. Runs in the browser, so no template placeholders or backticks inside.
+// Flow: a passkey button, the email field's autofill ("conditional mediation"), and an automatic prompt in
+// browsers that signed in with a passkey before (localStorage flag HINT, also set by the settings page).
+const passkeyScript = `{
+  const button = document.querySelector("#passkey");
+  const message = document.querySelector("#message");
+  const email = document.querySelector("#email"); // absent on the mock picker
+  const HINT = "abizeit-passkey";
+
+  if (window.PublicKeyCredential && PublicKeyCredential.parseRequestOptionsFromJSON) {
+    button.hidden = false;
+    let current; // only one browser prompt may be open; starting another aborts the previous one
+
+    const post = (path, body) =>
+      fetch("/api/auth/passkey/" + path, {
+        method: "POST",
+        credentials: "same-origin",
+        ...(body && { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+      });
+
+    const showError = () => {
+      message.className = "msg err";
+      message.textContent = "Anmeldung mit Passkey nicht möglich.";
+    };
+
+    // mediation: undefined = browser dialog, "conditional" = suggestions in the email field.
+    async function signIn(mediation) {
+      const controller = new AbortController();
+      current?.abort();
+      current = controller;
+      const options = await post("generate-authenticate-options");
+      if (!options.ok) throw new Error("options");
+      const credential = await navigator.credentials.get({
+        publicKey: PublicKeyCredential.parseRequestOptionsFromJSON(await options.json()),
+        mediation,
+        signal: controller.signal,
+      });
+      const result = await post("verify-authentication", { response: credential.toJSON() });
+      if (result.status !== 204) throw new Error("verify");
+      localStorage.setItem(HINT, "1");
+      location.replace("/");
+    }
+
+    async function suggestInEmailField() {
+      if (!email || !(await PublicKeyCredential.isConditionalMediationAvailable?.())) return;
+      try {
+        await signIn("conditional");
+      } catch (error) {
+        // Aborted by the button or dismissed: stay quiet.
+        if (error.name !== "AbortError" && error.name !== "NotAllowedError") showError();
+      }
+    }
+
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      message.className = "msg";
+      message.textContent = "";
+      try {
+        await signIn();
+      } catch {
+        showError();
+        suggestInEmailField();
+      }
+      button.disabled = false;
+    });
+
+    (async () => {
+      if (localStorage.getItem(HINT)) {
+        try {
+          await signIn();
+          return;
+        } catch {
+          localStorage.removeItem(HINT); // cancelled or no longer valid: never nag twice
+        }
+      }
+      suggestInEmailField();
+    })();
+  }
+}`;
 
 function formatMockCookie(cookie) {
   const parts = [cookie.name + "=" + cookie.value, "Path=" + (cookie.path || "/"), "HttpOnly", "SameSite=Lax", "Max-Age=86400"];
