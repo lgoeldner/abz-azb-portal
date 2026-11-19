@@ -196,8 +196,11 @@
   background: var(--color-soft);
   color: var(--color-ink);
 }
-.poll-stack__card ul[aria-label$='Suchergebnisse'] button[aria-pressed='true'],
-.poll-stack__card ul[aria-label$='Suchergebnisse'] button[aria-pressed='true']:hover {
+.poll-stack__card ul[aria-label$='Suchergebnisse'] button[aria-pressed='true'] {
   background: var(--color-pop);
   color: var(--color-ink);
+}
+/* Darker lime keeps ink text above 7:1. */
+.poll-stack__card ul[aria-label$='Suchergebnisse'] button[aria-pressed='true']:hover {
+  background: color-mix(in srgb, var(--color-pop) 80%, var(--color-ink));
 }
