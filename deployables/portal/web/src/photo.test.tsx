@@ -631,6 +631,19 @@ describe('photo contributions', () => {
     });
     await waitFor(() => expect(screen.queryByRole('img', { name: 'Drittes Foto' })).toBeNull());
 
+    // The enlarged view offers the same confirmed removal.
+    fireEvent.click(screen.getByRole('button', { name: 'Korrigierter Bildtext vergrößern' }));
+    const lightbox = screen.getByRole('dialog');
+    fireEvent.click(within(lightbox).getByRole('button', { name: 'Foto entfernen' }));
+    fireEvent.click(
+      within(within(lightbox).getByRole('group', { name: 'Entfernen bestätigen' })).getByRole('button', {
+        name: 'Abbrechen',
+      }),
+    );
+    expect(within(lightbox).queryByRole('group')).toBeNull();
+    fireEvent.click(within(lightbox).getByRole('button', { name: 'Schließen' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+
     // The last photo of a batch cannot be deleted on its own; removing it withdraws the batch after confirmation.
     fireEvent.click(within(singleFigure).getByRole('button', { name: 'Foto entfernen' }));
     const confirmation = within(singleFigure).getByRole('group', { name: 'Entfernen bestätigen' });

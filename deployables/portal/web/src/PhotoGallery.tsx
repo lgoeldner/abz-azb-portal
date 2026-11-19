@@ -1,5 +1,44 @@
-import { Download, ExternalLink, X } from 'lucide-react';
-import { useMemo, useState, type CSSProperties } from 'react';
+import { Download, ExternalLink, Trash2, X } from 'lucide-react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
+
+function ConfirmRemove({
+  warning,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  warning?: string;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div role="group" aria-label="Entfernen bestätigen" className="confirm-pill">
+      <p>Foto wirklich entfernen? {warning}</p>
+      <div className="confirm-pill__buttons">
+        <button type="button" disabled={busy} onClick={onCancel}>
+          Abbrechen
+        </button>
+        <button type="button" className="confirm-pill__danger" disabled={busy} onClick={onConfirm}>
+          Entfernen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const narrowQuery = '(max-width: 639px)';
+function useNarrow() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia(narrowQuery);
+      query.addEventListener('change', onChange);
+      return () => query.removeEventListener('change', onChange);
+    },
+    () => window.matchMedia(narrowQuery).matches,
+    () => false,
+  );
+}
 import type { Attachment, Submission } from './api';
 import './PhotoGallery.css';
 
@@ -52,12 +91,11 @@ export function PhotoGallery({
   removeWarning?: (photo: GalleryPhoto) => string | undefined;
 }) {
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [lightboxConfirm, setLightboxConfirm] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState('');
-  // Natural aspect ratio per photo, learned on load; drives the justified-row widths.
-  const [ratios, setRatios] = useState<Record<string, number>>({});
   const [viewing, setViewing] = useState<GalleryPhoto | null>(null);
 
   async function save(photo: GalleryPhoto) {
@@ -74,133 +112,128 @@ export function PhotoGallery({
     }
   }
 
+  // Independent masonry columns; photos are dealt left to right so reading order stays row-wise.
+  const count = useNarrow() ? 2 : 3;
+  const columns = Array.from({ length: count }, (_, c) => photos.filter((_, i) => i % count === c));
+
   if (!photos.length) return null;
 
   return (
     <section className="photo-gallery" aria-label="Fotogalerie">
-      {photos.map((photo) => {
-        const label = photo.caption || photo.filename;
-        const editingThis = editing === photo.id;
-        const editable = typeof allowCaptionEdit === 'function' ? allowCaptionEdit(photo) : allowCaptionEdit;
-        return (
-          <figure
-            className="photo-gallery__item"
-            key={photo.id}
-            style={{ '--ratio': ratios[photo.id] ?? 4 / 3 } as CSSProperties}
-          >
-            <button
-              type="button"
-              className="photo-gallery__image-link"
-              aria-label={`${label} vergrößern`}
-              onClick={() => setViewing(photo)}
-            >
-              <img
-                className="photo-gallery__image"
-                src={photo.preview_url}
-                alt={photo.caption || photo.filename}
-                loading="lazy"
-                onLoad={({ currentTarget: img }) => {
-                  if (!img.naturalWidth || !img.naturalHeight) return;
-                  const ratio = img.naturalWidth / img.naturalHeight;
-                  setRatios((current) => (current[photo.id] === ratio ? current : { ...current, [photo.id]: ratio }));
-                }}
-              />
-            </button>
-            <figcaption className="photo-gallery__caption">
-              {photo.caption && <p className="photo-gallery__text">{photo.caption}</p>}
-              {photo.author_name && (
-                <p className="photo-gallery__source">
-                  {photo.filename} <span>· {photo.author_name}</span>
-                </p>
-              )}
-              {!photo.author_name && (
-                <p className="photo-gallery__file">
-                  {photo.filename} <span>· {(photo.size_bytes / 1024).toFixed(0)} KB</span>
-                </p>
-              )}
-              {editingThis && editable && onSaveCaption ? (
-                <form
-                  className="photo-gallery__caption-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void save(photo);
-                  }}
+      {columns.map((column, columnIndex) => (
+        <div className="photo-gallery__column" key={columnIndex}>
+          {column.map((photo) => {
+            const label = photo.caption || photo.filename;
+            const editingThis = editing === photo.id;
+            const editable = typeof allowCaptionEdit === 'function' ? allowCaptionEdit(photo) : allowCaptionEdit;
+            return (
+              <figure className="photo-gallery__item" key={photo.id}>
+                <button
+                  type="button"
+                  className="photo-gallery__image-link"
+                  aria-label={`${label} vergrößern`}
+                  onClick={() => setViewing(photo)}
                 >
-                  <label htmlFor={`caption-${photo.id}`}>Bildtext</label>
-                  <textarea
-                    id={`caption-${photo.id}`}
-                    value={draft}
-                    maxLength={2000}
-                    rows={3}
-                    placeholder={captionPlaceholder}
-                    aria-describedby={`caption-hint-${photo.id}`}
-                    autoFocus
-                    disabled={busy || saving !== null}
-                    onChange={(event) => setDraft(event.target.value)}
+                  <img
+                    className="photo-gallery__image"
+                    src={photo.preview_url}
+                    alt={photo.caption || photo.filename}
+                    loading="lazy"
                   />
-                  <small id={`caption-hint-${photo.id}`} className="photo-gallery__hint">
-                    {captionHint}
-                  </small>
-                  <div className="photo-gallery__caption-actions">
-                    <button type="button" disabled={busy || saving !== null} onClick={() => setEditing(null)}>
-                      Abbrechen
-                    </button>
-                    <button type="submit" disabled={busy || saving !== null}>
-                      {saving === photo.id ? 'Speichert …' : 'Bildtext speichern'}
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <div className="photo-gallery__actions">
-                  {photo.href && <a href={photo.href}>Beitrag öffnen</a>}
-                  {editable && onSaveCaption && (
-                    <button
-                      type="button"
-                      disabled={busy || saving !== null}
-                      onClick={() => {
-                        setDraft(photo.caption);
-                        setEditing(photo.id);
-                        setError('');
+                </button>
+                <figcaption className="photo-gallery__caption">
+                  {photo.caption && <p className="photo-gallery__text">{photo.caption}</p>}
+                  {photo.author_name && (
+                    <p className="photo-gallery__source">
+                      {photo.filename} <span>· {photo.author_name}</span>
+                    </p>
+                  )}
+                  {!photo.author_name && (
+                    <p className="photo-gallery__file">
+                      {photo.filename} <span>· {(photo.size_bytes / 1024).toFixed(0)} KB</span>
+                    </p>
+                  )}
+                  {editingThis && editable && onSaveCaption ? (
+                    <form
+                      className="photo-gallery__caption-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void save(photo);
                       }}
                     >
-                      Bildtext {photo.caption ? 'bearbeiten' : 'ergänzen'}
-                    </button>
-                  )}
-                  {canRemove?.(photo) && onRemove && confirming !== photo.id && (
-                    <button type="button" disabled={busy || saving !== null} onClick={() => setConfirming(photo.id)}>
-                      Foto entfernen
-                    </button>
-                  )}
-                  {canRemove?.(photo) && onRemove && confirming === photo.id && (
-                    <div role="group" aria-label="Entfernen bestätigen" className="photo-gallery__confirm">
-                      <p>Foto wirklich entfernen? {removeWarning?.(photo)}</p>
-                      <button type="button" disabled={busy} onClick={() => setConfirming(null)}>
-                        Abbrechen
-                      </button>
-                      <button
-                        type="button"
-                        className="photo-gallery__danger"
-                        disabled={busy}
-                        onClick={() => {
-                          setConfirming(null);
-                          onRemove(photo);
-                        }}
-                      >
-                        Entfernen
-                      </button>
+                      <label htmlFor={`caption-${photo.id}`}>Bildtext</label>
+                      <textarea
+                        id={`caption-${photo.id}`}
+                        value={draft}
+                        maxLength={2000}
+                        rows={3}
+                        placeholder={captionPlaceholder}
+                        aria-describedby={`caption-hint-${photo.id}`}
+                        autoFocus
+                        disabled={busy || saving !== null}
+                        onChange={(event) => setDraft(event.target.value)}
+                      />
+                      <small id={`caption-hint-${photo.id}`} className="photo-gallery__hint">
+                        {captionHint}
+                      </small>
+                      <div className="photo-gallery__caption-actions">
+                        <button type="button" disabled={busy || saving !== null} onClick={() => setEditing(null)}>
+                          Abbrechen
+                        </button>
+                        <button type="submit" disabled={busy || saving !== null}>
+                          {saving === photo.id ? 'Speichert …' : 'Bildtext speichern'}
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="photo-gallery__actions">
+                      {photo.href && <a href={photo.href}>Beitrag öffnen</a>}
+                      {editable && onSaveCaption && (
+                        <button
+                          type="button"
+                          disabled={busy || saving !== null}
+                          onClick={() => {
+                            setDraft(photo.caption);
+                            setEditing(photo.id);
+                            setError('');
+                          }}
+                        >
+                          Bildtext {photo.caption ? 'bearbeiten' : 'ergänzen'}
+                        </button>
+                      )}
+                      {canRemove?.(photo) && onRemove && confirming !== photo.id && (
+                        <button
+                          type="button"
+                          disabled={busy || saving !== null}
+                          onClick={() => setConfirming(photo.id)}
+                        >
+                          Foto entfernen
+                        </button>
+                      )}
+                      {canRemove?.(photo) && onRemove && confirming === photo.id && (
+                        <ConfirmRemove
+                          warning={removeWarning?.(photo)}
+                          busy={busy}
+                          onCancel={() => setConfirming(null)}
+                          onConfirm={() => {
+                            setConfirming(null);
+                            onRemove(photo);
+                          }}
+                        />
+                      )}
                     </div>
                   )}
-                </div>
-              )}
-              {error && editingThis && (
-                <p role="alert" className="photo-gallery__error">
-                  {error}
-                </p>
-              )}
-            </figcaption>
-          </figure>
-        );
-      })}
+                  {error && editingThis && (
+                    <p role="alert" className="photo-gallery__error">
+                      {error}
+                    </p>
+                  )}
+                </figcaption>
+              </figure>
+            );
+          })}
+        </div>
+      ))}
       {viewing && (
         <dialog
           className="photo-lightbox"
@@ -208,7 +241,10 @@ export function PhotoGallery({
           ref={(dialog) => {
             if (dialog && !dialog.open) dialog.showModal();
           }}
-          onClose={() => setViewing(null)}
+          onClose={() => {
+            setViewing(null);
+            setLightboxConfirm(false);
+          }}
           onClick={(event) => {
             if (event.target === event.currentTarget) event.currentTarget.close();
           }}
@@ -236,6 +272,18 @@ export function PhotoGallery({
             >
               <Download aria-hidden size={20} />
             </a>
+            {canRemove?.(viewing) && onRemove && (
+              <button
+                type="button"
+                className="photo-lightbox__icon"
+                aria-label="Foto entfernen"
+                title="Foto entfernen"
+                disabled={busy}
+                onClick={() => setLightboxConfirm(true)}
+              >
+                <Trash2 aria-hidden size={20} />
+              </button>
+            )}
             <button
               type="button"
               className="photo-lightbox__icon"
@@ -246,6 +294,20 @@ export function PhotoGallery({
               <X aria-hidden size={20} />
             </button>
           </div>
+          {lightboxConfirm && canRemove?.(viewing) && onRemove && (
+            <div className="photo-lightbox__confirm">
+              <ConfirmRemove
+                warning={removeWarning?.(viewing)}
+                busy={busy}
+                onCancel={() => setLightboxConfirm(false)}
+                onConfirm={() => {
+                  setLightboxConfirm(false);
+                  setViewing(null);
+                  onRemove(viewing);
+                }}
+              />
+            </div>
+          )}
         </dialog>
       )}
     </section>

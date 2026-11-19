@@ -98,6 +98,9 @@ test('photo batches share one collection grid and new uploads return to it', asy
   for (const width of [1440, 768, 390]) {
     await page.setViewportSize({ width, height: 1000 });
     await expect(gallery).toBeVisible();
+    await expect
+      .poll(() => gallery.evaluate((element) => element.querySelectorAll('.photo-gallery__column').length))
+      .toBe(width < 640 ? 2 : 3);
     const layout = await gallery.evaluate((element) => ({
       // Rendered tiles keep each photo's natural aspect ratio (no cropping).
       distortion: Math.max(
@@ -106,10 +109,12 @@ test('photo batches share one collection grid and new uploads return to it', asy
         ),
       ),
       fit: Array.from(element.querySelectorAll('img')).map((img) => getComputedStyle(img).objectFit),
+      columns: element.querySelectorAll('.photo-gallery__column').length,
       overflow: document.documentElement.scrollWidth > window.innerWidth,
     }));
     expect(layout.distortion).toBeLessThan(0.02);
     expect(layout.fit.every((fit) => fit === 'fill')).toBe(true);
+    expect(layout.columns).toBe(width < 640 ? 2 : 3);
     expect(layout.overflow).toBe(false);
     await page.screenshot({ path: testInfo.outputPath(`photos-${width}.png`), fullPage: true });
   }
@@ -117,7 +122,10 @@ test('photo batches share one collection grid and new uploads return to it', asy
   await gallery.getByRole('button', { name: 'Jahrgangsmoment 1 vergrößern' }).click();
   const lightbox = page.getByRole('dialog');
   await expect(lightbox.getByRole('link', { name: 'Original herunterladen' })).toHaveAttribute('download', /.+/);
+  await lightbox.getByRole('button', { name: 'Foto entfernen' }).click();
+  await expect(lightbox.getByRole('group', { name: 'Entfernen bestätigen' })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('photos-lightbox.png') });
+  await lightbox.getByRole('button', { name: 'Abbrechen' }).click();
   await lightbox.getByRole('button', { name: 'Schließen' }).click();
   await expect(lightbox).toBeHidden();
 

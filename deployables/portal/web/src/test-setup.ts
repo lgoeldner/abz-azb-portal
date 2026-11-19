@@ -10,6 +10,8 @@ afterEach(() => {
 
 URL.createObjectURL ??= () => 'blob:preview';
 URL.revokeObjectURL ??= () => {};
+window.matchMedia ??= (query: string) =>
+  ({ matches: false, media: query, addEventListener() {}, removeEventListener() {} }) as unknown as MediaQueryList;
 HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
   this.open = true;
 };
