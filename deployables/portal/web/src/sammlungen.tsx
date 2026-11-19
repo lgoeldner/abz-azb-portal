@@ -141,23 +141,12 @@ export function Sammlungen() {
         </Empty>
       ) : (
         <div className="space-y-10">
-          {shown.some((c) => singleKinds.includes(c.kind)) && (
-            <div className={`${notice} space-y-1`}>
-              <strong className="block">Transparent abgestimmt.</strong>
-              <p>
-                Deine Stimme wird deinem Namen zugeordnet. Die Administration kann Stimmen und Änderungen
-                nachvollziehen. Die Redaktion sieht nur Gesamtergebnisse. Als Schüler:in siehst du keine Ergebnisse. Du
-                kannst während der Öffnung mitmachen; wiederholbare Abstimmungen erlauben mehrere Abgaben.
-              </p>
-            </div>
-          )}
           {once.length > 0 && (
             <section aria-labelledby="sammlungen-einmalig">
               <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
                 <h2 id="sammlungen-einmalig" className={heading}>
                   Einmalig
                 </h2>
-                <span className="text-sm text-muted">Nach Enddatum sortiert</span>
               </div>
               <Cards items={once} />
             </section>
@@ -168,7 +157,6 @@ export function Sammlungen() {
                 <h2 id="sammlungen-wiederholbar" className={heading}>
                   Wiederholbar
                 </h2>
-                <span className="text-sm text-muted">Mehrfach mitmachen</span>
               </div>
               <Cards items={repeatable} />
             </section>
@@ -797,11 +785,6 @@ function CollectionReader({ sammlung }: { sammlung: Category }) {
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className={heading}>{photoCollection ? 'Gesammelte Fotos' : 'Gesammelte Beiträge'}</h2>
-          <p className="mt-1 text-sm text-muted">
-            {photoCollection
-              ? 'Alle eingereichten Fotos ansehen und ihre Bildtexte lesen.'
-              : 'Originale lesen und Anmerkungen für die spätere Moderation festhalten.'}
-          </p>
         </div>
         <label className={`${label} w-full sm:w-72`}>
           Suchen

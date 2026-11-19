@@ -575,10 +575,6 @@ export function Steckbrief({
                 {empty === 1 ? 'Ein Feld ist' : empty + ' Felder sind'} noch leer. Du kannst trotzdem speichern.
               </p>
             )}
-            <p className="mt-3 text-sm text-muted">
-              Du musst nicht alles auf einmal ausfüllen. Solange dein Steckbrief eingereicht ist, kannst du ihn
-              jederzeit ergänzen. Nur du und die Redaktion sehen ihn.
-            </p>
           </>
         )}
       </form>

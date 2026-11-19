@@ -469,11 +469,7 @@ export function NewContribution() {
               Ein Insider aus dem Unterricht, das beste Foto der Klassenfahrt oder eine Idee für unsere Zeitung.
             </p>
             <hr className="my-4 border-line" />
-            <strong className="block text-ink">Dein Beitrag bleibt bearbeitbar.</strong>
-            <p className="mt-1">Solange dein Beitrag eingereicht ist, kannst du Text und Bilder jederzeit ändern.</p>
-            <small className="mt-4 block">
-              Bitte lade nur Bilder hoch, die du für unsere Abizeitung verwenden darfst.
-            </small>
+            <small className="block">Bitte lade nur Bilder hoch, die du für unsere Abizeitung verwenden darfst.</small>
           </aside>
         </div>
       )}
@@ -489,7 +485,7 @@ export function ContributionDetail() {
   const item = useData<Submission>(`/submissions/${id}`);
   const categories = useData<Category[]>('/categories');
   const submissions = useData<Submission[]>('/submissions', !isRedaktion);
-  const revisions = useData<Revision[]>(`/submissions/${id}/revisions`);
+  const revisions = useData<Revision[]>(`/submissions/${id}/revisions`, isRedaktion);
   const corrections = useData<Correction[]>(`/submissions/${id}/corrections`);
   const queryClient = useQueryClient();
   const action = useAction();
@@ -896,13 +892,11 @@ export function ContributionDetail() {
                 </div>
               </dl>
             ) : (
-              <p className="text-sm text-muted">
-                {isPhoto && s.status === 'pending'
-                  ? 'Du kannst deine Fotos und Bildtexte noch anpassen.'
-                  : s.status === 'pending'
-                    ? 'Du kannst deinen eingereichten Beitrag noch anpassen.'
-                    : 'Du kannst eine Änderung als Korrekturwunsch an die Redaktion senden.'}
-              </p>
+              s.status !== 'pending' && (
+                <p className="text-sm text-muted">
+                  Du kannst eine Änderung als Korrekturwunsch an die Redaktion senden.
+                </p>
+              )
             )}
             {!isRedaktion && own && s.status === 'pending' && (
               <button className={btn.danger} disabled={action.busy} onClick={() => setStatus('withdrawn')}>
@@ -916,44 +910,46 @@ export function ContributionDetail() {
             )}
           </section>
           {isRedaktion && annotationPanel}
-          <section className={panel}>
-            <h3 className={heading}>Versionsverlauf</h3>
-            {revisions.isPending ? (
-              <Loading />
-            ) : revisions.error ? (
-              <Failure error={revisions.error} />
-            ) : (
-              revisions.data?.map((r) => (
-                <details className="mt-3 border-t border-line pt-3 text-sm" key={r.id}>
-                  <summary className="cursor-pointer">
-                    <strong>Version {r.version}</strong>{' '}
-                    <small className="text-muted">
-                      <span className="flex flex-wrap gap-x-2">
-                        <span>{r.actor_name}</span>
-                        <span>{date(r.created_at)}</span>
-                      </span>
-                    </small>
-                  </summary>
-                  <div className="mt-3 space-y-2">
-                    <Badge status={r.status} />
-                    <h4 className="font-semibold">{r.title}</h4>
-                    <p className="whitespace-pre-wrap break-words">{r.body}</p>
-                    {r.context && <p className="whitespace-pre-wrap break-words text-muted">{r.context}</p>}
-                    {!!r.attachments.length && (
-                      <ul className="border-t border-line pt-2 text-muted">
-                        {r.attachments.map((attachment) => (
-                          <li key={attachment.id}>
-                            {attachment.filename}
-                            {attachment.caption && <span> · {attachment.caption}</span>}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </details>
-              ))
-            )}
-          </section>
+          {isRedaktion && (
+            <section className={panel}>
+              <h3 className={heading}>Versionsverlauf</h3>
+              {revisions.isPending ? (
+                <Loading />
+              ) : revisions.error ? (
+                <Failure error={revisions.error} />
+              ) : (
+                revisions.data?.map((r) => (
+                  <details className="mt-3 border-t border-line pt-3 text-sm" key={r.id}>
+                    <summary className="cursor-pointer">
+                      <strong>Version {r.version}</strong>{' '}
+                      <small className="text-muted">
+                        <span className="flex flex-wrap gap-x-2">
+                          <span>{r.actor_name}</span>
+                          <span>{date(r.created_at)}</span>
+                        </span>
+                      </small>
+                    </summary>
+                    <div className="mt-3 space-y-2">
+                      <Badge status={r.status} />
+                      <h4 className="font-semibold">{r.title}</h4>
+                      <p className="whitespace-pre-wrap break-words">{r.body}</p>
+                      {r.context && <p className="whitespace-pre-wrap break-words text-muted">{r.context}</p>}
+                      {!!r.attachments.length && (
+                        <ul className="border-t border-line pt-2 text-muted">
+                          {r.attachments.map((attachment) => (
+                            <li key={attachment.id}>
+                              {attachment.filename}
+                              {attachment.caption && <span> · {attachment.caption}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </details>
+                ))
+              )}
+            </section>
+          )}
         </aside>
       </div>
     </>

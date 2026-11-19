@@ -300,7 +300,7 @@ describe('photo contributions', () => {
   });
 
   it.each([false, true])(
-    'preserves caption drafts and history when another tab changed the version: %s',
+    'preserves caption drafts when another tab changed the version and hides history from students: %s',
     async (conflictFirst) => {
       const photo = photoCategory();
       const initial = submission({ attachments: [attachment('photo-one')] });
@@ -370,8 +370,8 @@ describe('photo contributions', () => {
         method: 'PATCH',
         body: { version: initial.version + (conflictFirst ? 1 : 0), caption: 'Unser letzter warmer Oktobertag' },
       });
-      fireEvent.click(screen.getByText('Version 1'));
-      expect(screen.getByText(/Vorheriger Bildtext/)).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Versionsverlauf' })).toBeNull();
+      expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).endsWith('/revisions'))).toBe(false);
     },
   );
 

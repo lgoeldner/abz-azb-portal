@@ -133,7 +133,7 @@ describe('BallotForm', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Zusammen' }));
     fireEvent.click(screen.getByRole('button', { name: 'Stimme speichern' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(screen.getByText(/Jede erneute Abgabe wird als eigene Stimme geführt/)).toBeInTheDocument();
+    expect(screen.queryByText(/Namentliche Abstimmung/)).toBeNull();
     const reVote = await screen.findByRole('button', { name: 'Erneut abstimmen' });
     fireEvent.click(reVote);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));

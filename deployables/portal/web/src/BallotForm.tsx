@@ -23,12 +23,12 @@ function clearPendingBallot(userId: string, pollId: string, id: string) {
   if (pendingBallots.get(key)?.id === id) pendingBallots.delete(key);
 }
 
-export function BallotPrivacyNotice({ repeatable = false }: { repeatable?: boolean }) {
+// Shown in the Redaktion view only; students are not burdened with it.
+export function BallotPrivacyNotice() {
   return (
     <p className="text-sm text-muted">
-      {repeatable
-        ? 'Namentliche Abstimmung: Die Administration kann jede Abgabe zuordnen. Jede erneute Abgabe wird als eigene Stimme geführt. Ergebnisse sind für Schüler:innen nicht sichtbar.'
-        : 'Namentliche Abstimmung: Die Administration kann deine Stimme und Änderungen zuordnen. Während der Öffnung kannst du deine Auswahl ändern. Ergebnisse sind für Schüler:innen nicht sichtbar.'}
+      Namentliche Abstimmung: Die Administration kann Stimmen und Änderungen zuordnen. Ergebnisse sind für Schüler:innen
+      nicht sichtbar.
     </p>
   );
 }
@@ -124,9 +124,6 @@ export function BallotForm({
           disabledUserIds={poll.allow_self_vote ? [] : [user.id]}
           disabled={disabled || poll.status !== 'open' || !eligible || action.busy}
         />
-        {poll.kind === 'person' && poll.all_people && (
-          <p className="text-sm text-muted">Die Personenliste wurde beim Öffnen festgelegt und bleibt gleich.</p>
-        )}
         {poll.status === 'open' && (
           <button className={btn.primary} disabled={!canSubmit}>
             {poll.repeatable
@@ -150,7 +147,6 @@ export function BallotForm({
           </p>
         )}
       </form>
-      <BallotPrivacyNotice repeatable={poll.repeatable} />
     </>
   );
 }
@@ -285,7 +281,7 @@ function WordsBallotForm({
             </label>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p id={`word-help-${poll.id}`} className="text-sm text-muted">
-                Ein Wort pro Eintrag, höchstens 64 Zeichen. Groß- und Kleinschreibung wird vereinheitlicht.
+                Ein Wort pro Eintrag, höchstens 64 Zeichen.
               </p>
               <button
                 className="rounded-full bg-pop px-4 py-2 text-sm font-bold text-ink transition-colors hover:bg-pill disabled:cursor-not-allowed disabled:opacity-50"
@@ -348,7 +344,6 @@ function WordsBallotForm({
         )}
         {!eligible && <p className={notice}>Nur freigegebene Mitglieder des Jahrgangs dürfen abstimmen.</p>}
       </form>
-      <BallotPrivacyNotice repeatable={poll.repeatable} />
     </>
   );
 }
