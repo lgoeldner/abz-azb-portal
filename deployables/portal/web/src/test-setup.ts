@@ -8,6 +8,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+URL.createObjectURL ??= () => 'blob:preview';
+URL.revokeObjectURL ??= () => {};
+
 if (!globalThis.crypto?.randomUUID) {
   Object.defineProperty(globalThis, 'crypto', {
     value: { ...globalThis.crypto, randomUUID: () => 'test-idempotency-key' },

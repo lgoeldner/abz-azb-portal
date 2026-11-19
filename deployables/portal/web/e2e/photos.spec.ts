@@ -99,10 +99,17 @@ test('photo batches share one collection grid and new uploads return to it', asy
     await page.setViewportSize({ width, height: 1000 });
     await expect(gallery).toBeVisible();
     const layout = await gallery.evaluate((element) => ({
-      columns: getComputedStyle(element).gridTemplateColumns.split(' ').length,
+      // Rendered tiles keep each photo's natural aspect ratio (no cropping).
+      distortion: Math.max(
+        ...Array.from(element.querySelectorAll('img')).map((img) =>
+          Math.abs(img.clientWidth / img.clientHeight / (img.naturalWidth / img.naturalHeight) - 1),
+        ),
+      ),
+      fit: Array.from(element.querySelectorAll('img')).map((img) => getComputedStyle(img).objectFit),
       overflow: document.documentElement.scrollWidth > window.innerWidth,
     }));
-    expect(layout.columns).toBe(width < 640 ? 2 : 3);
+    expect(layout.distortion).toBeLessThan(0.02);
+    expect(layout.fit.every((fit) => fit === 'fill')).toBe(true);
     expect(layout.overflow).toBe(false);
     await page.screenshot({ path: testInfo.outputPath(`photos-${width}.png`), fullPage: true });
   }
@@ -116,6 +123,10 @@ test('photo batches share one collection grid and new uploads return to it', asy
     { name: 'later-one.png', mimeType: 'image/png', buffer: png },
     { name: 'later-two.png', mimeType: 'image/png', buffer: png },
   ]);
+  const picked = page.getByRole('list', { name: 'Ausgewählte Fotos' });
+  await expect(picked.getByRole('img', { name: 'Vorschau von later-one.png' })).toBeVisible();
+  await expect(picked.getByRole('img')).toHaveCount(2);
+  await page.screenshot({ path: testInfo.outputPath('photos-picked.png'), fullPage: true });
   await page.getByRole('button', { name: 'Fotos einreichen' }).click();
   await expect(page).toHaveURL(`/sammlungen/${category.id}`);
   await expect(gallery.getByRole('img')).toHaveCount(6);

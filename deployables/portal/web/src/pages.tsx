@@ -35,7 +35,7 @@ import {
   useWorkspaceView,
 } from './ui';
 import { DevDebug } from './DevDebug';
-import { PhotoGallery } from './PhotoGallery';
+import { LocalThumb, PhotoGallery, captionHint, captionPlaceholder } from './PhotoGallery';
 import { Steckbrief } from './Steckbrief';
 
 type SelectedImage = { file: File; caption: string };
@@ -359,43 +359,53 @@ export function NewContribution() {
               </label>
             )}
             {isPhoto && !!images.length && (
-              <ul className="space-y-3" aria-label="Ausgewählte Fotos">
-                {images.map((image, index) => (
-                  <li
-                    key={`${image.file.name}-${image.file.size}-${image.file.lastModified}-${index}`}
-                    className="rounded-ui border border-line bg-white p-3 sm:p-4"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <strong className="min-w-0 break-all text-sm">{image.file.name}</strong>
-                      <button
-                        type="button"
-                        className={btn.text}
-                        disabled={action.busy}
-                        onClick={() => setImages((current) => current.filter((_, i) => i !== index))}
-                      >
-                        Entfernen
-                      </button>
-                    </div>
-                    <label className={`${label} mt-3`}>
-                      Bildtext <small className="font-normal text-muted">optional</small>
-                      <textarea
-                        className={field}
-                        rows={2}
-                        maxLength={2000}
-                        value={image.caption}
-                        disabled={action.busy}
-                        onChange={(e) =>
-                          setImages((current) =>
-                            current.map((candidate, i) =>
-                              i === index ? { ...candidate, caption: e.target.value } : candidate,
-                            ),
-                          )
-                        }
-                      />
-                    </label>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <p id="new-caption-hint" className="text-sm text-muted">
+                  {captionHint}
+                </p>
+                <ul className="grid items-start gap-3 sm:grid-cols-2" aria-label="Ausgewählte Fotos">
+                  {images.map((image, index) => (
+                    <li
+                      key={`${image.file.name}-${image.file.size}-${image.file.lastModified}-${index}`}
+                      className="min-w-0 rounded-ui border border-line bg-white p-3"
+                    >
+                      <LocalThumb file={image.file} />
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <strong className="min-w-0 truncate text-sm" title={image.file.name}>
+                          {image.file.name}
+                        </strong>
+                        <button
+                          type="button"
+                          className={btn.text}
+                          disabled={action.busy}
+                          onClick={() => setImages((current) => current.filter((_, i) => i !== index))}
+                        >
+                          Entfernen
+                        </button>
+                      </div>
+                      <label className={`${label} mt-3`}>
+                        Bildtext <small className="font-normal text-muted">optional</small>
+                        <textarea
+                          className={field}
+                          rows={3}
+                          maxLength={2000}
+                          placeholder={captionPlaceholder}
+                          aria-describedby="new-caption-hint"
+                          value={image.caption}
+                          disabled={action.busy}
+                          onChange={(e) =>
+                            setImages((current) =>
+                              current.map((candidate, i) =>
+                                i === index ? { ...candidate, caption: e.target.value } : candidate,
+                              ),
+                            )
+                          }
+                        />
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
             {saved && (
               <p className={notice}>
@@ -817,16 +827,26 @@ export function ContributionDetail() {
                         onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                       />
                     </label>
+                    {file && (
+                      <div className="max-w-xs">
+                        <LocalThumb file={file} />
+                      </div>
+                    )}
                     <label className={`${label} block`}>
                       Bildtext <small className="font-normal text-muted">optional</small>
                       <textarea
                         className={field}
                         rows={2}
                         maxLength={2000}
+                        placeholder={captionPlaceholder}
+                        aria-describedby="upload-caption-hint"
                         value={caption}
                         onChange={(e) => setCaption(e.target.value)}
                       />
                     </label>
+                    <p id="upload-caption-hint" className="text-sm text-muted">
+                      {captionHint}
+                    </p>
                   </div>
                   <button className={btn.secondary} disabled={action.busy || !file}>
                     Hochladen ↑

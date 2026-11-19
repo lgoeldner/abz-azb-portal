@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import type { Attachment, Submission } from './api';
 import './PhotoGallery.css';
 
@@ -6,6 +6,18 @@ export type GalleryPhoto = Attachment & {
   href?: string;
   author_name?: string;
 };
+
+export const captionPlaceholder = 'Wer ist drauf? Welcher Anlass, wo, wann? z. B. „Lena und Tim beim Sommerfest 2026“';
+export const captionHint = 'Namen, Anlass, Ort oder Datum helfen der Redaktion, das Foto einzuordnen.';
+
+/** Local preview of a picked file before it is uploaded. */
+export function LocalThumb({ file }: { file: File }) {
+  const url = useMemo(() => URL.createObjectURL(file), [file]);
+  // ponytail: revoke once decoded; the img keeps its pixels. A never-loaded file leaks one blob URL until reload.
+  return (
+    <img className="photo-thumb" src={url} alt={`Vorschau von ${file.name}`} onLoad={() => URL.revokeObjectURL(url)} />
+  );
+}
 
 export function photosFromSubmissions(
   submissions: Submission[],
@@ -41,6 +53,8 @@ export function PhotoGallery({
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState('');
+  // Natural aspect ratio per photo, learned on load; drives the justified-row widths.
+  const [ratios, setRatios] = useState<Record<string, number>>({});
 
   async function save(photo: GalleryPhoto) {
     if (!onSaveCaption) return;
@@ -66,7 +80,11 @@ export function PhotoGallery({
         const editingThis = editing === photo.id;
         const editable = typeof allowCaptionEdit === 'function' ? allowCaptionEdit(photo) : allowCaptionEdit;
         return (
-          <figure className="photo-gallery__item" key={photo.id}>
+          <figure
+            className="photo-gallery__item"
+            key={photo.id}
+            style={{ '--ratio': ratios[photo.id] ?? 4 / 3 } as CSSProperties}
+          >
             <a
               className="photo-gallery__image-link"
               href={target}
@@ -79,6 +97,11 @@ export function PhotoGallery({
                 src={photo.preview_url}
                 alt={photo.caption || photo.filename}
                 loading="lazy"
+                onLoad={({ currentTarget: img }) => {
+                  if (!img.naturalWidth || !img.naturalHeight) return;
+                  const ratio = img.naturalWidth / img.naturalHeight;
+                  setRatios((current) => (current[photo.id] === ratio ? current : { ...current, [photo.id]: ratio }));
+                }}
               />
             </a>
             <figcaption className="photo-gallery__caption">
@@ -107,10 +130,15 @@ export function PhotoGallery({
                     value={draft}
                     maxLength={2000}
                     rows={3}
+                    placeholder={captionPlaceholder}
+                    aria-describedby={`caption-hint-${photo.id}`}
                     autoFocus
                     disabled={busy || saving !== null}
                     onChange={(event) => setDraft(event.target.value)}
                   />
+                  <small id={`caption-hint-${photo.id}`} className="photo-gallery__hint">
+                    {captionHint}
+                  </small>
                   <div className="photo-gallery__caption-actions">
                     <button type="button" disabled={busy || saving !== null} onClick={() => setEditing(null)}>
                       Abbrechen

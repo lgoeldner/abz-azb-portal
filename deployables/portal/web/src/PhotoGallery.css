@@ -1,11 +1,21 @@
+/* Justified rows: each tile grows in proportion to its photo's aspect ratio (--ratio, set on load),
+   so rows have irregular widths but photos are never cropped. A spacer stops the last row stretching. */
 .photo-gallery {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(1rem, 2.5vw, 2rem);
+  --row-height: clamp(11rem, 18vw, 16rem);
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(1rem, 2vw, 1.5rem) clamp(0.75rem, 1.5vw, 1.25rem);
+}
+
+.photo-gallery::after {
+  content: '';
+  flex-grow: 999;
 }
 
 .photo-gallery__item {
+  flex: var(--ratio) 1 calc(var(--ratio) * var(--row-height));
   min-width: 0;
+  max-width: 100%;
   margin: 0;
 }
 
@@ -25,8 +35,8 @@
 .photo-gallery__image {
   display: block;
   width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
+  height: auto;
+  aspect-ratio: var(--ratio);
   border-radius: inherit;
   transition: transform 180ms ease;
 }
@@ -97,6 +107,8 @@
 .photo-gallery__caption-actions button,
 .photo-gallery__actions a,
 .photo-gallery__actions button {
+  display: inline-flex;
+  align-items: center;
   min-height: 44px;
   padding: 0.55rem 0.35rem;
   color: var(--color-ink);
@@ -122,6 +134,26 @@
   opacity: 0.55;
 }
 
+.photo-gallery__hint {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+}
+
+.photo-gallery__caption-form textarea::placeholder {
+  color: var(--color-muted);
+}
+
+/* Picked-file preview: full photo, never cropped; very tall ones are letterboxed. */
+.photo-thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 20rem;
+  object-fit: contain;
+  border-radius: 0.7rem;
+  background: var(--color-soft);
+}
+
 .photo-gallery__error {
   margin: 0.5rem 0 0;
   color: var(--color-bad);
@@ -130,7 +162,7 @@
 
 @media (max-width: 639px) {
   .photo-gallery {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    --row-height: 6.5rem;
     gap: 1rem 0.75rem;
   }
 
