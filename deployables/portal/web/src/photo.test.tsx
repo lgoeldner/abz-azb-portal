@@ -195,7 +195,11 @@ describe('photo contributions', () => {
     const input = await screen.findByLabelText(/Mindestens ein Foto/);
     expect(screen.queryByLabelText('Sammlung')).not.toBeInTheDocument();
     fireEvent.change(input, { target: { files: [firstFile, secondFile] } });
+    // Caption fields stay hidden until asked for, one per picked photo.
+    expect(screen.queryByLabelText('Bildtext optional')).toBeNull();
+    screen.getAllByRole('button', { name: /Bildtext ergänzen/ }).forEach((button) => fireEvent.click(button));
     const captions = screen.getAllByLabelText('Bildtext optional');
+    expect(captions).toHaveLength(2);
     fireEvent.change(captions[0], { target: { value: 'Im Hof nach der sechsten Stunde' } });
     fireEvent.change(captions[1], { target: { value: 'Licht über dem Schulhof' } });
     fireEvent.submit(input.closest('form')!);
@@ -499,7 +503,7 @@ describe('photo contributions', () => {
     expect(options).toEqual(['Erinnerungen', 'Jahrgangsmomente']);
   });
 
-  it('edits a pending photo through its own batch and refreshed version, while protecting accepted and final photos', async () => {
+  it('edits a pending photo through its own batch and refreshed version, while protecting accepted photos', async () => {
     const photo = photoCategory();
     const firstBatch = submission({
       id: 'batch-one',
@@ -518,6 +522,7 @@ describe('photo contributions', () => {
     });
     let current = [firstBatch, secondBatch, acceptedBatch];
     const writes: { path: string; method: string; body: { version: number; caption?: string } }[] = [];
+    const withdrawals: { version: number; status: string }[] = [];
     let conflictReturned = false;
     vi.stubGlobal(
       'fetch',
@@ -527,6 +532,14 @@ describe('photo contributions', () => {
         const method = init?.method ?? 'GET';
         if (path === '/categories') return Response.json([photo]);
         if (path === '/submissions' && method === 'GET') return Response.json(current);
+        if (path === '/submissions/batch-one/status') {
+          const body = JSON.parse(String(init?.body)) as { version: number; status: string };
+          withdrawals.push(body);
+          current = current.map((entry) =>
+            entry.id === 'batch-one' ? { ...entry, version: entry.version + 1, status: 'withdrawn' as const } : entry,
+          );
+          return Response.json(current.find((entry) => entry.id === 'batch-one'));
+        }
         if (path.startsWith('/submissions/batch-two/attachments/')) {
           const body = JSON.parse(String(init?.body)) as { version: number; caption?: string };
           writes.push({ path, method, body });
@@ -585,8 +598,8 @@ describe('photo contributions', () => {
     const editableFigure = screen.getByRole('img', { name: 'Zweites Foto' }).closest('figure')!;
     const removableFigure = screen.getByRole('img', { name: 'Drittes Foto' }).closest('figure')!;
     const acceptedFigure = screen.getByRole('img', { name: 'Angenommenes Foto' }).closest('figure')!;
-    expect(within(singleFigure).queryByRole('button', { name: 'Foto entfernen' })).toBeNull();
     expect(within(acceptedFigure).queryByRole('button', { name: /Bildtext/ })).toBeNull();
+    expect(within(acceptedFigure).queryByRole('button', { name: 'Foto entfernen' })).toBeNull();
 
     fireEvent.click(within(editableFigure).getByRole('button', { name: 'Bildtext bearbeiten' }));
     fireEvent.change(within(editableFigure).getByLabelText('Bildtext'), { target: { value: 'Korrigierter Bildtext' } });
@@ -608,13 +621,27 @@ describe('photo contributions', () => {
     ]);
 
     fireEvent.click(within(removableFigure).getByRole('button', { name: 'Foto entfernen' }));
+    expect(writes).toHaveLength(2);
+    fireEvent.click(within(removableFigure).getByRole('button', { name: 'Entfernen' }));
     await waitFor(() => expect(writes).toHaveLength(3));
     expect(writes[2]).toEqual({
       path: '/submissions/batch-two/attachments/photo-three',
       method: 'DELETE',
       body: { version: 9 },
     });
-    await waitFor(() => expect(within(editableFigure).queryByRole('button', { name: 'Foto entfernen' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('img', { name: 'Drittes Foto' })).toBeNull());
+
+    // The last photo of a batch cannot be deleted on its own; removing it withdraws the batch after confirmation.
+    fireEvent.click(within(singleFigure).getByRole('button', { name: 'Foto entfernen' }));
+    const confirmation = within(singleFigure).getByRole('group', { name: 'Entfernen bestätigen' });
+    expect(confirmation).toHaveTextContent('zurückgezogen');
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Abbrechen' }));
+    expect(withdrawals).toHaveLength(0);
+    fireEvent.click(within(singleFigure).getByRole('button', { name: 'Foto entfernen' }));
+    fireEvent.click(within(singleFigure).getByRole('button', { name: 'Entfernen' }));
+    await waitFor(() => expect(withdrawals).toEqual([{ version: 3, status: 'withdrawn' }]));
+    expect(writes).toHaveLength(3);
+    await waitFor(() => expect(screen.queryByRole('img', { name: 'Einzelnes Foto' })).toBeNull());
   });
 
   it('flattens photos from the student’s own batches, while editorial collection readers see every photo', async () => {
@@ -674,16 +701,7 @@ describe('photo contributions', () => {
     );
     fireEvent.click(within(lightbox).getByRole('button', { name: 'Schließen' }));
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(
-      within(screen.getByRole('img', { name: 'Mias Moment' }).closest('figure')!).getByRole('link', {
-        name: 'Details & Verlauf',
-      }),
-    ).toHaveAttribute('href', '/beitraege/own-photo');
-    expect(
-      within(screen.getByRole('img', { name: 'Mias dritter Moment' }).closest('figure')!).getByRole('link', {
-        name: 'Details & Verlauf',
-      }),
-    ).toHaveAttribute('href', '/beitraege/own-second-batch');
+    expect(screen.queryByRole('link', { name: 'Details & Verlauf' })).toBeNull();
     expect(screen.getByRole('link', { name: 'Foto ergänzen' })).toHaveAttribute('href', '/beitraege/legacy-photo');
     cleanup();
 

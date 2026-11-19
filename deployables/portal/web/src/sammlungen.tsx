@@ -876,7 +876,8 @@ function StudentCollection({ sammlung }: { sammlung: Category }) {
   const mine = (submissions.data ?? []).filter((s) => s.category_id === sammlung.id);
   const own = mine.filter((s) => s.author_id === user.id);
   const photoCollection = sammlung.kind === 'photo';
-  const photos = photosFromSubmissions(own);
+  // Withdrawn batches are gone from the student's view; their photos stay on record for history only.
+  const photos = photosFromSubmissions(own.filter((s) => s.status !== 'withdrawn'));
   const ownerByPhoto = new Map(own.flatMap((entry) => entry.attachments.map((photo) => [photo.id, entry] as const)));
   const withoutPhotos = own.filter((submission) => !submission.attachments.length);
   return (
@@ -933,7 +934,6 @@ function StudentCollection({ sammlung }: { sammlung: Category }) {
                 <PhotoGallery
                   photos={photos}
                   busy={action.busy}
-                  detailsFor={(photo) => `/beitraege/${ownerByPhoto.get(photo.id)!.id}`}
                   allowCaptionEdit={(photo) => ownerByPhoto.get(photo.id)?.status === 'pending'}
                   onSaveCaption={async (attachmentId, caption) => {
                     const entry = ownerByPhoto.get(attachmentId)!;
@@ -947,11 +947,27 @@ function StudentCollection({ sammlung }: { sammlung: Category }) {
                     }
                   }}
                   canRemove={(photo) => {
-                    const entry = ownerByPhoto.get(photo.id)!;
-                    return entry.status === 'pending' && entry.attachments.length > 1;
+                    return ownerByPhoto.get(photo.id)!.status === 'pending';
                   }}
+                  removeWarning={(photo) =>
+                    ownerByPhoto.get(photo.id)!.attachments.length === 1
+                      ? 'Es ist das letzte Foto dieser Einreichung, sie wird damit zurückgezogen.'
+                      : undefined
+                  }
                   onRemove={(photo) => {
                     const entry = ownerByPhoto.get(photo.id)!;
+                    // A batch always keeps its last photo, so removing that one withdraws the whole batch.
+                    if (entry.attachments.length === 1) {
+                      void action.run(
+                        () =>
+                          api(
+                            `/submissions/${entry.id}/status`,
+                            json('POST', { version: entry.version, status: 'withdrawn' }),
+                          ),
+                        'Foto entfernt.',
+                      );
+                      return;
+                    }
                     void action.run(
                       () =>
                         api(

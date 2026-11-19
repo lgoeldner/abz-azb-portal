@@ -40,7 +40,7 @@ export function PhotoGallery({
   busy = false,
   onSaveCaption,
   onRemove,
-  detailsFor,
+  removeWarning,
 }: {
   photos: GalleryPhoto[];
   allowCaptionEdit?: boolean | ((photo: GalleryPhoto) => boolean);
@@ -48,8 +48,10 @@ export function PhotoGallery({
   busy?: boolean;
   onSaveCaption?: (attachmentId: string, caption: string) => Promise<unknown>;
   onRemove?: (photo: GalleryPhoto) => void;
-  detailsFor?: (photo: GalleryPhoto) => string;
+  /** Extra sentence shown in the remove confirmation, e.g. when removal withdraws the whole batch. */
+  removeWarning?: (photo: GalleryPhoto) => string | undefined;
 }) {
+  const [confirming, setConfirming] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState<string | null>(null);
@@ -150,8 +152,7 @@ export function PhotoGallery({
                 </form>
               ) : (
                 <div className="photo-gallery__actions">
-                  {detailsFor && <a href={detailsFor(photo)}>Details & Verlauf</a>}
-                  {!detailsFor && photo.href && <a href={photo.href}>Beitrag öffnen</a>}
+                  {photo.href && <a href={photo.href}>Beitrag öffnen</a>}
                   {editable && onSaveCaption && (
                     <button
                       type="button"
@@ -165,10 +166,29 @@ export function PhotoGallery({
                       Bildtext {photo.caption ? 'bearbeiten' : 'ergänzen'}
                     </button>
                   )}
-                  {canRemove?.(photo) && onRemove && (
-                    <button type="button" disabled={busy || saving !== null} onClick={() => onRemove(photo)}>
+                  {canRemove?.(photo) && onRemove && confirming !== photo.id && (
+                    <button type="button" disabled={busy || saving !== null} onClick={() => setConfirming(photo.id)}>
                       Foto entfernen
                     </button>
+                  )}
+                  {canRemove?.(photo) && onRemove && confirming === photo.id && (
+                    <div role="group" aria-label="Entfernen bestätigen" className="photo-gallery__confirm">
+                      <p>Foto wirklich entfernen? {removeWarning?.(photo)}</p>
+                      <button type="button" disabled={busy} onClick={() => setConfirming(null)}>
+                        Abbrechen
+                      </button>
+                      <button
+                        type="button"
+                        className="photo-gallery__danger"
+                        disabled={busy}
+                        onClick={() => {
+                          setConfirming(null);
+                          onRemove(photo);
+                        }}
+                      >
+                        Entfernen
+                      </button>
+                    </div>
                   )}
                 </div>
               )}

@@ -38,7 +38,7 @@ import { DevDebug } from './DevDebug';
 import { LocalThumb, PhotoGallery, captionHint, captionPlaceholder } from './PhotoGallery';
 import { Steckbrief } from './Steckbrief';
 
-type SelectedImage = { file: File; caption: string };
+type SelectedImage = { file: File; caption: string; captionOpen?: boolean };
 
 function photoValidationError(files: File[], alreadyAttached = 0) {
   if (files.length + alreadyAttached > 10) return 'Bitte wähle höchstens 10 Bilder aus.';
@@ -383,25 +383,43 @@ export function NewContribution() {
                           Entfernen
                         </button>
                       </div>
-                      <label className={`${label} mt-3`}>
-                        Bildtext <small className="font-normal text-muted">optional</small>
-                        <textarea
-                          className={field}
-                          rows={3}
-                          maxLength={2000}
-                          placeholder={captionPlaceholder}
-                          aria-describedby="new-caption-hint"
-                          value={image.caption}
+                      {!image.captionOpen && !image.caption ? (
+                        <button
+                          type="button"
+                          className={`${btn.text} mt-2`}
                           disabled={action.busy}
-                          onChange={(e) =>
+                          onClick={() =>
                             setImages((current) =>
                               current.map((candidate, i) =>
-                                i === index ? { ...candidate, caption: e.target.value } : candidate,
+                                i === index ? { ...candidate, captionOpen: true } : candidate,
                               ),
                             )
                           }
-                        />
-                      </label>
+                        >
+                          + Bildtext ergänzen
+                        </button>
+                      ) : (
+                        <label className={`${label} mt-3`}>
+                          Bildtext <small className="font-normal text-muted">optional</small>
+                          <textarea
+                            className={field}
+                            autoFocus={!image.caption}
+                            rows={3}
+                            maxLength={2000}
+                            placeholder={captionPlaceholder}
+                            aria-describedby="new-caption-hint"
+                            value={image.caption}
+                            disabled={action.busy}
+                            onChange={(e) =>
+                              setImages((current) =>
+                                current.map((candidate, i) =>
+                                  i === index ? { ...candidate, caption: e.target.value } : candidate,
+                                ),
+                              )
+                            }
+                          />
+                        </label>
+                      )}
                     </li>
                   ))}
                 </ul>
