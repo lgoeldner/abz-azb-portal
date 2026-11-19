@@ -155,41 +155,72 @@
   background: var(--color-soft);
 }
 
-/* Remove confirmation: a rounded pill with large tap targets, used in tiles and the lightbox. */
+/* Trash icon floats on the photo's top-right corner (positioned against the figure). */
+.photo-gallery__item {
+  position: relative;
+}
+
+.photo-gallery__actions .photo-gallery__icon {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  justify-content: center;
+  width: 44px;
+  padding: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.9);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.18);
+  color: var(--color-bad);
+}
+
+.photo-gallery__actions .photo-gallery__icon:hover,
+.photo-gallery__actions .photo-gallery__icon[aria-expanded='true'] {
+  background: white;
+}
+
+/* Remove confirmation: a floating light pill with two large buttons (cancel, trash).
+   It hovers over the photo below the trash icon instead of growing the tile or the lightbox bar. */
 .confirm-pill {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.6rem 1rem;
-  width: 100%;
-  margin-top: 0.4rem;
-  padding: 0.6rem 0.6rem 0.6rem 1.25rem;
-  border-radius: 2rem;
-  background: var(--color-ink);
-  color: white;
+  box-sizing: border-box;
+  position: absolute;
+  z-index: 2;
+  top: 3.4rem;
+  right: 0.4rem;
+  left: 0.4rem;
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-line);
+  border-radius: 1.75rem;
+  background: white;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.22);
+  color: var(--color-ink);
 }
 
 .confirm-pill p {
-  flex: 1 1 12rem;
   margin: 0;
-  font-size: 0.9rem;
+  padding: 0 0.4rem;
+  font-size: 0.85rem;
   font-weight: 600;
+  line-height: 1.4;
 }
 
 .confirm-pill__buttons {
-  display: flex;
-  flex: 1 1 auto;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(3.25rem, 1fr);
   gap: 0.5rem;
 }
 
 .photo-gallery .confirm-pill__buttons button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
   min-height: 48px;
-  padding: 0.7rem 1.4rem;
+  padding: 0.6rem 0.5rem;
   border-radius: 999px;
-  background: rgb(255 255 255 / 0.14);
-  color: white;
+  background: var(--color-soft);
+  color: var(--color-ink);
   font: inherit;
   font-size: 0.95rem;
   font-weight: 700;
@@ -199,6 +230,7 @@
 
 .photo-gallery .confirm-pill__buttons .confirm-pill__danger {
   background: var(--color-bad);
+  color: white;
 }
 
 .confirm-pill__buttons button:focus-visible {
@@ -211,13 +243,26 @@
   opacity: 0.55;
 }
 
-.photo-lightbox__confirm {
-  padding: 0 0.6rem 0.6rem;
+/* Tiles can be narrow on phones: fixed-width trash, cancel takes the rest. */
+.photo-gallery__item .confirm-pill__buttons {
+  grid-template-columns: minmax(0, 1fr) 3.25rem;
+}
+
+.photo-gallery .photo-gallery__item .confirm-pill__buttons button {
+  padding: 0.6rem 0.25rem;
+  font-size: 0.85rem;
+}
+
+.photo-lightbox__bar {
+  position: relative;
 }
 
 .photo-lightbox__confirm .confirm-pill {
-  margin: 0;
-  background: #2a2a2a;
+  top: auto;
+  right: 0.6rem;
+  bottom: calc(100% + 0.6rem);
+  left: auto;
+  width: min(22rem, calc(100% - 1.2rem));
 }
 
 .photo-gallery__error {

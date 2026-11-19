@@ -129,6 +129,20 @@ test('photo batches share one collection grid and new uploads return to it', asy
   await lightbox.getByRole('button', { name: 'Schließen' }).click();
   await expect(lightbox).toBeHidden();
 
+  await gallery.getByRole('button', { name: 'Foto entfernen' }).first().click();
+  const tileConfirm = gallery.getByRole('group', { name: 'Entfernen bestätigen' });
+  await expect(tileConfirm).toBeVisible();
+  // The pill and its buttons stay inside the tile.
+  const [tileBox, pillBox, dangerBox] = await Promise.all([
+    gallery.locator('figure').first().boundingBox(),
+    tileConfirm.boundingBox(),
+    tileConfirm.getByRole('button', { name: 'Entfernen' }).boundingBox(),
+  ]);
+  expect(pillBox!.x + pillBox!.width).toBeLessThanOrEqual(tileBox!.x + tileBox!.width + 1);
+  expect(dangerBox!.x + dangerBox!.width).toBeLessThanOrEqual(pillBox!.x + pillBox!.width);
+  await page.screenshot({ path: testInfo.outputPath('photos-confirm.png') });
+  await tileConfirm.getByRole('button', { name: 'Abbrechen' }).click();
+
   await page.getByRole('link', { name: 'Fotos hochladen' }).click();
   const png = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jD1kAAAAASUVORK5CYII=',

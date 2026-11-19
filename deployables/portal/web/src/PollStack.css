@@ -191,9 +191,13 @@
 .poll-stack__card ul[aria-label$='Suchergebnisse'] button {
   background: var(--color-paper);
 }
-.poll-stack__card ul[aria-label$='Suchergebnisse'] button[aria-pressed='true'] {
-  background: var(--color-pop);
-}
+/* Lime needs ink text in every state; the picker's default selected style is white on ink. */
 .poll-stack__card ul[aria-label$='Suchergebnisse'] button:hover:not(:disabled) {
   background: var(--color-soft);
+  color: var(--color-ink);
+}
+.poll-stack__card ul[aria-label$='Suchergebnisse'] button[aria-pressed='true'],
+.poll-stack__card ul[aria-label$='Suchergebnisse'] button[aria-pressed='true']:hover {
+  background: var(--color-pop);
+  color: var(--color-ink);
 }

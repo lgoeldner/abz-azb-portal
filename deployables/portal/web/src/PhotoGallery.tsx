@@ -19,8 +19,15 @@ function ConfirmRemove({
         <button type="button" disabled={busy} onClick={onCancel}>
           Abbrechen
         </button>
-        <button type="button" className="confirm-pill__danger" disabled={busy} onClick={onConfirm}>
-          Entfernen
+        <button
+          type="button"
+          className="confirm-pill__danger"
+          aria-label="Entfernen"
+          title="Entfernen"
+          disabled={busy}
+          onClick={onConfirm}
+        >
+          <Trash2 aria-hidden size={22} />
         </button>
       </div>
     </div>
@@ -201,13 +208,17 @@ export function PhotoGallery({
                           Bildtext {photo.caption ? 'bearbeiten' : 'ergänzen'}
                         </button>
                       )}
-                      {canRemove?.(photo) && onRemove && confirming !== photo.id && (
+                      {canRemove?.(photo) && onRemove && (
                         <button
                           type="button"
+                          className="photo-gallery__icon"
+                          aria-label="Foto entfernen"
+                          title="Foto entfernen"
+                          aria-expanded={confirming === photo.id}
                           disabled={busy || saving !== null}
-                          onClick={() => setConfirming(photo.id)}
+                          onClick={() => setConfirming(confirming === photo.id ? null : photo.id)}
                         >
-                          Foto entfernen
+                          <Trash2 aria-hidden size={18} />
                         </button>
                       )}
                       {canRemove?.(photo) && onRemove && confirming === photo.id && (
@@ -279,7 +290,8 @@ export function PhotoGallery({
                 aria-label="Foto entfernen"
                 title="Foto entfernen"
                 disabled={busy}
-                onClick={() => setLightboxConfirm(true)}
+                aria-expanded={lightboxConfirm}
+                onClick={() => setLightboxConfirm(!lightboxConfirm)}
               >
                 <Trash2 aria-hidden size={20} />
               </button>
@@ -293,21 +305,21 @@ export function PhotoGallery({
             >
               <X aria-hidden size={20} />
             </button>
+            {lightboxConfirm && canRemove?.(viewing) && onRemove && (
+              <div className="photo-lightbox__confirm">
+                <ConfirmRemove
+                  warning={removeWarning?.(viewing)}
+                  busy={busy}
+                  onCancel={() => setLightboxConfirm(false)}
+                  onConfirm={() => {
+                    setLightboxConfirm(false);
+                    setViewing(null);
+                    onRemove(viewing);
+                  }}
+                />
+              </div>
+            )}
           </div>
-          {lightboxConfirm && canRemove?.(viewing) && onRemove && (
-            <div className="photo-lightbox__confirm">
-              <ConfirmRemove
-                warning={removeWarning?.(viewing)}
-                busy={busy}
-                onCancel={() => setLightboxConfirm(false)}
-                onConfirm={() => {
-                  setLightboxConfirm(false);
-                  setViewing(null);
-                  onRemove(viewing);
-                }}
-              />
-            </div>
-          )}
         </dialog>
       )}
     </section>
