@@ -1,3 +1,4 @@
+import { Download, ExternalLink, X } from 'lucide-react';
 import { useMemo, useState, type CSSProperties } from 'react';
 import type { Attachment, Submission } from './api';
 import './PhotoGallery.css';
@@ -55,6 +56,7 @@ export function PhotoGallery({
   const [error, setError] = useState('');
   // Natural aspect ratio per photo, learned on load; drives the justified-row widths.
   const [ratios, setRatios] = useState<Record<string, number>>({});
+  const [viewing, setViewing] = useState<GalleryPhoto | null>(null);
 
   async function save(photo: GalleryPhoto) {
     if (!onSaveCaption) return;
@@ -75,7 +77,6 @@ export function PhotoGallery({
   return (
     <section className="photo-gallery" aria-label="Fotogalerie">
       {photos.map((photo) => {
-        const target = photo.href ?? photo.url;
         const label = photo.caption || photo.filename;
         const editingThis = editing === photo.id;
         const editable = typeof allowCaptionEdit === 'function' ? allowCaptionEdit(photo) : allowCaptionEdit;
@@ -85,12 +86,11 @@ export function PhotoGallery({
             key={photo.id}
             style={{ '--ratio': ratios[photo.id] ?? 4 / 3 } as CSSProperties}
           >
-            <a
+            <button
+              type="button"
               className="photo-gallery__image-link"
-              href={target}
-              target={photo.href ? undefined : '_blank'}
-              rel={photo.href ? undefined : 'noreferrer'}
-              aria-label={photo.href ? `${label} öffnen` : `${label} in voller Größe öffnen`}
+              aria-label={`${label} vergrößern`}
+              onClick={() => setViewing(photo)}
             >
               <img
                 className="photo-gallery__image"
@@ -103,7 +103,7 @@ export function PhotoGallery({
                   setRatios((current) => (current[photo.id] === ratio ? current : { ...current, [photo.id]: ratio }));
                 }}
               />
-            </a>
+            </button>
             <figcaption className="photo-gallery__caption">
               {photo.caption && <p className="photo-gallery__text">{photo.caption}</p>}
               {photo.author_name && (
@@ -151,6 +151,7 @@ export function PhotoGallery({
               ) : (
                 <div className="photo-gallery__actions">
                   {detailsFor && <a href={detailsFor(photo)}>Details & Verlauf</a>}
+                  {!detailsFor && photo.href && <a href={photo.href}>Beitrag öffnen</a>}
                   {editable && onSaveCaption && (
                     <button
                       type="button"
@@ -180,6 +181,53 @@ export function PhotoGallery({
           </figure>
         );
       })}
+      {viewing && (
+        <dialog
+          className="photo-lightbox"
+          aria-label={viewing.caption || viewing.filename}
+          ref={(dialog) => {
+            if (dialog && !dialog.open) dialog.showModal();
+          }}
+          onClose={() => setViewing(null)}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) event.currentTarget.close();
+          }}
+        >
+          {/* The 1600px preview is already cached from the gallery; only the download fetches the original. */}
+          <img className="photo-lightbox__image" src={viewing.preview_url} alt={viewing.caption || viewing.filename} />
+          <div className="photo-lightbox__bar">
+            <p className="photo-lightbox__caption">{viewing.caption || viewing.filename}</p>
+            {viewing.href && (
+              <a
+                className="photo-lightbox__icon"
+                href={viewing.href}
+                aria-label="Beitrag öffnen"
+                title="Beitrag öffnen"
+              >
+                <ExternalLink aria-hidden size={20} />
+              </a>
+            )}
+            <a
+              className="photo-lightbox__icon"
+              href={viewing.url}
+              download={viewing.filename}
+              aria-label="Original herunterladen"
+              title="Original herunterladen"
+            >
+              <Download aria-hidden size={20} />
+            </a>
+            <button
+              type="button"
+              className="photo-lightbox__icon"
+              aria-label="Schließen"
+              title="Schließen"
+              onClick={(event) => event.currentTarget.closest('dialog')?.close()}
+            >
+              <X aria-hidden size={20} />
+            </button>
+          </div>
+        </dialog>
+      )}
     </section>
   );
 }

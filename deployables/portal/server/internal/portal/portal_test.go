@@ -327,6 +327,14 @@ func TestPostgresAuthorizationLifecycleAndBallots(t *testing.T) {
 	if otherRead.Code != http.StatusNotFound || ownerRead.Code != http.StatusOK {
 		t.Fatalf("private attachment statuses: other=%d owner=%d", otherRead.Code, ownerRead.Code)
 	}
+	// Previews may stay in the reader's own browser, never in shared caches; originals are never stored.
+	previewRead := authenticatedRequest(t, app, pool, MiaID, http.MethodGet, photoSubmission.Attachments[0].PreviewURL, "")
+	if cc := previewRead.Header().Get("Cache-Control"); previewRead.Code != http.StatusOK || !strings.HasPrefix(cc, "private,") || strings.Contains(cc, "public") {
+		t.Fatalf("preview status=%d cache-control=%q", previewRead.Code, cc)
+	}
+	if cc := ownerRead.Header().Get("Cache-Control"); cc != "private, no-store" {
+		t.Fatalf("original cache-control=%q", cc)
+	}
 	var storedChecksum string
 	if err := pool.QueryRow(ctx, "SELECT sha256 FROM attachments WHERE id=$1", photoSubmission.Attachments[0].ID).Scan(&storedChecksum); err != nil || storedChecksum != digest(jpegData.String()) {
 		t.Fatalf("attachment checksum mismatch: checksum=%q error=%v", storedChecksum, err)

@@ -292,11 +292,11 @@ describe('Redaktion contribution reading', () => {
       expect(await screen.findByRole('heading', { name: 'Beitragsdetails' })).toBeInTheDocument();
       expect(screen.getAllByText(submission.body).length).toBeGreaterThan(0);
       expect(screen.getByRole('img', { name: 'klassenfahrt.jpg' })).toBeInTheDocument();
-      expect(
-        screen
-          .getAllByRole('link', { name: /klassenfahrt.jpg/ })
-          .every((link) => link.getAttribute('href') === submission.attachments[0].url),
-      ).toBe(true);
+      fireEvent.click(screen.getByRole('button', { name: 'klassenfahrt.jpg vergrößern' }));
+      expect(screen.getByRole('link', { name: 'Original herunterladen' })).toHaveAttribute(
+        'href',
+        submission.attachments[0].url,
+      );
       expect(screen.getByText('Version 1')).toBeInTheDocument();
 
       expect(screen.queryByRole('button', { name: /Bearbeiten/ })).not.toBeInTheDocument();

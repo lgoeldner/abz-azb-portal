@@ -114,6 +114,13 @@ test('photo batches share one collection grid and new uploads return to it', asy
     await page.screenshot({ path: testInfo.outputPath(`photos-${width}.png`), fullPage: true });
   }
 
+  await gallery.getByRole('button', { name: 'Jahrgangsmoment 1 vergrößern' }).click();
+  const lightbox = page.getByRole('dialog');
+  await expect(lightbox.getByRole('link', { name: 'Original herunterladen' })).toHaveAttribute('download', /.+/);
+  await page.screenshot({ path: testInfo.outputPath('photos-lightbox.png') });
+  await lightbox.getByRole('button', { name: 'Schließen' }).click();
+  await expect(lightbox).toBeHidden();
+
   await page.getByRole('link', { name: 'Fotos hochladen' }).click();
   const png = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jD1kAAAAASUVORK5CYII=',

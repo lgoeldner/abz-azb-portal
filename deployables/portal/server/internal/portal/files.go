@@ -370,8 +370,11 @@ func (a *App) download(w http.ResponseWriter, r *http.Request) error {
 	if _, e = readable(r.Context(), a.DB, sid, current(r)); e != nil {
 		return e
 	}
-	disposition := "attachment"
+	disposition, cache := "attachment", "private, no-store"
 	if strings.HasSuffix(r.URL.Path, "/preview") {
+		// A preview never changes for its attachment id; let the viewer's own browser keep it
+		// instead of refetching on every gallery visit and lightbox open.
+		cache = "private, max-age=86400"
 		key = preview
 		mimeType = "image/jpeg"
 		filename = "preview.jpg"
@@ -384,7 +387,7 @@ func (a *App) download(w http.ResponseWriter, r *http.Request) error {
 	defer func() { _ = f.Close() }()
 	w.Header().Set("Content-Type", mimeType)
 	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": filename}))
-	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("Cache-Control", cache)
 	http.ServeContent(w, r, filename, modTime, f)
 	return nil
 }

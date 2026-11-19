@@ -82,7 +82,7 @@ file `deployables/portal/server/internal/portal/my_ballots.go` :: private own po
 test `deployables/portal/server/internal/portal/my_ballots_test.go` :: own-entry isolation across roles, grouping, repeatable entries/retries, replacements and lifecycle states [ballot, invariant, privacy]
 file `deployables/portal/server/internal/portal/polls.go` :: vote (row lock, atomic bounded multi-selection), results, grouped ballot audit, roster [ballot, vote, results, roster]
 file `deployables/portal/server/internal/portal/submissions.go` :: author-owned submission CRUD, author search, status transitions, revisions, editorial annotations/correction requests [beitrag, submission, revision, correction]
-file `deployables/portal/server/internal/portal/files.go` :: photo-collection and Steckbrief-slot uploads, previews, downloads, ZIP export (via the blob store) [attachment, upload, export, zip]
+file `deployables/portal/server/internal/portal/files.go` :: photo-collection and Steckbrief-slot uploads, previews (private browser-cacheable), downloads (no-store), ZIP export (via the blob store) [attachment, upload, export, zip]
 file `deployables/portal/server/internal/portal/blobs.go` :: BlobStore interface with disk and S3 (AWS SDK v2, path-style) implementations, S3_* config validation [s3, storage, blob, upload]
 test `deployables/portal/server/internal/portal/blobs_test.go` :: store contract on disk and S3Mock (TEST_S3_ENDPOINT), partial/production S3 config rules, opt-in real-S3 smoke test (S3_SMOKE_*), helpers that run upload invariants on both stores [s3, storage, invariant, test]
 file `deployables/portal/server/internal/portal/admin.go` :: user list/edit/delete, audit log, system status; database triggers enforce identity revocation/last usable admin [admin, users, audit, backup status]
@@ -189,7 +189,7 @@ test `deployables/portal/server/internal/portal/collection_repeatability_test.go
 rule Word portraits: configurable max_choices default 3 (1–500); original NFC lowercase words remain private to their voter, anonymous moderation and word cloud/CSV editorial-only, changes grant-controlled, merged labels count each ballot entry once, named history admin-only [words, permissions, moderation, cloud, csv]
 
 file `deployables/portal/web/src/PeoplePicker.tsx` :: shared searchable person list and wrapping proposal toggle chips, cap enforcement and accessible pressed states [choice, chips, vote]
-file `deployables/portal/web/src/PhotoGallery.tsx` :: flattened private photo album, captions with prompt hints, author-only caption/remove controls, LocalThumb previews for picked files [photo, gallery, caption]
+file `deployables/portal/web/src/PhotoGallery.tsx` :: flattened private photo album, click-to-enlarge lightbox (cached preview, icon download of the original), captions with prompt hints, author-only caption/remove controls, LocalThumb previews for picked files [photo, gallery, caption]
 file `deployables/portal/web/src/PhotoGallery.css` :: justified-row tiling (flex rows sized by each photo's natural aspect ratio, never cropped), picked-file thumbnails and accessible caption controls [photo, gallery, style]
 test `deployables/portal/web/src/PeoplePicker.test.tsx` :: search, chip toggles, selection limits and self-vote guards [choice, chips, invariant]
 file `deployables/portal/server/migrations/009_photo_captions.sql` :: additive per-image captions and attachment metadata in revision snapshots, old records preserved with empty defaults [migration, photo, caption, history]

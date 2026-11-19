@@ -10,6 +10,13 @@ afterEach(() => {
 
 URL.createObjectURL ??= () => 'blob:preview';
 URL.revokeObjectURL ??= () => {};
+HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+  this.open = true;
+};
+HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
+  this.open = false;
+  this.dispatchEvent(new Event('close'));
+};
 
 if (!globalThis.crypto?.randomUUID) {
   Object.defineProperty(globalThis, 'crypto', {

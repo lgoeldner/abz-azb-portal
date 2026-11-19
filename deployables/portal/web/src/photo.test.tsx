@@ -219,7 +219,8 @@ describe('photo contributions', () => {
     expect(await screen.findByRole('img', { name: 'Ein früherer Moment' })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Im Hof nach der sechsten Stunde' })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Licht über dem Schulhof' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Ein früherer Moment in voller Größe öffnen' })).toHaveAttribute(
+    fireEvent.click(screen.getByRole('button', { name: 'Ein früherer Moment vergrößern' }));
+    expect(screen.getByRole('link', { name: 'Original herunterladen' })).toHaveAttribute(
       'href',
       '/api/v1/attachments/previous-photo',
     );
@@ -665,10 +666,14 @@ describe('photo contributions', () => {
     expect(screen.getByRole('img', { name: 'Mias zweiter Moment' })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Mias dritter Moment' })).toBeInTheDocument();
     expect(screen.queryByRole('img', { name: 'Noahs Moment' })).toBeNull();
-    expect(screen.getByRole('link', { name: 'Mias Moment in voller Größe öffnen' })).toHaveAttribute(
+    fireEvent.click(screen.getByRole('button', { name: 'Mias Moment vergrößern' }));
+    const lightbox = screen.getByRole('dialog', { name: 'Mias Moment' });
+    expect(within(lightbox).getByRole('link', { name: 'Original herunterladen' })).toHaveAttribute(
       'href',
       '/api/v1/attachments/own-image',
     );
+    fireEvent.click(within(lightbox).getByRole('button', { name: 'Schließen' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(
       within(screen.getByRole('img', { name: 'Mias Moment' }).closest('figure')!).getByRole('link', {
         name: 'Details & Verlauf',
@@ -698,10 +703,11 @@ describe('photo contributions', () => {
       'href',
       '/redaktion/beitraege/legacy-photo',
     );
-    expect(screen.getByRole('link', { name: 'Noahs Moment öffnen' })).toHaveAttribute(
-      'href',
-      '/redaktion/beitraege/other-photo',
-    );
+    expect(
+      within(screen.getByRole('img', { name: 'Noahs Moment' }).closest('figure')!).getByRole('link', {
+        name: 'Beitrag öffnen',
+      }),
+    ).toHaveAttribute('href', '/redaktion/beitraege/other-photo');
   });
 
   it('groups photo submissions by collection with a total count and keeps ordinary contributions listed', async () => {
