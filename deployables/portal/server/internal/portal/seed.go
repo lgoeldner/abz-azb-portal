@@ -44,6 +44,7 @@ func categoryID(i int) string { return fmt.Sprintf("10000000-0000-4000-8000-%012
 // areaID addresses the Bereiche created by migration 013 (1 Redaktion ... 8 Orga); ticketID the seeded fixtures.
 func areaID(i int) string   { return fmt.Sprintf("60000000-0000-4000-8000-%012d", i) }
 func ticketID(i int) string { return fmt.Sprintf("70000000-0000-4000-8000-%012d", i) }
+func docID(i int) string    { return fmt.Sprintf("70000000-0000-4000-8000-%012d", i) }
 func Seed(ctx context.Context, pool *pgxpool.Pool, environment string) error {
 	return SeedWithIssuer(ctx, pool, environment, "http://localhost:9090")
 }
@@ -145,7 +146,25 @@ func SeedWithIssuer(ctx context.Context, pool *pgxpool.Pool, environment, issuer
 	if e = seedTickets(ctx, tx); e != nil {
 		return e
 	}
+	if e = seedDocuments(ctx, tx); e != nil {
+		return e
+	}
 	return tx.Commit(ctx)
+}
+
+// seedDocuments adds two development documents written by different people, so each of them sees the other's as unread.
+// Existing fixtures are never rewritten.
+func seedDocuments(ctx context.Context, tx pgx.Tx) error {
+	for i, f := range []struct{ Title, Kind, Body, Author string }{
+		{"Treffen 18.11.", "meeting", "## Agenda\n\n- Stand der Bereiche\n- Terminplan bis zur Abgabe\n- Druckerei: Bildformat\n\n## Ergebnis\n\n- Fotos klären bis Freitag (Sam)\n- Rückblick-Entwurf in der Review (Alex)\n- Nächstes Treffen in zwei Wochen\n", AdminID},
+		{"Hinweise zum Schreiben", "note", "Kurze Sätze, kein Insiderwissen ohne Erklärung.\n\nNamen von Lehrkräften nur mit Einverständnis.", ManagerID},
+	} {
+		if _, e := tx.Exec(ctx, `INSERT INTO documents(id,title,kind,body,created_by,updated_by,created_at,updated_at)
+ VALUES($1,$2,$3,$4,$5,$5,now()-$6::int*interval '1 day',now()-$6::int*interval '1 day') ON CONFLICT(id) DO NOTHING`, docID(i+1), f.Title, f.Kind, f.Body, f.Author, 4-3*i); e != nil {
+			return e
+		}
+	}
+	return nil
 }
 
 // seedTickets adds development fixtures covering all four columns, both types, an approved done ticket and a done

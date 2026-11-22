@@ -122,6 +122,8 @@ func eraseUser(ctx context.Context, tx pgx.Tx, id string) (map[string]int, []str
 		// Free-text words nobody else chose would otherwise remain as anonymous leftovers of this person's input.
 		{"words", "DELETE FROM poll_options o USING categories c WHERE o.poll_id=c.id AND c.kind='words' AND NOT EXISTS(SELECT 1 FROM ballots b WHERE b.option_id=o.id) AND NOT EXISTS(SELECT 1 FROM ballot_audit h WHERE h.option_id=o.id)"},
 		{"", "DELETE FROM area_reviewers WHERE user_id=$1"},
+		// Documents the person wrote stay as team records under the tombstone name; only the personal reading marks go.
+		{"", "DELETE FROM document_views WHERE user_id=$1"},
 		{"", "DELETE FROM consents WHERE user_id=$1"},
 		{"", "DELETE FROM mail_reminder_jobs WHERE user_id=$1"},
 		{"mail_addresses", "DELETE FROM mail_destinations WHERE message_id IN (SELECT id FROM mail_messages WHERE user_id=$1)"},

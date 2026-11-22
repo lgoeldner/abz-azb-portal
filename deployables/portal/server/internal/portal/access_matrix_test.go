@@ -51,6 +51,7 @@ func concretePath(path string) string {
 		"attachments": "50000000-0000-4000-8000-0000000000ff",
 		"tickets":     ticketID(1),
 		"areas":       areaID(1),
+		"documents":   docID(1),
 	}
 	parts := strings.Split(path, "/")
 	for i, part := range parts {
@@ -167,6 +168,11 @@ func TestRestrictedOperationsRejectLowerRoles(t *testing.T) {
 		{http.MethodPost, "/api/v1/tickets/{id}/claim"},
 		{http.MethodPost, "/api/v1/tickets/{id}/comments"},
 		{http.MethodPut, "/api/v1/tickets/{id}/review"},
+		{http.MethodGet, "/api/v1/documents"},
+		{http.MethodPost, "/api/v1/documents"},
+		{http.MethodGet, "/api/v1/documents/{id}"},
+		{http.MethodPatch, "/api/v1/documents/{id}"},
+		{http.MethodDelete, "/api/v1/documents/{id}"},
 	}
 	adminOnly := []contractOperation{
 		{http.MethodDelete, "/api/v1/categories/{id}"},
