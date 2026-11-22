@@ -664,8 +664,25 @@ export interface paths {
         /** List tickets; finished (done and approved) only with include_finished=true */
         get: operations["getTickets"];
         put?: never;
-        /** Create a ticket; area reviewers/admins may assign anyone, other managers only themselves */
+        /** Create a ticket; any editor may assign any admitted editors or nobody */
         post: operations["postTickets"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tickets/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admitted managers and admins who can be assigned to tickets */
+        get: operations["getTicketsPeople"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -686,7 +703,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Edit ticket fields (assignee, area reviewers, admin); changing area, assignee, size or est_pages starts a new review round */
+        /** Edit ticket fields (area reviewers, admin; assignees only the assignee set while todo/in_progress); changing area, assignees, size or est_pages starts a new review round */
         patch: operations["patchTicketsId"];
         trace?: never;
     };
@@ -716,7 +733,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Claim an unassigned ticket atomically and set it in_progress */
+        /** Join the assignees of a todo/in_progress ticket and set it in_progress */
         post: operations["postTicketsIdClaim"];
         delete?: never;
         options?: never;
@@ -1241,7 +1258,8 @@ export interface components {
             /** Format: uuid */
             area_id: string;
             area_name: string;
-            assignee: components["schemas"]["UserRef"] | null;
+            /** @description Everyone working on the ticket, sorted by name; empty when nobody is. */
+            assignees: components["schemas"]["UserRef"][];
             body: string;
             comment_count: number;
             /** Format: date-time */
@@ -1275,8 +1293,7 @@ export interface components {
         TicketEdit: {
             /** Format: uuid */
             area_id: string;
-            /** Format: uuid */
-            assignee_id: null | string;
+            assignee_ids: string[];
             body: string;
             est_pages: null | number;
             goal: string;
@@ -1299,8 +1316,7 @@ export interface components {
         TicketInput: {
             /** Format: uuid */
             area_id: string;
-            /** Format: uuid */
-            assignee_id: null | string;
+            assignee_ids: string[];
             body: string;
             est_pages: null | number;
             goal: string;
@@ -2991,6 +3007,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Ticket"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getTicketsPeople: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRef"][];
                 };
             };
             /** @description Error */

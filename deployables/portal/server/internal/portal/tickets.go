@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -42,7 +43,7 @@ type Ticket struct {
 	Body            string         `json:"body"`
 	AreaID          string         `json:"area_id" format:"uuid"`
 	AreaName        string         `json:"area_name"`
-	Assignee        *UserRef       `json:"assignee"`
+	Assignees       []UserRef      `json:"assignees" description:"Everyone working on the ticket, sorted by name; empty when nobody is."`
 	CreatedBy       UserRef        `json:"created_by"`
 	Size            string         `json:"size" enum:"XS,S,M,L,XL"`
 	Goal            string         `json:"goal"`
@@ -77,14 +78,16 @@ const maxTicketPages = 1000
 
 // ticketInner exposes one row per ticket with the derived "approved" flag: the current round has a
 // binding approval by a voter who is still an admitted manager or admin.
-const ticketInner = `SELECT t.id,t.number,t.type,t.title,t.body,t.area_id,a.name AS area_name,t.assignee_id,asg.name AS assignee_name,
+const ticketInner = `SELECT t.id,t.number,t.type,t.title,t.body,t.area_id,a.name AS area_name,
+ COALESCE((SELECT json_agg(json_build_object('id',ta.user_id::text,'name',au.name) ORDER BY au.name,ta.user_id)
+  FROM ticket_assignees ta JOIN users au ON au.id=ta.user_id WHERE ta.ticket_id=t.id),'[]') AS assignees,
  t.created_by,cb.name AS creator_name,t.size,t.goal,t.est_pages,t.status,t.round,t.version,
  EXISTS(SELECT 1 FROM ticket_reviews r JOIN users v ON v.id=r.user_id
   WHERE r.ticket_id=t.id AND r.round=t.round AND r.verdict='approve' AND r.binding AND v.admitted AND v.role IN ('manager','admin')) AS approved,
  t.created_at,t.updated_at,t.status_changed_at,
  (SELECT count(*) FROM ticket_events ev WHERE ev.ticket_id=t.id AND ev.kind='comment') AS comment_count
- FROM tickets t JOIN areas a ON a.id=t.area_id JOIN users cb ON cb.id=t.created_by LEFT JOIN users asg ON asg.id=t.assignee_id`
-const ticketCols = "id::text,number,type,title,body,area_id::text,area_name,assignee_id::text,assignee_name,created_by::text,creator_name,size,goal,est_pages,status,round,version,approved,created_at,updated_at,status_changed_at,comment_count"
+ FROM tickets t JOIN areas a ON a.id=t.area_id JOIN users cb ON cb.id=t.created_by`
+const ticketCols = "id::text,number,type,title,body,area_id::text,area_name,assignees,created_by::text,creator_name,size,goal,est_pages,status,round,version,approved,created_at,updated_at,status_changed_at,comment_count"
 
 // reviewerPredicate: the user holds a default-reviewer grant for the area and is currently an admitted manager/admin.
 const reviewerPredicate = "EXISTS(SELECT 1 FROM area_reviewers ar JOIN users u ON u.id=ar.user_id WHERE ar.area_id=$1 AND ar.user_id=$2 AND u.admitted AND u.role IN ('manager','admin'))"
@@ -93,13 +96,13 @@ type scanner interface{ Scan(dest ...any) error }
 
 func scanTicket(row scanner) (Ticket, error) {
 	var t Ticket
-	var assigneeID, assigneeName *string
+	var assignees []byte
 	var creatorID, creatorName string
-	if e := row.Scan(&t.ID, &t.Number, &t.Type, &t.Title, &t.Body, &t.AreaID, &t.AreaName, &assigneeID, &assigneeName, &creatorID, &creatorName, &t.Size, &t.Goal, &t.EstPages, &t.Status, &t.Round, &t.Version, &t.Approved, &t.CreatedAt, &t.UpdatedAt, &t.StatusChangedAt, &t.CommentCount); e != nil {
+	if e := row.Scan(&t.ID, &t.Number, &t.Type, &t.Title, &t.Body, &t.AreaID, &t.AreaName, &assignees, &creatorID, &creatorName, &t.Size, &t.Goal, &t.EstPages, &t.Status, &t.Round, &t.Version, &t.Approved, &t.CreatedAt, &t.UpdatedAt, &t.StatusChangedAt, &t.CommentCount); e != nil {
 		return t, e
 	}
-	if assigneeID != nil && assigneeName != nil {
-		t.Assignee = &UserRef{*assigneeID, *assigneeName}
+	if e := json.Unmarshal(assignees, &t.Assignees); e != nil {
+		return t, e
 	}
 	t.CreatedBy = UserRef{creatorID, creatorName}
 	t.Reviews = []TicketReview{}
@@ -186,15 +189,48 @@ func requireEditorUser(ctx context.Context, db DB, id, message string) error {
 	return e
 }
 
-func userName(ctx context.Context, db DB, id *string) string {
-	if id == nil {
+// userNames renders a set of people for the timeline ("niemand" when empty).
+func userNames(ctx context.Context, db DB, ids []string) string {
+	if len(ids) == 0 {
 		return "niemand"
 	}
-	var name string
-	if e := db.QueryRow(ctx, "SELECT name FROM users WHERE id=$1", *id).Scan(&name); e != nil {
+	var names string
+	if e := db.QueryRow(ctx, "SELECT string_agg(name,', ' ORDER BY name) FROM users WHERE id=ANY($1::uuid[])", ids).Scan(&names); e != nil {
 		return "unbekannt"
 	}
-	return name
+	return names
+}
+
+func assigneeIDs(t Ticket) []string {
+	ids := make([]string, len(t.Assignees))
+	for i, a := range t.Assignees {
+		ids[i] = a.ID
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+func isTicketAssignee(t Ticket, userID string) bool {
+	return slices.ContainsFunc(t.Assignees, func(a UserRef) bool { return a.ID == userID })
+}
+
+// setAssignees replaces the assignee set; ids new to the ticket must be admitted managers/admins.
+func setAssignees(ctx context.Context, db DB, ticketID string, before, after []string) error {
+	for _, id := range after {
+		if !slices.Contains(before, id) {
+			if e := requireEditorUser(ctx, db, id, noAssigneeMessage); e != nil {
+				return e
+			}
+		}
+	}
+	if _, e := db.Exec(ctx, "INSERT INTO ticket_former_assignees(ticket_id,user_id) SELECT ticket_id,user_id FROM ticket_assignees WHERE ticket_id=$1 AND NOT user_id=ANY($2::uuid[]) ON CONFLICT DO NOTHING", ticketID, after); e != nil {
+		return e
+	}
+	if _, e := db.Exec(ctx, "DELETE FROM ticket_assignees WHERE ticket_id=$1", ticketID); e != nil {
+		return e
+	}
+	_, e := db.Exec(ctx, "INSERT INTO ticket_assignees(ticket_id,user_id) SELECT $1,unnest($2::uuid[])", ticketID, after)
+	return e
 }
 
 func addTicketEvent(ctx context.Context, db DB, ticketID, actorID, kind, body, detail string) error {
@@ -213,17 +249,12 @@ func ticketActor(r *http.Request) (User, error) {
 // ticketShape holds the fields that decide whether a ticket starts a new review round.
 type ticketShape struct {
 	Status, AreaID, Size string
-	Assignee             *string
+	Assignees            []string // sorted
 	EstPages             *int
 }
 
 func shapeOf(t Ticket) ticketShape {
-	s := ticketShape{Status: t.Status, AreaID: t.AreaID, Size: t.Size, EstPages: t.EstPages}
-	if t.Assignee != nil {
-		id := t.Assignee.ID
-		s.Assignee = &id
-	}
-	return s
+	return ticketShape{Status: t.Status, AreaID: t.AreaID, Size: t.Size, Assignees: assigneeIDs(t), EstPages: t.EstPages}
 }
 
 func samePtr[T comparable](a, b *T) bool {
@@ -239,14 +270,16 @@ func startsNewRound(before, after ticketShape) bool {
 	if (before.Status == "review" || before.Status == "done") && (after.Status == "todo" || after.Status == "in_progress") {
 		return true
 	}
-	return before.AreaID != after.AreaID || before.Size != after.Size || !samePtr(before.Assignee, after.Assignee) || !samePtr(before.EstPages, after.EstPages)
+	return before.AreaID != after.AreaID || before.Size != after.Size || !slices.Equal(before.Assignees, after.Assignees) || !samePtr(before.EstPages, after.EstPages)
 }
 
 type ticketFields struct {
 	Title, Body, AreaID, Size, Goal string
-	AssigneeID                      *string
+	AssigneeIDs                     []string
 	EstPages                        *int
 }
+
+const maxTicketAssignees = 20
 
 // normalize trims and validates the user-supplied fields; typ decides the est_pages rule.
 func (f *ticketFields) normalize(typ string) error {
@@ -270,8 +303,19 @@ func (f *ticketFields) normalize(typ string) error {
 	if !validID(f.AreaID) {
 		return bad("Bereich erforderlich.")
 	}
-	if f.AssigneeID != nil && !validID(*f.AssigneeID) {
-		return bad("Ungültige zuständige Person.")
+	if len(f.AssigneeIDs) > maxTicketAssignees {
+		return bad(fmt.Sprintf("Höchstens %d zuständige Personen.", maxTicketAssignees))
+	}
+	for i, id := range f.AssigneeIDs {
+		f.AssigneeIDs[i] = strings.ToLower(id)
+		if !validID(id) {
+			return bad("Ungültige zuständige Person.")
+		}
+	}
+	// Sorted and duplicate-free, so set comparisons are plain slice comparisons.
+	f.AssigneeIDs = slices.Compact(slices.Sorted(slices.Values(f.AssigneeIDs)))
+	if f.AssigneeIDs == nil {
+		f.AssigneeIDs = []string{}
 	}
 	switch typ {
 	case "artikel":
@@ -503,6 +547,31 @@ func (a *App) editArea(w http.ResponseWriter, r *http.Request) error {
 
 // ---- Tickets ----
 
+// ticketPeople lists everyone who can work on tickets (admitted managers and admins), for the "Wer" picker.
+func (a *App) ticketPeople(w http.ResponseWriter, r *http.Request) error {
+	if _, e := ticketActor(r); e != nil {
+		return e
+	}
+	rows, e := a.DB.Query(r.Context(), "SELECT id::text,name FROM users WHERE admitted AND role IN ('manager','admin') ORDER BY name,id")
+	if e != nil {
+		return e
+	}
+	defer rows.Close()
+	out := []UserRef{}
+	for rows.Next() {
+		var v UserRef
+		if e = rows.Scan(&v.ID, &v.Name); e != nil {
+			return e
+		}
+		out = append(out, v)
+	}
+	if e = rows.Err(); e != nil {
+		return e
+	}
+	jsonOut(w, 200, out)
+	return nil
+}
+
 func (a *App) listTickets(w http.ResponseWriter, r *http.Request) error {
 	u, e := ticketActor(r)
 	if e != nil {
@@ -528,7 +597,7 @@ func (a *App) listTickets(w http.ResponseWriter, r *http.Request) error {
 		if !validID(v) {
 			return bad("Ungültige zuständige Person.")
 		}
-		add("assignee_id=?", v)
+		add("EXISTS(SELECT 1 FROM ticket_assignees ta WHERE ta.ticket_id=x.id AND ta.user_id=?)", v)
 	}
 	if v := q.Get("type"); v != "" {
 		if v != "aufgabe" && v != "artikel" {
@@ -609,19 +678,19 @@ func (a *App) createTicket(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	var in struct {
-		Type       string  `json:"type"`
-		Title      string  `json:"title"`
-		Body       string  `json:"body"`
-		AreaID     string  `json:"area_id"`
-		AssigneeID *string `json:"assignee_id"`
-		Size       string  `json:"size"`
-		Goal       string  `json:"goal"`
-		EstPages   *int    `json:"est_pages"`
+		Type        string   `json:"type"`
+		Title       string   `json:"title"`
+		Body        string   `json:"body"`
+		AreaID      string   `json:"area_id"`
+		AssigneeIDs []string `json:"assignee_ids"`
+		Size        string   `json:"size"`
+		Goal        string   `json:"goal"`
+		EstPages    *int     `json:"est_pages"`
 	}
 	if e = decode(w, r, &in); e != nil {
 		return e
 	}
-	f := ticketFields{Title: in.Title, Body: in.Body, AreaID: in.AreaID, Size: in.Size, Goal: in.Goal, AssigneeID: in.AssigneeID, EstPages: in.EstPages}
+	f := ticketFields{Title: in.Title, Body: in.Body, AreaID: in.AreaID, Size: in.Size, Goal: in.Goal, AssigneeIDs: in.AssigneeIDs, EstPages: in.EstPages}
 	if e = f.normalize(in.Type); e != nil {
 		return e
 	}
@@ -633,27 +702,21 @@ func (a *App) createTicket(w http.ResponseWriter, r *http.Request) error {
 	if e = requireArea(r.Context(), tx, f.AreaID); e != nil {
 		return e
 	}
-	manage, e := canManageTicketArea(r.Context(), tx, u, f.AreaID)
-	if e != nil {
-		return e
-	}
-	if !manage && (f.AssigneeID == nil || *f.AssigneeID != u.ID) {
-		return forbidden()
-	}
+	// Any editor may assign any admitted editors (or nobody); the Bereich alone decides who reviews.
 	status := "todo"
-	if f.AssigneeID != nil {
-		if e = requireEditorUser(r.Context(), tx, *f.AssigneeID, noAssigneeMessage); e != nil {
-			return e
-		}
+	if len(f.AssigneeIDs) > 0 {
 		status = "in_progress"
 	}
 	id := ID()
-	if _, e = tx.Exec(r.Context(), "INSERT INTO tickets(id,type,title,body,area_id,assignee_id,created_by,size,goal,est_pages,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
-		id, in.Type, f.Title, f.Body, f.AreaID, f.AssigneeID, u.ID, f.Size, f.Goal, f.EstPages, status); e != nil {
+	if _, e = tx.Exec(r.Context(), "INSERT INTO tickets(id,type,title,body,area_id,created_by,size,goal,est_pages,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+		id, in.Type, f.Title, f.Body, f.AreaID, u.ID, f.Size, f.Goal, f.EstPages, status); e != nil {
 		return e
 	}
-	if f.AssigneeID != nil {
-		if e = addTicketEvent(r.Context(), tx, id, u.ID, "assign", "", "niemand -> "+userName(r.Context(), tx, f.AssigneeID)); e != nil {
+	if len(f.AssigneeIDs) > 0 {
+		if e = setAssignees(r.Context(), tx, id, nil, f.AssigneeIDs); e != nil {
+			return e
+		}
+		if e = addTicketEvent(r.Context(), tx, id, u.ID, "assign", "", "niemand -> "+userNames(r.Context(), tx, f.AssigneeIDs)); e != nil {
 			return e
 		}
 	}
@@ -672,8 +735,9 @@ func (a *App) createTicket(w http.ResponseWriter, r *http.Request) error {
 }
 
 // editTicket applies a full replace of the editable fields (type is immutable). Area reviewers and admins may change
-// anything; the assignee may only release the ticket (assignee_id null) and must leave every other field unchanged.
-// Releasing an in_progress ticket returns it to todo.
+// anything. An assignee may change only the assignee set (to any admitted editors), and only while the ticket is
+// todo/in_progress: in review a changed set would change which votes bind (rule 2) without a reviewer's action.
+// Emptying the set of an in_progress ticket returns it to todo.
 func (a *App) editTicket(w http.ResponseWriter, r *http.Request) error {
 	u, e := ticketActor(r)
 	if e != nil {
@@ -684,25 +748,28 @@ func (a *App) editTicket(w http.ResponseWriter, r *http.Request) error {
 		return missing()
 	}
 	var in struct {
-		Title      string  `json:"title"`
-		Body       string  `json:"body"`
-		AreaID     string  `json:"area_id"`
-		AssigneeID *string `json:"assignee_id"`
-		Size       string  `json:"size"`
-		Goal       string  `json:"goal"`
-		EstPages   *int    `json:"est_pages"`
-		Version    int     `json:"version"`
+		Title       string   `json:"title"`
+		Body        string   `json:"body"`
+		AreaID      string   `json:"area_id"`
+		AssigneeIDs []string `json:"assignee_ids"`
+		Size        string   `json:"size"`
+		Goal        string   `json:"goal"`
+		EstPages    *int     `json:"est_pages"`
+		Version     int      `json:"version"`
 	}
-	// PATCH is a full replace: every key must be present (null is allowed for assignee_id and est_pages), so a
-	// partial body can never silently blank a field or release the assignee.
+	// PATCH is a full replace: every key must be present (null is allowed only for est_pages), so a partial body
+	// can never silently blank a field or drop the assignees.
 	var raw map[string]json.RawMessage
 	if e = decode(w, r, &raw); e != nil {
 		return e
 	}
-	for _, key := range []string{"title", "body", "area_id", "assignee_id", "size", "goal", "est_pages", "version"} {
+	for _, key := range []string{"title", "body", "area_id", "assignee_ids", "size", "goal", "est_pages", "version"} {
 		if _, ok := raw[key]; !ok {
 			return bad("Pflichtfeld fehlt: " + key + ".")
 		}
+	}
+	if strings.TrimSpace(string(raw["assignee_ids"])) == "null" {
+		return bad("assignee_ids muss eine Liste sein.")
 	}
 	if len(raw) != 8 {
 		return bad("Unbekannte Felder.")
@@ -723,7 +790,7 @@ func (a *App) editTicket(w http.ResponseWriter, r *http.Request) error {
 	if e != nil {
 		return e
 	}
-	isAssignee := t.Assignee != nil && t.Assignee.ID == u.ID
+	isAssignee := isTicketAssignee(t, u.ID)
 	manage, e := canManageTicketArea(r.Context(), tx, u, t.AreaID)
 	if e != nil {
 		return e
@@ -731,20 +798,24 @@ func (a *App) editTicket(w http.ResponseWriter, r *http.Request) error {
 	if !manage && !isAssignee {
 		return forbidden()
 	}
-	f := ticketFields{Title: in.Title, Body: in.Body, AreaID: in.AreaID, Size: in.Size, Goal: in.Goal, AssigneeID: in.AssigneeID, EstPages: in.EstPages}
+	f := ticketFields{Title: in.Title, Body: in.Body, AreaID: in.AreaID, Size: in.Size, Goal: in.Goal, AssigneeIDs: in.AssigneeIDs, EstPages: in.EstPages}
 	if e = f.normalize(t.Type); e != nil {
 		return e
 	}
 	if t.Version != in.Version {
 		return conflict()
 	}
+	before := shapeOf(t)
+	assigneesChanged := !slices.Equal(f.AssigneeIDs, before.Assignees)
 	if !manage {
 		unchanged := f.Title == t.Title && f.Body == t.Body && f.AreaID == t.AreaID && f.Size == t.Size && f.Goal == t.Goal && samePtr(f.EstPages, t.EstPages)
-		if !unchanged || (f.AssigneeID != nil && *f.AssigneeID != u.ID) {
-			return forbidden()
+		if !unchanged {
+			return fail(403, "forbidden", "Als zuständige Person kannst du nur ändern, wer am Ticket arbeitet.")
+		}
+		if assigneesChanged && t.Status != "todo" && t.Status != "in_progress" {
+			return fail(403, "forbidden", "In Review oder Fertig ändern nur Bereichsverantwortliche, wer am Ticket arbeitet.")
 		}
 	}
-	before := shapeOf(t)
 	if f.AreaID != t.AreaID {
 		if e = requireArea(r.Context(), tx, f.AreaID); e != nil {
 			return e
@@ -758,16 +829,11 @@ func (a *App) editTicket(w http.ResponseWriter, r *http.Request) error {
 			return forbidden()
 		}
 	}
-	if f.AssigneeID != nil && !samePtr(f.AssigneeID, before.Assignee) {
-		if e = requireEditorUser(r.Context(), tx, *f.AssigneeID, noAssigneeMessage); e != nil {
-			return e
-		}
-	}
 	status := t.Status
-	if f.AssigneeID == nil && t.Status == "in_progress" {
+	if len(f.AssigneeIDs) == 0 && t.Status == "in_progress" {
 		status = "todo"
 	}
-	after := ticketShape{Status: status, AreaID: f.AreaID, Size: f.Size, Assignee: f.AssigneeID, EstPages: f.EstPages}
+	after := ticketShape{Status: status, AreaID: f.AreaID, Size: f.Size, Assignees: f.AssigneeIDs, EstPages: f.EstPages}
 	changed := []string{}
 	for _, c := range []struct {
 		name string
@@ -777,8 +843,7 @@ func (a *App) editTicket(w http.ResponseWriter, r *http.Request) error {
 			changed = append(changed, c.name)
 		}
 	}
-	assigneeChanged := !samePtr(after.Assignee, before.Assignee)
-	if len(changed) == 0 && !assigneeChanged && status == t.Status {
+	if len(changed) == 0 && !assigneesChanged && status == t.Status {
 		jsonOut(w, 200, t)
 		return nil
 	}
@@ -786,17 +851,22 @@ func (a *App) editTicket(w http.ResponseWriter, r *http.Request) error {
 	if startsNewRound(before, after) {
 		round++
 	}
-	if _, e = tx.Exec(r.Context(), "UPDATE tickets SET title=$2,body=$3,area_id=$4,assignee_id=$5,size=$6,goal=$7,est_pages=$8,status=$9,round=$10,version=version+1,updated_at=now(),status_changed_at=CASE WHEN status<>$9 THEN now() ELSE status_changed_at END WHERE id=$1",
-		t.ID, f.Title, f.Body, f.AreaID, f.AssigneeID, f.Size, f.Goal, f.EstPages, status, round); e != nil {
+	if _, e = tx.Exec(r.Context(), "UPDATE tickets SET title=$2,body=$3,area_id=$4,size=$5,goal=$6,est_pages=$7,status=$8,round=$9,version=version+1,updated_at=now(),status_changed_at=CASE WHEN status<>$8 THEN now() ELSE status_changed_at END WHERE id=$1",
+		t.ID, f.Title, f.Body, f.AreaID, f.Size, f.Goal, f.EstPages, status, round); e != nil {
 		return e
+	}
+	if assigneesChanged {
+		if e = setAssignees(r.Context(), tx, t.ID, before.Assignees, f.AssigneeIDs); e != nil {
+			return e
+		}
 	}
 	if len(changed) > 0 {
 		if e = addTicketEvent(r.Context(), tx, t.ID, u.ID, "edit", "", strings.Join(changed, ",")); e != nil {
 			return e
 		}
 	}
-	if assigneeChanged {
-		detail := userName(r.Context(), tx, before.Assignee) + " -> " + userName(r.Context(), tx, after.Assignee)
+	if assigneesChanged {
+		detail := userNames(r.Context(), tx, before.Assignees) + " -> " + userNames(r.Context(), tx, after.Assignees)
 		if e = addTicketEvent(r.Context(), tx, t.ID, u.ID, "assign", "", detail); e != nil {
 			return e
 		}
@@ -853,7 +923,7 @@ func (a *App) ticketStatus(w http.ResponseWriter, r *http.Request) error {
 	if e != nil {
 		return e
 	}
-	if !manage && !(t.Assignee != nil && t.Assignee.ID == u.ID) {
+	if !manage && !isTicketAssignee(t, u.ID) {
 		return forbidden()
 	}
 	if t.Version != in.Version || t.Status == in.Status {
@@ -878,8 +948,8 @@ func (a *App) ticketStatus(w http.ResponseWriter, r *http.Request) error {
 	return a.finishTicket(w, r, tx, t.ID, 200)
 }
 
-// claimTicket assigns an unassigned ticket to the caller. The row lock serializes concurrent claims, so exactly one
-// wins; the others observe the assignee and get 409.
+// claimTicket adds the caller to the assignees of open work ("Übernehmen" / "Mitmachen"). The row lock serializes
+// concurrent claims; claiming twice is 409.
 func (a *App) claimTicket(w http.ResponseWriter, r *http.Request) error {
 	u, e := ticketActor(r)
 	if e != nil {
@@ -899,26 +969,27 @@ func (a *App) claimTicket(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	// Only open work can be claimed: claiming a done or in-review ticket would reopen it and drop its approval.
-	if t.Assignee != nil || (t.Status != "todo" && t.Status != "in_progress") {
+	if isTicketAssignee(t, u.ID) || (t.Status != "todo" && t.Status != "in_progress") {
 		return conflict()
+	}
+	if len(t.Assignees) >= maxTicketAssignees {
+		return bad(fmt.Sprintf("Höchstens %d zuständige Personen.", maxTicketAssignees))
 	}
 	before := shapeOf(t)
 	after := before
 	after.Status = "in_progress"
-	me := u.ID
-	after.Assignee = &me
+	after.Assignees = slices.Sorted(slices.Values(append(slices.Clone(before.Assignees), u.ID)))
 	round := t.Round
 	if startsNewRound(before, after) {
 		round++
 	}
-	tag, e := tx.Exec(r.Context(), "UPDATE tickets SET assignee_id=$2,status='in_progress',round=$3,version=version+1,updated_at=now(),status_changed_at=CASE WHEN status<>'in_progress' THEN now() ELSE status_changed_at END WHERE id=$1 AND assignee_id IS NULL AND status IN ('todo','in_progress')", t.ID, u.ID, round)
-	if e != nil {
+	if _, e = tx.Exec(r.Context(), "INSERT INTO ticket_assignees(ticket_id,user_id) VALUES($1,$2)", t.ID, u.ID); e != nil {
 		return e
 	}
-	if tag.RowsAffected() != 1 {
-		return conflict()
+	if _, e = tx.Exec(r.Context(), "UPDATE tickets SET status='in_progress',round=$2,version=version+1,updated_at=now(),status_changed_at=CASE WHEN status<>'in_progress' THEN now() ELSE status_changed_at END WHERE id=$1", t.ID, round); e != nil {
+		return e
 	}
-	if e = addTicketEvent(r.Context(), tx, t.ID, u.ID, "assign", "", "niemand -> "+u.Name); e != nil {
+	if e = addTicketEvent(r.Context(), tx, t.ID, u.ID, "assign", "", userNames(r.Context(), tx, before.Assignees)+" -> "+userNames(r.Context(), tx, after.Assignees)); e != nil {
 		return e
 	}
 	if t.Status != "in_progress" {
@@ -1018,18 +1089,30 @@ func (a *App) reviewTicket(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	binding, selfConfirmed := false, false
-	if t.Assignee != nil && t.Assignee.ID == u.ID {
-		// Rule 3: self approval only for a default reviewer, with explicit confirmation, XS/S and type aufgabe.
-		if !voterReviewer || !in.SelfConfirmed || (t.Size != "XS" && t.Size != "S") || t.Type != "aufgabe" {
-			return fail(403, "forbidden", "Eigene Aufgaben dürfen nur Bereichsverantwortliche bei bestätigter Selbstfreigabe (Aufgabe, Größe XS/S) bewerten.")
+	if isTicketAssignee(t, u.ID) {
+		// Rule 3: self approval only for the sole assignee who is a default reviewer, with explicit confirmation, XS/S
+		// and type aufgabe. A co-assigned colleague did part of the work and must not approve it alone.
+		if len(t.Assignees) != 1 || !voterReviewer || !in.SelfConfirmed || (t.Size != "XS" && t.Size != "S") || t.Type != "aufgabe" {
+			return fail(403, "forbidden", "Eigene Aufgaben darf nur die allein zuständige bereichsverantwortliche Person bei bestätigter Selbstfreigabe (Aufgabe, Größe XS/S) bewerten.")
 		}
 		binding, selfConfirmed = true, true
 	} else {
 		binding = voterReviewer // rule 1
-		if !binding && t.Assignee != nil {
-			// Rule 2: the assignee is a default reviewer, so any other manager/admin is binding.
-			if binding, e = isAreaReviewer(r.Context(), tx, t.AreaID, t.Assignee.ID); e != nil {
+		// Rule 2: every assignee is a default reviewer, so no reviewer is left to vote and any other manager/admin is
+		// binding. "Every" keeps co-assigning from switching this on, and a former assignee never counts: whoever
+		// worked on the ticket cannot leave it to a reviewer and then approve their own work.
+		if !binding && len(t.Assignees) > 0 {
+			var former bool
+			if e = tx.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM ticket_former_assignees WHERE ticket_id=$1 AND user_id=$2)", t.ID, u.ID).Scan(&former); e != nil {
 				return e
+			}
+			binding = !former
+			for _, a := range t.Assignees {
+				ok, e := isAreaReviewer(r.Context(), tx, t.AreaID, a.ID)
+				if e != nil {
+					return e
+				}
+				binding = binding && ok
 			}
 		}
 	}

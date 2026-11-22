@@ -81,25 +81,25 @@ type AreaEdit struct {
 }
 
 type TicketInput struct {
-	Type       string  `json:"type" enum:"aufgabe,artikel"`
-	Title      string  `json:"title"`
-	Body       string  `json:"body"`
-	AreaID     string  `json:"area_id" format:"uuid"`
-	AssigneeID *string `json:"assignee_id" format:"uuid"`
-	Size       string  `json:"size" enum:"XS,S,M,L,XL"`
-	Goal       string  `json:"goal"`
-	EstPages   *int    `json:"est_pages"`
+	Type        string   `json:"type" enum:"aufgabe,artikel"`
+	Title       string   `json:"title"`
+	Body        string   `json:"body"`
+	AreaID      string   `json:"area_id" format:"uuid"`
+	AssigneeIDs []string `json:"assignee_ids" items.format:"uuid"`
+	Size        string   `json:"size" enum:"XS,S,M,L,XL"`
+	Goal        string   `json:"goal"`
+	EstPages    *int     `json:"est_pages"`
 }
 
 type TicketEdit struct {
-	Title      string  `json:"title"`
-	Body       string  `json:"body"`
-	AreaID     string  `json:"area_id" format:"uuid"`
-	AssigneeID *string `json:"assignee_id" format:"uuid"`
-	Size       string  `json:"size" enum:"XS,S,M,L,XL"`
-	Goal       string  `json:"goal"`
-	EstPages   *int    `json:"est_pages"`
-	Version    int     `json:"version"`
+	Title       string   `json:"title"`
+	Body        string   `json:"body"`
+	AreaID      string   `json:"area_id" format:"uuid"`
+	AssigneeIDs []string `json:"assignee_ids" items.format:"uuid"`
+	Size        string   `json:"size" enum:"XS,S,M,L,XL"`
+	Goal        string   `json:"goal"`
+	EstPages    *int     `json:"est_pages"`
+	Version     int      `json:"version"`
 }
 
 type TicketStatusInput struct {

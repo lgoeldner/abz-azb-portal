@@ -54,7 +54,7 @@ function ticket(overrides: Partial<Ticket> = {}): Ticket {
     body: 'Ergebnis wird abgelegt in: Drive',
     area_id: 'area-redaktion',
     area_name: 'Redaktion',
-    assignee: ref(manager),
+    assignees: [ref(manager)],
     created_by: ref(reviewer),
     size: 'M',
     goal: '5 Angebote',
@@ -105,12 +105,17 @@ function installApi(
       // Like the server: a ticket with an assignee starts in progress.
       if (path === '/tickets')
         return Response.json(
-          ticket({ id: 'created-1', ...(body as Partial<Ticket>), status: body.assignee_id ? 'in_progress' : 'todo' }),
+          ticket({
+            id: 'created-1',
+            ...(body as Partial<Ticket>),
+            status: (body.assignee_ids as string[]).length ? 'in_progress' : 'todo',
+          }),
         );
       return Response.json(tickets[0] ?? {});
     }
     gets.push(path + url.search);
     if (path === '/areas') return Response.json(areas);
+    if (path === '/tickets/people') return Response.json([ref(admin), ref(manager), ref(reviewer)]);
     if (path === '/tickets') {
       const finished = url.searchParams.get('include_finished') === 'true';
       return Response.json(tickets.filter((t) => finished || !(t.status === 'done' && t.approved)));
@@ -149,7 +154,7 @@ async function pickArea(user: ReturnType<typeof userEvent.setup>, name: string, 
 }
 
 describe('ticket board', () => {
-  const todo = ticket({ id: 't-todo', number: 1, title: 'Fotos sichten', status: 'todo', assignee: null });
+  const todo = ticket({ id: 't-todo', number: 1, title: 'Fotos sichten', status: 'todo', assignees: [] });
   const work = ticket({
     id: 't-work',
     number: 2,
@@ -158,7 +163,13 @@ describe('ticket board', () => {
     area_id: 'area-layout',
     area_name: 'Layout',
   });
-  const review = ticket({ id: 't-review', number: 3, title: 'Steckbriefe', status: 'review', assignee: ref(reviewer) });
+  const review = ticket({
+    id: 't-review',
+    number: 3,
+    title: 'Steckbriefe',
+    status: 'review',
+    assignees: [ref(reviewer)],
+  });
   const waiting = ticket({ id: 't-wait', number: 4, title: 'Abizeitung drucken', status: 'done', approved: false });
   const approved = ticket({ id: 't-ok', number: 5, title: 'Cover entwerfen', status: 'done', approved: true });
 
@@ -286,7 +297,7 @@ describe('ticket board', () => {
       title: 'Lehrerumfrage',
       type: 'artikel',
       est_pages: 2,
-      assignee: ref(reviewer),
+      assignees: [ref(reviewer)],
     });
     installApi([todo, work, review, article]);
     const user = userEvent.setup();
@@ -395,7 +406,7 @@ describe('ticket page review panel', () => {
     screen.queryByLabelText('Ich nehme meine eigene Aufgabe selbst ab und trage die Verantwortung dafür');
 
   it('gives an assignee who is no reviewer no way to vote', async () => {
-    installApi([ticket({ status: 'review', assignee: ref(manager) })]);
+    installApi([ticket({ status: 'review', assignees: [ref(manager)] })]);
     renderAt('/tickets/ticket-1', manager);
     await screen.findByRole('heading', { name: /Angebote besorgen/ });
     expect(reviewButton()).not.toBeInTheDocument();
@@ -404,7 +415,7 @@ describe('ticket page review panel', () => {
   });
 
   it('offers self approval only for a reviewer assignee on a small Aufgabe, and sends the confirmation', async () => {
-    const api = installApi([ticket({ status: 'review', assignee: ref(reviewer), size: 'S', round: 4 })]);
+    const api = installApi([ticket({ status: 'review', assignees: [ref(reviewer)], size: 'S', round: 4 })]);
     renderAt('/tickets/ticket-1', reviewer);
     const checkbox = await screen.findByLabelText(
       'Ich nehme meine eigene Aufgabe selbst ab und trage die Verantwortung dafür',
@@ -425,7 +436,7 @@ describe('ticket page review panel', () => {
     ['size M', { size: 'M' as const }],
     ['an Artikel', { type: 'artikel' as const, est_pages: 1, size: 'XS' as const }],
   ])('hides self approval for a reviewer assignee on %s', async (_name, change) => {
-    installApi([ticket({ status: 'review', assignee: ref(reviewer), ...change })]);
+    installApi([ticket({ status: 'review', assignees: [ref(reviewer)], ...change })]);
     renderAt('/tickets/ticket-1', reviewer);
     await screen.findByRole('heading', { name: /Angebote besorgen/ });
     expect(selfConfirm()).not.toBeInTheDocument();
@@ -468,7 +479,7 @@ describe('ticket page review panel', () => {
   });
 
   it('offers no vote before the ticket reaches review', async () => {
-    installApi([ticket({ status: 'in_progress', assignee: ref(reviewer) })]);
+    installApi([ticket({ status: 'in_progress', assignees: [ref(reviewer)] })]);
     renderAt('/tickets/ticket-1', admin);
     await screen.findByRole('heading', { name: /Angebote besorgen/ });
     expect(reviewButton()).not.toBeInTheDocument();
@@ -477,7 +488,7 @@ describe('ticket page review panel', () => {
 
 describe('ticket page', () => {
   it('lets a manager claim an unassigned ticket with the help text on the button', async () => {
-    const api = installApi([ticket({ status: 'todo', assignee: null })]);
+    const api = installApi([ticket({ status: 'todo', assignees: [] })]);
     renderAt('/tickets/ticket-1', manager);
     const claim = await screen.findByRole('button', { name: /Übernehmen/ });
     expect(claim).toHaveAttribute('title', 'Dich selbst in Wer eintragen.');
@@ -487,7 +498,7 @@ describe('ticket page', () => {
   });
 
   it.each(['review', 'done'] as const)('does not offer to claim an unassigned ticket in %s', async (status) => {
-    installApi([ticket({ status, assignee: null })]);
+    installApi([ticket({ status, assignees: [] })]);
     renderAt('/tickets/ticket-1', manager);
     await screen.findByRole('heading', { name: /Angebote besorgen/ });
     expect(screen.queryByRole('button', { name: /Übernehmen/ })).not.toBeInTheDocument();
@@ -526,7 +537,7 @@ describe('ticket page', () => {
 
   it('saves edits as a full TicketEdit that keeps the assignee and carries the version', async () => {
     const api = installApi([ticket()]);
-    renderAt('/tickets/ticket-1', manager);
+    renderAt('/tickets/ticket-1', reviewer);
     await userEvent.click(await screen.findByRole('button', { name: /Bearbeiten/ }));
     const title = screen.getByLabelText('Titel');
     await userEvent.clear(title);
@@ -539,7 +550,7 @@ describe('ticket page', () => {
       body: {
         title: 'Neue Angebote',
         area_id: 'area-redaktion',
-        assignee_id: 'manager-1',
+        assignee_ids: ['manager-1'],
         size: 'M',
         goal: '5 Angebote',
         est_pages: null,
@@ -549,8 +560,55 @@ describe('ticket page', () => {
     expect(api.writes[0].body).not.toHaveProperty('type');
   });
 
+  it('lets a plain assignee change only who works on an open ticket', async () => {
+    const api = installApi([ticket()]);
+    const user = userEvent.setup();
+    renderAt('/tickets/ticket-1', manager);
+    await user.click(await screen.findByRole('button', { name: /Wer ändern/ }));
+    expect(screen.queryByRole('button', { name: /Bearbeiten/ })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('checkbox', { name: /Ada Admin/ }));
+    await user.click(screen.getByRole('button', { name: 'Speichern' }));
+    await waitFor(() => expect(api.writes).toHaveLength(1));
+    expect(api.writes[0]).toMatchObject({
+      method: 'PATCH',
+      body: { title: 'Angebote besorgen', assignee_ids: ['manager-1', 'admin-1'], size: 'M', version: 3 },
+    });
+  });
+
+  it('saves Wer against the version the picker opened with', async () => {
+    const current = ticket({ version: 3 });
+    const api = installApi([current]);
+    const user = userEvent.setup();
+    renderAt('/tickets/ticket-1', manager);
+    await user.click(await screen.findByRole('button', { name: /Wer ändern/ }));
+    current.version = 4;
+    const loads = () => api.gets.filter((g) => g === '/tickets/ticket-1').length;
+    const before = loads();
+    window.dispatchEvent(new Event('visibilitychange'));
+    await waitFor(() => expect(loads()).toBeGreaterThan(before));
+    await user.click(screen.getByRole('button', { name: 'Speichern' }));
+    await waitFor(() => expect(api.writes).toHaveLength(1));
+    expect(api.writes[0]).toMatchObject({ method: 'PATCH', body: { version: 3 } });
+  });
+
+  it('keeps who works on a ticket in review fixed for a plain assignee', async () => {
+    installApi([ticket({ status: 'review' })]);
+    renderAt('/tickets/ticket-1', manager);
+    await screen.findByRole('heading', { name: /Angebote besorgen/ });
+    expect(screen.queryByRole('button', { name: /Wer ändern/ })).not.toBeInTheDocument();
+  });
+
+  it('labels assignees who are Bereichsverantwortliche', async () => {
+    installApi([ticket({ assignees: [ref(manager), ref(reviewer)] })]);
+    renderAt('/tickets/ticket-1', manager);
+    const details = await screen.findByRole('complementary', { name: 'Details' });
+    const rita = within(details).getAllByText('Rita Review')[0].parentElement!;
+    expect(rita).toHaveTextContent('Bereichsverantwortlich');
+    expect(within(details).getByText('Mona Manager').parentElement).not.toHaveTextContent('Bereichsverantwortlich');
+  });
+
   it('hides editing for a manager who neither owns the ticket nor reviews its Bereich', async () => {
-    installApi([ticket({ assignee: ref(reviewer) })]);
+    installApi([ticket({ assignees: [ref(reviewer)] })]);
     renderAt('/tickets/ticket-1', manager);
     await screen.findByRole('heading', { name: /Angebote besorgen/ });
     expect(screen.queryByRole('button', { name: /Bearbeiten/ })).not.toBeInTheDocument();
@@ -590,7 +648,7 @@ describe('ticket page state transitions', () => {
   });
 
   it('shows a read-only status pill instead of the stepper to people who may not move the ticket', async () => {
-    installApi([ticket({ assignee: ref(reviewer) })]);
+    installApi([ticket({ assignees: [ref(reviewer)] })]);
     renderAt('/tickets/ticket-1', manager);
     await screen.findByRole('heading', { name: /Angebote besorgen/ });
     expect(screen.queryByRole('group', { name: 'Status' })).not.toBeInTheDocument();
@@ -771,34 +829,39 @@ describe('new ticket', () => {
     expect(api.writes[0].body).toMatchObject({
       type: 'aufgabe',
       title: 'Sponsoren anfragen',
-      assignee_id: 'manager-1',
+      assignee_ids: ['manager-1'],
       est_pages: null,
       goal: '5 Angebote',
     });
     expect(String(api.writes[0].body.body)).toContain('Ergebnis wird abgelegt in:');
   });
 
-  it('lets only area reviewers and admins leave the ticket unassigned', async () => {
-    installApi([]);
+  it('lets anyone pick several people and labels the Bereichsverantwortliche', async () => {
+    const api = installApi([]);
     const user = userEvent.setup();
-    const { unmount } = renderAt('/tickets/neu', manager);
-    await screen.findByLabelText('Titel');
-    await pickArea(user, 'Redaktion');
+    renderAt('/tickets/neu', manager);
+    await fill(user, 'S', '5 Angebote');
+    const who = screen.getByRole('group', { name: 'Wer' });
+    // You start assigned; everyone who can work on tickets is listed, the Bereich's reviewer with a label.
+    expect(within(who).getByRole('checkbox', { name: /Mona Manager \(ich\)/ })).toBeChecked();
+    const rita = await within(who).findByRole('checkbox', { name: /Rita Review/ });
+    expect(rita.closest('label')).toHaveTextContent('Bereichsverantwortlich');
     expect(
-      within(screen.getByLabelText('Wer'))
-        .getAllByRole('option')
-        .map((o) => o.textContent),
-    ).toEqual(['Ich (Mona Manager)']);
-    unmount();
+      within(who)
+        .getByRole('checkbox', { name: /Ada Admin/ })
+        .closest('label'),
+    ).not.toHaveTextContent('Bereichsverantwortlich');
+    await user.click(rita);
+    await user.click(screen.getByRole('button', { name: 'Ticket anlegen' }));
+    await waitFor(() => expect(api.writes.length).toBeGreaterThan(0));
+    expect(api.writes[0].body.assignee_ids).toEqual(['manager-1', 'reviewer-1']);
+  });
 
-    renderAt('/tickets/neu', reviewer);
-    await screen.findByLabelText('Titel');
-    await pickArea(user, 'Redaktion');
-    const names = within(screen.getByLabelText('Wer'))
-      .getAllByRole('option')
-      .map((o) => o.textContent);
-    expect(names).toContain('Unbesetzt');
-    expect(names).toContain('Ich (Rita Review)');
+  it('starts a reviewer of the Bereich unassigned', async () => {
+    installApi([]);
+    renderAt('/tickets/neu?bereich=area-redaktion', reviewer);
+    const who = await screen.findByRole('group', { name: 'Wer' });
+    expect(within(who).getByRole('checkbox', { name: /Rita Review \(ich\)/ })).not.toBeChecked();
   });
 
   it('shows the Notion checklist text for the Zieldefinition', async () => {
@@ -813,7 +876,7 @@ describe('new ticket', () => {
 
 describe('ticket board permissions and drag', () => {
   const mine = ticket({ id: 't-mine', number: 1, title: 'Meins', status: 'todo' });
-  const foreign = ticket({ id: 't-foreign', number: 2, title: 'Fremdes', status: 'todo', assignee: ref(reviewer) });
+  const foreign = ticket({ id: 't-foreign', number: 2, title: 'Fremdes', status: 'todo', assignees: [ref(reviewer)] });
   const layout = ticket({
     id: 't-layout',
     number: 3,
@@ -845,7 +908,11 @@ describe('ticket board permissions and drag', () => {
   });
 
   it('refuses drops into another Bereich and does not send a status move', async () => {
-    const api = installApi([mine, layout, ticket({ ...layout, id: 't-layout-2', number: 4, assignee: ref(manager) })]);
+    const api = installApi([
+      mine,
+      layout,
+      ticket({ ...layout, id: 't-layout-2', number: 4, assignees: [ref(manager)] }),
+    ]);
     renderAt('/tickets', manager);
     const card = await screen.findByRole('article', { name: '#4 Layout bauen' });
     const own = within(screen.getByRole('region', { name: 'Bereich Layout' }));
@@ -895,7 +962,7 @@ describe('ticket edit versions', () => {
   it('sends the version the edit started from, even when a refetch brought a newer one', async () => {
     const current = ticket({ version: 3 });
     const api = installApi([current]);
-    renderAt('/tickets/ticket-1', manager);
+    renderAt('/tickets/ticket-1', reviewer);
     await userEvent.click(await screen.findByRole('button', { name: /Bearbeiten/ }));
     // Someone else saves meanwhile; the open page refetches.
     current.version = 4;
@@ -910,7 +977,7 @@ describe('ticket edit versions', () => {
 
   it('shows the conflict hint and stays in the form when the save is rejected', async () => {
     const api = installApi([ticket()], { patchError: 409 });
-    renderAt('/tickets/ticket-1', manager);
+    renderAt('/tickets/ticket-1', reviewer);
     await userEvent.click(await screen.findByRole('button', { name: /Bearbeiten/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Speichern' }));
     expect((await screen.findAllByRole('alert'))[0]).toHaveTextContent('inzwischen geändert');

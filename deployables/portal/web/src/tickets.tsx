@@ -80,7 +80,7 @@ const typeIcon: Record<Ticket['type'], LucideIcon> = { aufgabe: ListChecks, arti
 const TEMPLATE = '## Ergebnis wird abgelegt in:\n\n';
 
 const HELP = {
-  wer: 'Offen, wenn niemand direkt anfängt. Wenn du direkt anfängst: dich in Wer eintragen.',
+  wer: 'Offen, wenn niemand direkt anfängt. Wenn du direkt anfängst: dich in Wer eintragen. Mehrere Personen sind möglich; wer reviewt, legt der Bereich fest.',
   bereich: 'Den richtigen Bereich eintragen.',
   seiten: 'Wenn am Ende Seiten in der Zeitung durch die Aufgabe landen: geschätzte Anzahl eintragen.',
   ziel: 'Muss messbar sein (begrenzte Anzahl statt offener Aufgabe, z. B. 5 Angebote besorgen statt mehrere) und innerhalb einer Arbeitsphase (zwei Wochen) erfüllbar sein, sonst in Unteraufgaben teilen.',
@@ -210,8 +210,18 @@ function Hint({ name, children }: { name: string; children: string }) {
 
 const isReviewer = (user: { id: string; role: string }, area?: Area) =>
   user.role === 'admin' || !!area?.reviewers.some((r) => r.id === user.id);
+const reviewerOf = (area: Area | undefined, id: string) => !!area?.reviewers.some((r) => r.id === id);
+const assigned = (ticket: Ticket, id: string) => ticket.assignees.some((a) => a.id === id);
+/** Marks a default reviewer of the ticket's Bereich wherever people are listed. */
+const ReviewerLabel = () => (
+  <span className="flex-none rounded-full bg-pill px-2 py-0.5 text-[11px] font-bold text-ink">
+    Bereichsverantwortlich
+  </span>
+);
+// Like the server: self approval only for the sole assignee.
 const canSelfApprove = (user: { id: string }, ticket: Ticket, area?: Area) =>
-  ticket.assignee?.id === user.id &&
+  ticket.assignees.length === 1 &&
+  assigned(ticket, user.id) &&
   !!area?.reviewers.some((r) => r.id === user.id) &&
   (ticket.size === 'XS' || ticket.size === 'S') &&
   ticket.type === 'aufgabe';
@@ -407,9 +417,11 @@ export function Board() {
     (t) =>
       (!areaId || t.area_id === areaId) &&
       (!type || t.type === type) &&
-      (!mine || t.assignee?.id === user.id) &&
+      (!mine || assigned(t, user.id)) &&
       (!needle ||
-        [String(t.number), t.title, t.area_name, t.assignee?.name ?? ''].some((s) => s.toLowerCase().includes(needle))),
+        [String(t.number), t.title, t.area_name, ...t.assignees.map((a) => a.name)].some((s) =>
+          s.toLowerCase().includes(needle),
+        )),
   );
   // A chosen Bereich always shows, even without tickets, so its "+ Neu" rows stay reachable.
   const groups = (areas.data ?? [])
@@ -428,7 +440,7 @@ export function Board() {
     setDragId('');
     if (dragged && dragged.area_id === areaOfColumn) move(dragged, status);
   }
-  const mayMove = (t: Ticket, area: Area) => isReviewer(user, area) || t.assignee?.id === user.id;
+  const mayMove = (t: Ticket, area: Area) => isReviewer(user, area) || assigned(t, user.id);
 
   const typeFilter = (
     <div className="flex flex-wrap gap-2" role="group" aria-label="Typ">
@@ -682,7 +694,7 @@ function TicketCard({
   ticket: Ticket;
   position: number;
   busy: boolean;
-  /** Only the assignee, a reviewer of the Bereich and admins may change the status (the server answers 403 otherwise). */
+  /** Only assignees, a reviewer of the Bereich and admins may change the status (the server answers 403 otherwise). */
   movable: boolean;
   onDragStart: () => void;
   onDragEnd: () => void;
@@ -716,10 +728,16 @@ function TicketCard({
         </div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
           <AreaTag name={t.area_name} position={position} />
-          {t.assignee && (
+          {t.assignees.length > 0 && (
             <span className="inline-flex min-w-0 items-center gap-1.5 text-sm">
-              <Avatar user={t.assignee} />
-              <span className="truncate">{t.assignee.name}</span>
+              <span className="flex flex-none -space-x-1.5">
+                {t.assignees.map((a) => (
+                  <span key={a.id} className="inline-flex rounded-full ring-2 ring-white">
+                    <Avatar user={a} />
+                  </span>
+                ))}
+              </span>
+              <span className="truncate">{t.assignees.map((a) => a.name).join(', ')}</span>
             </span>
           )}
         </div>
@@ -749,30 +767,59 @@ interface TicketPayload {
   title: string;
   body: string;
   area_id: string;
-  assignee_id: string | null;
+  assignee_ids: string[];
   size: Size;
   goal: string;
   est_pages: number | null;
 }
 
-/** Selectable people. Only area reviewers and admins can assign others; the people list is limited to what GET /areas knows. */
-function assigneeOptions(
-  user: { id: string; name: string; role: string },
-  area: Area | undefined,
-  current: UserRef | null,
-  creating: boolean,
-) {
-  const me = { id: user.id, name: 'Ich (' + user.name + ')' };
-  const none = { id: '', name: 'Unbesetzt' };
-  if (isReviewer(user, area)) {
-    const others = (area?.reviewers ?? []).filter((r) => r.id !== user.id);
-    const list = [none, me, ...others];
-    if (current && !list.some((o) => o.id === current.id)) list.push(current);
-    return list;
-  }
-  if (creating) return [me];
-  // An assignee who is no reviewer may only keep the ticket or release it.
-  return current ? [current, none] : [none];
+/**
+ * Everyone who can work on tickets, as a checkbox list (you first). Reviewers of the Bereich carry a label;
+ * the Bereich alone decides who reviews, so anyone may be picked.
+ */
+function PeoplePicker({
+  id,
+  area,
+  value,
+  current,
+  onChange,
+}: {
+  id?: string;
+  area?: Area;
+  value: string[];
+  /** Shown even before the list loads or when someone is no longer admitted. */
+  current: UserRef[];
+  onChange: (ids: string[]) => void;
+}) {
+  const { user } = useSession();
+  const people = useData<UserRef[]>('/tickets/people');
+  const list: UserRef[] = [{ id: user.id, name: user.name }];
+  for (const p of [...(people.data ?? []), ...current]) if (!list.some((o) => o.id === p.id)) list.push(p);
+  return (
+    <div
+      id={id}
+      role="group"
+      aria-label="Wer"
+      className="grid max-h-60 gap-0.5 overflow-y-auto rounded-ui border border-[#e9e9e7] bg-white p-1.5"
+    >
+      {list.map((p) => (
+        <label
+          key={p.id}
+          className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg px-2 text-sm hover:bg-soft"
+        >
+          <input
+            type="checkbox"
+            className="size-4 flex-none"
+            checked={value.includes(p.id)}
+            onChange={(e) => onChange(e.target.checked ? [...value, p.id] : value.filter((v) => v !== p.id))}
+          />
+          <Avatar user={p} />
+          <span className="min-w-0 flex-1 truncate">{p.id === user.id ? p.name + ' (ich)' : p.name}</span>
+          {reviewerOf(area, p.id) && <ReviewerLabel />}
+        </label>
+      ))}
+    </div>
+  );
 }
 
 /** Label, info button and control. The hint sits beside the label so it does not become the label's control. */
@@ -780,20 +827,27 @@ function Field({
   name,
   help,
   hintName = name,
+  group = false,
   children,
 }: {
   name: string;
   help: string;
   hintName?: string;
+  /** For a control group: the name is a plain caption (a label can only name a single control). */
+  group?: boolean;
   children: (id: string) => ReactNode;
 }) {
   const id = useId();
   return (
     <div>
       <div className="flex items-center gap-1">
-        <label htmlFor={id} className={label}>
-          {name}
-        </label>
+        {group ? (
+          <span className={label}>{name}</span>
+        ) : (
+          <label htmlFor={id} className={label}>
+            {name}
+          </label>
+        )}
         <Hint name={hintName}>{help}</Hint>
       </div>
       {children(id)}
@@ -817,7 +871,7 @@ function TicketForm({
     title: string;
     body: string;
     area_id: string;
-    assignee: UserRef | null;
+    assignees: UserRef[];
     size: Size | '';
     goal: string;
     est_pages: number | null;
@@ -832,21 +886,23 @@ function TicketForm({
   const [title, setTitle] = useState(initial.title);
   const [body, setBody] = useState(initial.body);
   const [areaId, setAreaId] = useState(initial.area_id);
-  const [assigneeChoice, setAssigneeChoice] = useState<string | null>(null);
+  // A new ticket starts with you unless you review the Bereich (then it usually waits for someone to pick it up).
+  const [assignees, setAssignees] = useState<string[]>(() =>
+    mode === 'edit'
+      ? initial.assignees.map((a) => a.id)
+      : isReviewer(
+            user,
+            areas.find((a) => a.id === initial.area_id),
+          )
+        ? []
+        : [user.id],
+  );
   const [size, setSize] = useState<Size | ''>(initial.size);
   const [goal, setGoal] = useState(initial.goal);
   const [pages, setPages] = useState(initial.est_pages == null ? '' : String(initial.est_pages));
   const [problems, setProblems] = useState<string[]>([]);
 
   const area = areas.find((a) => a.id === areaId);
-  const options = assigneeOptions(user, area, initial.assignee, mode === 'new');
-  const defaultAssignee = mode === 'edit' ? (initial.assignee?.id ?? '') : isReviewer(user, area) ? '' : user.id;
-  const assignee =
-    assigneeChoice !== null && options.some((o) => o.id === assigneeChoice)
-      ? assigneeChoice
-      : options.some((o) => o.id === defaultAssignee)
-        ? defaultAssignee
-        : options[0].id;
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -865,7 +921,7 @@ function TicketForm({
       title: title.trim(),
       body: blank(body) ? '' : body,
       area_id: areaId,
-      assignee_id: assignee || null,
+      assignee_ids: assignees,
       size,
       goal: goal.trim(),
       est_pages: type === 'artikel' ? pageCount : null,
@@ -908,15 +964,9 @@ function TicketForm({
         <Field name="Bereich" help={HELP.bereich}>
           {(id) => <AreaPicker areas={areas} value={areaId} onChange={setAreaId} id={id} />}
         </Field>
-        <Field name="Wer" help={HELP.wer} hintName="Status/Wer">
+        <Field name="Wer" help={HELP.wer} hintName="Status/Wer" group>
           {(id) => (
-            <select id={id} className={field} value={assignee} onChange={(e) => setAssigneeChoice(e.target.value)}>
-              {options.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
+            <PeoplePicker id={id} area={area} value={assignees} current={initial.assignees} onChange={setAssignees} />
           )}
         </Field>
         <Field name="Größe" help={HELP.groesse}>
@@ -1018,7 +1068,7 @@ export function NewTicket() {
               title: '',
               body: TEMPLATE,
               area_id: presetArea,
-              assignee: null,
+              assignees: [],
               size: '',
               goal: '',
               est_pages: null,
@@ -1145,9 +1195,17 @@ function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) 
   const { ticket, events } = detail;
   const area = areas.find((a) => a.id === ticket.area_id);
   const admin = user.role === 'admin';
-  const isAssignee = ticket.assignee?.id === user.id;
+  const isAssignee = assigned(ticket, user.id);
   const reviewerHere = isReviewer(user, area);
-  const mayEdit = reviewerHere || isAssignee;
+  const open = ticket.status === 'todo' || ticket.status === 'in_progress';
+  // Same rules as the server: reviewers and admins edit everything; assignees move the status and, while the
+  // ticket is open, change who works on it.
+  const mayEdit = reviewerHere;
+  const mayMove = reviewerHere || isAssignee;
+  const mayEditWho = reviewerHere || (isAssignee && open);
+  const [whoDraft, setWhoDraft] = useState<string[] | null>(null);
+  // Like baseVersion: a colleague joining while the picker is open must turn into a 409, not be dropped silently.
+  const [whoVersion, setWhoVersion] = useState(0);
   const [editing, setEditing] = useState(false);
   // The version the edit started from: a refetch while editing must not turn into a silent overwrite.
   const [baseVersion, setBaseVersion] = useState(0);
@@ -1160,7 +1218,18 @@ function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) 
   const post = (path: string, body?: unknown, message = '') => action.run(() => api(path, json('POST', body)), message);
   const move = (status: Status) =>
     status !== ticket.status && void post('/tickets/' + ticket.id + '/status', { version: ticket.version, status });
-  const canClaim = !ticket.assignee && (ticket.status === 'todo' || ticket.status === 'in_progress');
+  const canClaim = !isAssignee && open;
+  const saveWho = async (ids: string[]) => {
+    const edit = {
+      title: ticket.title,
+      body: ticket.body,
+      area_id: ticket.area_id,
+      assignee_ids: ids,
+      size: ticket.size,
+    };
+    const payload = { ...edit, goal: ticket.goal, est_pages: ticket.est_pages, version: whoVersion };
+    if (await action.run(() => api('/tickets/' + ticket.id, json('PATCH', payload)), 'Gespeichert.')) setWhoDraft(null);
+  };
   const canHandOver = isAssignee && ticket.status === 'in_progress';
 
   return (
@@ -1176,7 +1245,7 @@ function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) 
             {ticket.title} <span className="font-semibold text-muted">#{ticket.number}</span>
           </h1>
           <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
-            {!mayEdit && <StatusPill status={ticket.status} />}
+            {!mayMove && <StatusPill status={ticket.status} />}
             <ApprovalBadge ticket={ticket} />
             {typeLabel[ticket.type]} von {ticket.created_by.name}, angelegt am {date(ticket.created_at)}
           </p>
@@ -1194,9 +1263,9 @@ function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) 
           </button>
         )}
       </header>
-      {(mayEdit || canClaim) && (
+      {(mayMove || canClaim) && (
         <div className="mb-8 grid gap-3">
-          {mayEdit && <StatusStepper status={ticket.status} busy={action.busy} onMove={move} />}
+          {mayMove && <StatusStepper status={ticket.status} busy={action.busy} onMove={move} />}
           {(canClaim || canHandOver) && (
             <div className="flex flex-wrap gap-3">
               {canClaim && (
@@ -1205,9 +1274,9 @@ function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) 
                   className={btn.primary + ' min-h-11'}
                   title={HELP.uebernehmen}
                   disabled={action.busy}
-                  onClick={() => void post('/tickets/' + ticket.id + '/claim', undefined, 'Ticket übernommen.')}
+                  onClick={() => void post('/tickets/' + ticket.id + '/claim', undefined, 'Du bist eingetragen.')}
                 >
-                  <Hand aria-hidden="true" className="size-4" /> Übernehmen
+                  <Hand aria-hidden="true" className="size-4" /> {ticket.assignees.length ? 'Mitmachen' : 'Übernehmen'}
                 </button>
               )}
               {canHandOver && (
@@ -1236,7 +1305,7 @@ function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) 
                   title: ticket.title,
                   body: ticket.body,
                   area_id: ticket.area_id,
-                  assignee: ticket.assignee,
+                  assignees: ticket.assignees,
                   size: ticket.size,
                   goal: ticket.goal,
                   est_pages: ticket.est_pages,
@@ -1357,13 +1426,47 @@ function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) 
               {area ? <AreaTag name={area.name} position={area.position} /> : ticket.area_name}
             </Side>
             <Side title="Wer">
-              {ticket.assignee ? (
-                <span className="flex items-center gap-2">
-                  <Avatar user={ticket.assignee} />
-                  {ticket.assignee.name}
-                </span>
+              {whoDraft ? (
+                <div className="grid gap-2">
+                  <PeoplePicker area={area} value={whoDraft} current={ticket.assignees} onChange={setWhoDraft} />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className={btn.primary}
+                      disabled={action.busy}
+                      onClick={() => void saveWho(whoDraft)}
+                    >
+                      Speichern
+                    </button>
+                    <button type="button" className={btn.text} onClick={() => setWhoDraft(null)}>
+                      Abbrechen
+                    </button>
+                  </div>
+                </div>
               ) : (
-                'Unbesetzt'
+                <div className="grid gap-1.5">
+                  {ticket.assignees.length
+                    ? ticket.assignees.map((a) => (
+                        <span key={a.id} className="flex items-center gap-2">
+                          <Avatar user={a} />
+                          <span className="min-w-0 truncate">{a.name}</span>
+                          {reviewerOf(area, a.id) && <ReviewerLabel />}
+                        </span>
+                      ))
+                    : 'Unbesetzt'}
+                  {mayEditWho && !editing && (
+                    <button
+                      type="button"
+                      className={btn.text + ' justify-self-start'}
+                      onClick={() => {
+                        setWhoVersion(ticket.version);
+                        setWhoDraft(ticket.assignees.map((a) => a.id));
+                      }}
+                    >
+                      <Pencil aria-hidden="true" className="size-4" /> Wer ändern
+                    </button>
+                  )}
+                </div>
               )}
             </Side>
             <Side title="Größe">{ticket.size}</Side>
@@ -1490,7 +1593,7 @@ function ReviewPanel({
 }) {
   const { user } = useSession();
   const [confirmed, setConfirmed] = useState(false);
-  const isAssignee = ticket.assignee?.id === user.id;
+  const isAssignee = assigned(ticket, user.id);
   const selfApproval = canSelfApprove(user, ticket, area);
   const reviewing = ticket.status === 'review' || ticket.status === 'done';
   const mayVote = reviewing && (!isAssignee || selfApproval);

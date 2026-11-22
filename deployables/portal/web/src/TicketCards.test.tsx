@@ -30,7 +30,7 @@ function ticket(overrides: Partial<Ticket> & Pick<Ticket, 'id'>): Ticket {
     body: '',
     area_id: areaA.id,
     area_name: areaA.name,
-    assignee: null,
+    assignees: [],
     created_by: { id: 'creator', name: 'Creator' },
     size: 'M',
     goal: 'Ziel',
@@ -84,10 +84,10 @@ describe('MyTasks', () => {
   it('lists my unfinished tickets as review, in progress, todo, then done awaiting approval', async () => {
     renderTasks(
       [
-        ticket({ id: 'p-done', status: 'done', assignee: mona }),
-        ticket({ id: 'p-todo', status: 'todo', assignee: mona }),
-        ticket({ id: 'p-review', status: 'review', assignee: mona }),
-        ticket({ id: 'p-work', status: 'in_progress', assignee: mona }),
+        ticket({ id: 'p-done', status: 'done', assignees: [mona] }),
+        ticket({ id: 'p-todo', status: 'todo', assignees: [mona] }),
+        ticket({ id: 'p-review', status: 'review', assignees: [mona] }),
+        ticket({ id: 'p-work', status: 'in_progress', assignees: [mona] }),
       ],
       [areaB],
     );
@@ -99,7 +99,7 @@ describe('MyTasks', () => {
   });
 
   it('links to the ticket and shows its area and status', async () => {
-    renderTasks([ticket({ id: 't-1', title: 'Mein Ticket', status: 'in_progress', assignee: mona })], [areaA]);
+    renderTasks([ticket({ id: 't-1', title: 'Mein Ticket', status: 'in_progress', assignees: [mona] })], [areaA]);
     const link = await screen.findByRole('link', { name: /Mein Ticket/ });
     expect(link).toHaveAttribute('href', '/tickets/t-1');
     expect(link).toHaveTextContent('Bereich area-a');
@@ -109,9 +109,9 @@ describe('MyTasks', () => {
   it('leaves out finished tickets and tickets of other people', async () => {
     renderTasks(
       [
-        ticket({ id: 'open', title: 'Offen eins', assignee: mona }),
-        ticket({ id: 'fin', title: 'Fertig eins', assignee: mona, status: 'done', approved: true }),
-        ticket({ id: 'oth', title: 'Fremd eins', assignee: other }),
+        ticket({ id: 'open', title: 'Offen eins', assignees: [mona] }),
+        ticket({ id: 'fin', title: 'Fertig eins', assignees: [mona], status: 'done', approved: true }),
+        ticket({ id: 'oth', title: 'Fremd eins', assignees: [other] }),
       ],
       [areaB],
     );
@@ -122,9 +122,9 @@ describe('MyTasks', () => {
 
   it('shows what waits for approval only to reviewers, never their own tickets', async () => {
     const tickets = [
-      ticket({ id: 'w1', title: 'In meinem Bereich', status: 'review', assignee: other }),
-      ticket({ id: 'w2', title: 'Im anderen Bereich', status: 'review', assignee: other, area_id: areaB.id }),
-      ticket({ id: 'w3', title: 'Mein eigenes', status: 'review', assignee: mona }),
+      ticket({ id: 'w1', title: 'In meinem Bereich', status: 'review', assignees: [other] }),
+      ticket({ id: 'w2', title: 'Im anderen Bereich', status: 'review', assignees: [other], area_id: areaB.id }),
+      ticket({ id: 'w3', title: 'Mein eigenes', status: 'review', assignees: [mona] }),
     ];
     renderTasks(tickets, [areaA, areaB]);
     expect(await screen.findByRole('heading', { name: 'Wartet auf deine Freigabe' })).toBeInTheDocument();
@@ -135,7 +135,7 @@ describe('MyTasks', () => {
   });
 
   it('hides the waiting list for a viewer who is no listed reviewer of any area, admins included', async () => {
-    const tickets = [ticket({ id: 'w', title: 'Wartet', status: 'review', assignee: other, area_id: areaB.id })];
+    const tickets = [ticket({ id: 'w', title: 'Wartet', status: 'review', assignees: [other], area_id: areaB.id })];
     const { unmount } = renderTasks(tickets, [areaB]);
     await screen.findByText('Dir ist gerade nichts zugewiesen.');
     expect(screen.queryByRole('heading', { name: 'Wartet auf deine Freigabe' })).not.toBeInTheDocument();
@@ -147,8 +147,8 @@ describe('MyTasks', () => {
 
   it('lists an admin only the tickets of areas they review', async () => {
     const tickets = [
-      ticket({ id: 'a', title: 'Eigener Bereich', status: 'review', assignee: other, area_id: areaA.id }),
-      ticket({ id: 'b', title: 'Fremder Bereich', status: 'review', assignee: other, area_id: areaB.id }),
+      ticket({ id: 'a', title: 'Eigener Bereich', status: 'review', assignees: [other], area_id: areaA.id }),
+      ticket({ id: 'b', title: 'Fremder Bereich', status: 'review', assignees: [other], area_id: areaB.id }),
     ];
     renderTasks(tickets, [areaA, areaB], { ...viewer, role: 'admin' });
     const heading = await screen.findByRole('heading', { name: 'Wartet auf deine Freigabe' });
@@ -165,8 +165,8 @@ describe('MyTasks', () => {
       verdict: 'approve',
     });
     const tickets = [
-      ticket({ id: 'v1', title: 'Schon bewertet', status: 'review', assignee: other, reviews: [vote(viewerId)] }),
-      ticket({ id: 'v2', title: 'Noch offen', status: 'review', assignee: other, reviews: [vote('someone-else')] }),
+      ticket({ id: 'v1', title: 'Schon bewertet', status: 'review', assignees: [other], reviews: [vote(viewerId)] }),
+      ticket({ id: 'v2', title: 'Noch offen', status: 'review', assignees: [other], reviews: [vote('someone-else')] }),
     ];
     renderTasks(tickets, [areaA]);
     const heading = await screen.findByRole('heading', { name: 'Wartet auf deine Freigabe' });
@@ -175,7 +175,7 @@ describe('MyTasks', () => {
   });
 
   it('shows six rows and a link for the rest', async () => {
-    const many = Array.from({ length: 8 }, (_, i) => ticket({ id: `m${i}`, title: `Aufgabe ${i}`, assignee: mona }));
+    const many = Array.from({ length: 8 }, (_, i) => ticket({ id: `m${i}`, title: `Aufgabe ${i}`, assignees: [mona] }));
     renderTasks(many, [areaB]);
     const more = await screen.findByRole('link', { name: 'und 2 weitere' });
     expect(more).toHaveAttribute('href', '/tickets');

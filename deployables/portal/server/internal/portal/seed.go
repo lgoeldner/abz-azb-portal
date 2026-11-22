@@ -203,9 +203,9 @@ func seedTickets(ctx context.Context, tx pgx.Tx) error {
 	}{5: {ManagerID, true}, 6: {AdminID, false}}
 	for i, f := range fixtures {
 		id := ticketID(i + 1)
-		tag, e := tx.Exec(ctx, `INSERT INTO tickets(id,type,title,body,area_id,assignee_id,created_by,size,goal,est_pages,status,created_at,updated_at,status_changed_at)
- SELECT $1::uuid,$2::text,$3::text,$4::text,$5::uuid,$6::uuid,$7::uuid,$8::text,$9::text,$10::int,$11::text,now()-$12::int*interval '1 day',now()-$13::int*interval '1 day',now()-$13::int*interval '1 day'
- WHERE NOT EXISTS(SELECT 1 FROM tickets WHERE id=$1::uuid)`, id, f.Type, f.Title, f.Body, areaID(f.Area), f.Assignee, f.Creator, f.Size, f.Goal, f.Pages, f.Status, f.CreatedDays, f.ChangedDays)
+		tag, e := tx.Exec(ctx, `INSERT INTO tickets(id,type,title,body,area_id,created_by,size,goal,est_pages,status,created_at,updated_at,status_changed_at)
+ SELECT $1::uuid,$2::text,$3::text,$4::text,$5::uuid,$6::uuid,$7::text,$8::text,$9::int,$10::text,now()-$11::int*interval '1 day',now()-$12::int*interval '1 day',now()-$12::int*interval '1 day'
+ WHERE NOT EXISTS(SELECT 1 FROM tickets WHERE id=$1::uuid)`, id, f.Type, f.Title, f.Body, areaID(f.Area), f.Creator, f.Size, f.Goal, f.Pages, f.Status, f.CreatedDays, f.ChangedDays)
 		if e != nil {
 			return e
 		}
@@ -217,6 +217,9 @@ func seedTickets(ctx context.Context, tx pgx.Tx) error {
 			return e
 		}
 		if f.Assignee != nil {
+			if _, e = tx.Exec(ctx, "INSERT INTO ticket_assignees(ticket_id,user_id) VALUES($1,$2)", id, *f.Assignee); e != nil {
+				return e
+			}
 			name := map[string]string{AdminID: "Alex (Administration)", ManagerID: "Sam (Redaktion)"}[*f.Assignee]
 			if e = event(f.Creator, "assign", "", "niemand -> "+name, f.CreatedDays, 1); e != nil {
 				return e

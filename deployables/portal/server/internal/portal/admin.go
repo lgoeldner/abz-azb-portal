@@ -72,7 +72,9 @@ func (a *App) deleteUser(w http.ResponseWriter, r *http.Request) error {
  OR EXISTS(SELECT 1 FROM ballot_audit WHERE user_id=$1)
  OR EXISTS(SELECT 1 FROM audit_events WHERE actor_id=$1)
  OR EXISTS(SELECT 1 FROM poll_options WHERE user_id=$1)
- OR EXISTS(SELECT 1 FROM tickets WHERE created_by=$1 OR assignee_id=$1)
+ OR EXISTS(SELECT 1 FROM tickets WHERE created_by=$1)
+ OR EXISTS(SELECT 1 FROM ticket_assignees WHERE user_id=$1)
+ OR EXISTS(SELECT 1 FROM ticket_former_assignees WHERE user_id=$1)
  OR EXISTS(SELECT 1 FROM documents WHERE created_by=$1 OR updated_by=$1)
  OR EXISTS(SELECT 1 FROM ticket_events WHERE actor_id=$1)
  OR EXISTS(SELECT 1 FROM ticket_reviews WHERE user_id=$1)`, id).Scan(&used); e != nil {

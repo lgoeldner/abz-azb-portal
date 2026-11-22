@@ -29,14 +29,14 @@ export function summarizeTickets(tickets: Ticket[], areas: Area[], viewerId: str
   // A vote only binds in an area the viewer is a listed reviewer of, admins included.
   const canReview = reviewAreaIds.size > 0;
   const mine = tickets
-    .filter((ticket) => ticket.assignee?.id === viewerId && !isFinishedTicket(ticket))
+    .filter((ticket) => ticket.assignees.some((a) => a.id === viewerId) && !isFinishedTicket(ticket))
     .sort((a, b) => taskRank(a) - taskRank(b) || byUpdatedDesc(a, b));
   const waiting = canReview
     ? tickets
         .filter(
           (ticket) =>
             (ticket.status === 'review' || (ticket.status === 'done' && !ticket.approved)) &&
-            ticket.assignee?.id !== viewerId &&
+            !ticket.assignees.some((a) => a.id === viewerId) &&
             reviewAreaIds.has(ticket.area_id) &&
             !ticket.reviews.some((review) => review.user.id === viewerId),
         )

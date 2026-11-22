@@ -1686,15 +1686,12 @@
           "area_name": {
             "type": "string"
           },
-          "assignee": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/UserRef"
-              },
-              {
-                "type": "null"
-              }
-            ]
+          "assignees": {
+            "description": "Everyone working on the ticket, sorted by name; empty when nobody is.",
+            "items": {
+              "$ref": "#/components/schemas/UserRef"
+            },
+            "type": "array"
           },
           "body": {
             "type": "string"
@@ -1784,7 +1781,7 @@
           "body",
           "area_id",
           "area_name",
-          "assignee",
+          "assignees",
           "created_by",
           "size",
           "goal",
@@ -1827,12 +1824,12 @@
             "format": "uuid",
             "type": "string"
           },
-          "assignee_id": {
-            "format": "uuid",
-            "type": [
-              "null",
-              "string"
-            ]
+          "assignee_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
           },
           "body": {
             "type": "string"
@@ -1867,7 +1864,7 @@
           "title",
           "body",
           "area_id",
-          "assignee_id",
+          "assignee_ids",
           "size",
           "goal",
           "est_pages",
@@ -1923,12 +1920,12 @@
             "format": "uuid",
             "type": "string"
           },
-          "assignee_id": {
-            "format": "uuid",
-            "type": [
-              "null",
-              "string"
-            ]
+          "assignee_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
           },
           "body": {
             "type": "string"
@@ -1968,7 +1965,7 @@
           "title",
           "body",
           "area_id",
-          "assignee_id",
+          "assignee_ids",
           "size",
           "goal",
           "est_pages"
@@ -4444,7 +4441,38 @@
             "description": "Error"
           }
         },
-        "summary": "Create a ticket; area reviewers/admins may assign anyone, other managers only themselves"
+        "summary": "Create a ticket; any editor may assign any admitted editors or nobody"
+      }
+    },
+    "/api/v1/tickets/people": {
+      "get": {
+        "operationId": "getTicketsPeople",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UserRef"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Admitted managers and admins who can be assigned to tickets"
       }
     },
     "/api/v1/tickets/{id}": {
@@ -4536,7 +4564,7 @@
             "description": "Error"
           }
         },
-        "summary": "Edit ticket fields (assignee, area reviewers, admin); changing area, assignee, size or est_pages starts a new review round"
+        "summary": "Edit ticket fields (area reviewers, admin; assignees only the assignee set while todo/in_progress); changing area, assignees, size or est_pages starts a new review round"
       }
     },
     "/api/v1/tickets/{id}/status": {
@@ -4638,7 +4666,7 @@
             "description": "Error"
           }
         },
-        "summary": "Claim an unassigned ticket atomically and set it in_progress"
+        "summary": "Join the assignees of a todo/in_progress ticket and set it in_progress"
       }
     },
     "/api/v1/tickets/{id}/comments": {

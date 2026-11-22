@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -93,15 +94,19 @@ func (f *ticketFixture) newArea(reviewers ...string) string {
 	return decodeInto[Area](f.t, res, 201).ID
 }
 
-func asg(id string) any {
-	if id == "" {
-		return nil
+// who builds an assignee_ids list; empty strings are dropped so who("") means nobody.
+func who(ids ...string) []string {
+	out := []string{}
+	for _, id := range ids {
+		if id != "" {
+			out = append(out, id)
+		}
 	}
-	return id
+	return out
 }
 
 func (f *ticketFixture) body(area, assignee string, over map[string]any) map[string]any {
-	b := map[string]any{"type": "aufgabe", "title": "Titel", "body": "", "area_id": area, "assignee_id": asg(assignee), "size": "M", "goal": "Ziel erreicht", "est_pages": nil}
+	b := map[string]any{"type": "aufgabe", "title": "Titel", "body": "", "area_id": area, "assignee_ids": who(assignee), "size": "M", "goal": "Ziel erreicht", "est_pages": nil}
 	for k, v := range over {
 		b[k] = v
 	}
@@ -127,11 +132,11 @@ func (f *ticketFixture) setStatus(actor string, tk Ticket, status string) Ticket
 }
 
 func editPayload(tk Ticket, over map[string]any) map[string]any {
-	var assignee any
-	if tk.Assignee != nil {
-		assignee = tk.Assignee.ID
+	assignees := who()
+	for _, a := range tk.Assignees {
+		assignees = append(assignees, a.ID)
 	}
-	b := map[string]any{"title": tk.Title, "body": tk.Body, "area_id": tk.AreaID, "assignee_id": assignee, "size": tk.Size, "goal": tk.Goal, "est_pages": tk.EstPages, "version": tk.Version}
+	b := map[string]any{"title": tk.Title, "body": tk.Body, "area_id": tk.AreaID, "assignee_ids": assignees, "size": tk.Size, "goal": tk.Goal, "est_pages": tk.EstPages, "version": tk.Version}
 	for k, v := range over {
 		b[k] = v
 	}
@@ -288,6 +293,79 @@ func TestTicketBindingRules(t *testing.T) {
 	f.voted(f.r2, done.ID, "approve", false)
 }
 
+// Invariant: changing who works on a ticket never makes a vote binding that would not bind otherwise.
+func TestTicketCoAssigneesCannotSwitchBinding(t *testing.T) {
+	f := newTicketFixture(t)
+	small := map[string]any{"size": "XS"}
+
+	// Rule 2 needs every assignee to be a reviewer: co-assigning a reviewer to a plain manager keeps others advisory.
+	tk := f.inReview(f.area, "", map[string]any{"assignee_ids": who(f.m, f.r1)})
+	tk = f.voted(f.m2, tk.ID, "approve", false)
+	if rv := findReview(tk, f.m2); rv == nil || rv.Binding || tk.Approved {
+		t.Fatalf("mixed assignees made a plain vote binding: %+v approved=%v", tk.Reviews, tk.Approved)
+	}
+	// The remaining reviewer who is not assigned still binds (rule 1).
+	if tk = f.voted(f.r2, tk.ID, "approve", false); !tk.Approved {
+		t.Fatalf("free reviewer did not bind: %+v", tk.Reviews)
+	}
+	// All assignees reviewers: nobody independent is left in the Bereich, so others bind (rule 2).
+	tk = f.inReview(f.area, "", map[string]any{"assignee_ids": who(f.r1, f.r2)})
+	if tk = f.voted(f.m, tk.ID, "approve", false); !tk.Approved {
+		t.Fatalf("rule 2 with two reviewer assignees: %+v", tk.Reviews)
+	}
+
+	// Rule 3 only for a sole assignee: a reviewer sharing the work cannot approve it alone.
+	tk = f.inReview(f.area, "", map[string]any{"assignee_ids": who(f.r1, f.m), "size": "XS"})
+	f.expect(f.vote(f.r1, tk.ID, "approve", true), http.StatusForbidden, "self approval with a co-assignee")
+	tk = f.inReview(f.area, "", map[string]any{"assignee_ids": who(f.r1, f.r2), "size": "XS"})
+	f.expect(f.vote(f.r1, tk.ID, "approve", true), http.StatusForbidden, "self approval by one of two reviewer assignees")
+	tk = f.inReview(f.area, f.r1, small)
+	if tk = f.voted(f.r1, tk.ID, "approve", true); !tk.Approved {
+		t.Fatalf("sole reviewer self approval: %+v", tk.Reviews)
+	}
+
+	// Leaving an open ticket to a reviewer does not make the leaver's vote binding (rule 2 skips former assignees),
+	// while a colleague who never worked on it still binds.
+	tk = f.create(f.m, f.body(f.area, "", map[string]any{"assignee_ids": who(f.m, f.r1)}))
+	tk = f.edit(f.m, tk, map[string]any{"assignee_ids": who(f.r1)})
+	tk = f.setStatus(f.r1, tk, "review")
+	tk = f.voted(f.m, tk.ID, "approve", false)
+	if rv := findReview(tk, f.m); rv == nil || rv.Binding || tk.Approved {
+		t.Fatalf("former assignee bound under rule 2: %+v approved=%v", tk.Reviews, tk.Approved)
+	}
+	if tk = f.voted(f.m2, tk.ID, "approve", false); !tk.Approved {
+		t.Fatalf("uninvolved colleague did not bind under rule 2: %+v", tk.Reviews)
+	}
+
+	// A plain assignee cannot hand an in-review ticket to a reviewer to make their own vote binding (rule 2).
+	tk = f.inReview(f.area, f.m, nil)
+	f.expect(f.editRaw(f.m, tk, map[string]any{"assignee_ids": who(f.r1)}), http.StatusForbidden, "hand-over in review")
+	if got := f.get(tk.ID); len(got.Assignees) != 1 || got.Assignees[0].ID != f.m {
+		t.Fatalf("rejected hand-over changed the ticket: %+v", got)
+	}
+	f.expect(f.vote(f.m, tk.ID, "approve", false), http.StatusForbidden, "plain assignee votes")
+}
+
+func TestTicketPeopleListsOnlyEditors(t *testing.T) {
+	f := newTicketFixture(t)
+	people := decodeInto[[]UserRef](t, f.do(f.m, http.MethodGet, "/api/v1/tickets/people", nil), 200)
+	ids := map[string]bool{}
+	for _, p := range people {
+		ids[p.ID] = true
+	}
+	for _, id := range []string{f.r1, f.m, AdminID, ManagerID} {
+		if !ids[id] {
+			t.Errorf("editor %s missing from people", id)
+		}
+	}
+	for _, id := range []string{MiaID, f.pending} {
+		if ids[id] {
+			t.Errorf("non-editor %s listed in people", id)
+		}
+	}
+	f.expect(f.do(MiaID, http.MethodGet, "/api/v1/tickets/people", nil), http.StatusForbidden, "student lists people")
+}
+
 func TestTicketRoundsInvalidateEarlierVotes(t *testing.T) {
 	f := newTicketFixture(t)
 	otherArea := f.newArea(f.r1)
@@ -303,7 +381,7 @@ func TestTicketRoundsInvalidateEarlierVotes(t *testing.T) {
 		"status back to in_progress": func(tk Ticket) Ticket { return f.setStatus(AdminID, tk, "in_progress") },
 		"status back to todo":        func(tk Ticket) Ticket { return f.setStatus(AdminID, tk, "todo") },
 		"area change":                func(tk Ticket) Ticket { return f.edit(AdminID, tk, map[string]any{"area_id": otherArea}) },
-		"assignee change":            func(tk Ticket) Ticket { return f.edit(AdminID, tk, map[string]any{"assignee_id": f.m2}) },
+		"assignee change":            func(tk Ticket) Ticket { return f.edit(AdminID, tk, map[string]any{"assignee_ids": who(f.m2)}) },
 		"size change":                func(tk Ticket) Ticket { return f.edit(AdminID, tk, map[string]any{"size": "L"}) },
 		"est_pages change":           func(tk Ticket) Ticket { return f.edit(AdminID, tk, map[string]any{"est_pages": 3}) },
 	} {
@@ -352,7 +430,7 @@ func TestTicketRoundsInvalidateEarlierVotes(t *testing.T) {
 	// alone (size M, rule 3 not met); another manager's vote is binding through rule 2.
 	tk = f.inReview(f.area, f.m, nil)
 	tk = f.voted(f.r1, tk.ID, "approve", false)
-	tk = f.edit(AdminID, tk, map[string]any{"assignee_id": f.r1})
+	tk = f.edit(AdminID, tk, map[string]any{"assignee_ids": who(f.r1)})
 	if tk.Approved || tk.Round != 2 {
 		t.Fatalf("reassign to approver: approved=%v round=%d", tk.Approved, tk.Round)
 	}
@@ -403,22 +481,24 @@ func TestTicketApprovalRechecksVoterAtReadTime(t *testing.T) {
 func TestTicketPermissions(t *testing.T) {
 	f := newTicketFixture(t)
 
-	// Create: reviewers and admins assign anyone or nobody; other managers only themselves.
-	f.expect(f.do(f.m, http.MethodPost, "/api/v1/tickets", f.body(f.area, f.r1, nil)), http.StatusForbidden, "plain manager assigns reviewer")
-	f.expect(f.do(f.m, http.MethodPost, "/api/v1/tickets", f.body(f.area, f.m2, nil)), http.StatusForbidden, "plain manager assigns another manager")
+	// Create: every editor may assign any admitted editors, several at once, or nobody.
+	if got := f.create(f.m, f.body(f.area, "", map[string]any{"assignee_ids": who(f.r1, f.m2, f.r1)})); len(got.Assignees) != 2 || got.Status != "in_progress" {
+		t.Fatalf("plain manager assigns two people (with a duplicate): %+v", got)
+	}
+	if got := f.create(f.m, f.body(f.area, "", nil)); got.Status != "todo" || len(got.Assignees) > 0 {
+		t.Fatalf("plain manager creates unassigned: %+v", got)
+	}
 	own := f.create(f.m, f.body(f.area, f.m, nil))
-	if own.Status != "in_progress" || own.Assignee == nil || own.Assignee.ID != f.m || own.CreatedBy.ID != f.m || own.Round != 1 || own.Version != 1 {
+	if own.Status != "in_progress" || len(own.Assignees) == 0 || own.Assignees[0].ID != f.m || own.CreatedBy.ID != f.m || own.Round != 1 || own.Version != 1 {
 		t.Fatalf("self-assigned ticket: %+v", own)
 	}
-	// Managers who are neither reviewer nor admin must assign themselves: unassigned is refused too.
-	f.expect(f.do(f.m, http.MethodPost, "/api/v1/tickets", f.body(f.area, "", nil)), http.StatusForbidden, "plain manager creates unassigned")
-	if got := f.create(f.r1, f.body(f.area, "", nil)); got.Status != "todo" || got.Assignee != nil {
+	if got := f.create(f.r1, f.body(f.area, "", nil)); got.Status != "todo" || len(got.Assignees) > 0 {
 		t.Fatalf("reviewer creating unassigned: %+v", got)
 	}
-	if got := f.create(AdminID, f.body(f.area, "", nil)); got.Status != "todo" || got.Assignee != nil {
+	if got := f.create(AdminID, f.body(f.area, "", nil)); got.Status != "todo" || len(got.Assignees) > 0 {
 		t.Fatalf("admin creating unassigned: %+v", got)
 	}
-	if got := f.create(f.r1, f.body(f.area, f.m2, nil)); got.Assignee == nil || got.Assignee.ID != f.m2 || got.Status != "in_progress" {
+	if got := f.create(f.r1, f.body(f.area, f.m2, nil)); len(got.Assignees) == 0 || got.Assignees[0].ID != f.m2 || got.Status != "in_progress" {
 		t.Fatalf("reviewer assigning another manager: %+v", got)
 	}
 	if got := f.create(AdminID, f.body(f.area, f.m2, nil)); got.Status != "in_progress" {
@@ -434,7 +514,7 @@ func TestTicketPermissions(t *testing.T) {
 	// Plain managers who are not the assignee can neither edit, move, assign nor review-assign.
 	other := f.create(AdminID, f.body(f.area, f.m2, nil))
 	f.expect(f.editRaw(f.m, other, map[string]any{"title": "Fremd"}), http.StatusForbidden, "non-reviewer edit")
-	f.expect(f.editRaw(f.m, other, map[string]any{"assignee_id": f.m}), http.StatusForbidden, "non-reviewer takes over via edit")
+	f.expect(f.editRaw(f.m, other, map[string]any{"assignee_ids": who(f.m)}), http.StatusForbidden, "non-reviewer takes over via edit")
 	f.expect(f.do(f.m, http.MethodPost, "/api/v1/tickets/"+other.ID+"/status", map[string]any{"version": other.Version, "status": "review"}), http.StatusForbidden, "non-reviewer status")
 	// Area reviewers and admins may edit and move any ticket of the area.
 	if got := f.edit(f.r1, other, map[string]any{"title": "Von Reviewer"}); got.Title != "Von Reviewer" {
@@ -449,11 +529,10 @@ func TestTicketPermissions(t *testing.T) {
 	foreign := f.create(AdminID, f.body(otherArea, f.m2, nil))
 	f.expect(f.editRaw(f.r1, foreign, map[string]any{"title": "Fremder Bereich"}), http.StatusForbidden, "reviewer of another area")
 
-	// The assignee may only release the ticket.
+	// An assignee may change only who works on the ticket (and only while it is open).
 	assigned := f.create(f.m, f.body(f.area, f.m, nil))
 	f.expect(f.editRaw(f.m, assigned, map[string]any{"title": "Anders"}), http.StatusForbidden, "assignee edits title")
-	f.expect(f.editRaw(f.m, assigned, map[string]any{"assignee_id": f.r1}), http.StatusForbidden, "assignee reassigns")
-	f.expect(f.editRaw(f.m, assigned, map[string]any{"assignee_id": nil, "size": "L"}), http.StatusForbidden, "assignee releases and edits")
+	f.expect(f.editRaw(f.m, assigned, map[string]any{"assignee_ids": who(), "size": "L"}), http.StatusForbidden, "assignee releases and edits")
 	f.expect(f.editRaw(f.m, assigned, map[string]any{"area_id": otherArea}), http.StatusForbidden, "assignee moves area")
 	if got := f.get(assigned.ID); got.Version != assigned.Version || got.Title != assigned.Title {
 		t.Fatalf("rejected edits changed the ticket: %+v", got)
@@ -461,14 +540,26 @@ func TestTicketPermissions(t *testing.T) {
 	if got := f.setStatus(f.m, assigned, "review"); got.Status != "review" {
 		t.Fatalf("assignee moves own ticket: %+v", got)
 	}
-	assigned = f.setStatus(f.m, f.get(assigned.ID), "in_progress")
-	released := f.edit(f.m, assigned, map[string]any{"assignee_id": nil})
-	if released.Assignee != nil || released.Status != "todo" || released.Version != assigned.Version+1 || released.Round != assigned.Round+1 {
+	inReview := f.get(assigned.ID)
+	f.expect(f.editRaw(f.m, inReview, map[string]any{"assignee_ids": who(f.m, f.m2)}), http.StatusForbidden, "assignee adds a colleague in review")
+	f.expect(f.editRaw(f.m, inReview, map[string]any{"assignee_ids": who()}), http.StatusForbidden, "assignee leaves in review")
+	assigned = f.setStatus(f.m, inReview, "in_progress")
+	shared := f.edit(f.m, assigned, map[string]any{"assignee_ids": who(f.m, f.m2)})
+	if len(shared.Assignees) != 2 || shared.Round != assigned.Round+1 {
+		t.Fatalf("assignee adds a colleague: %+v", shared)
+	}
+	// The added colleague is an assignee too and may move the ticket.
+	if got := f.setStatus(f.m2, shared, "review"); got.Status != "review" {
+		t.Fatalf("co-assignee moves the ticket: %+v", got)
+	}
+	assigned = f.setStatus(f.m2, f.get(shared.ID), "in_progress")
+	released := f.edit(f.m, assigned, map[string]any{"assignee_ids": who()})
+	if len(released.Assignees) > 0 || released.Status != "todo" || released.Version != assigned.Version+1 || released.Round != assigned.Round+1 {
 		t.Fatalf("release: %+v", released)
 	}
 	f.expect(f.editRaw(f.m, released, map[string]any{"title": "Nach Abgabe"}), http.StatusForbidden, "former assignee edits")
 	// Released tickets can be claimed again.
-	if claimed := decodeInto[Ticket](t, f.do(f.m2, http.MethodPost, "/api/v1/tickets/"+released.ID+"/claim", nil), 200); claimed.Assignee == nil || claimed.Assignee.ID != f.m2 {
+	if claimed := decodeInto[Ticket](t, f.do(f.m2, http.MethodPost, "/api/v1/tickets/"+released.ID+"/claim", nil), 200); len(claimed.Assignees) == 0 || claimed.Assignees[0].ID != f.m2 {
 		t.Fatalf("claim after release: %+v", claimed)
 	}
 
@@ -520,7 +611,7 @@ func TestStudentsAndPendingAccountsAreDeniedEverywhere(t *testing.T) {
 		}
 	}
 	after := f.get(tk.ID)
-	if after.Version != tk.Version || after.Assignee != nil || after.Status != "todo" {
+	if after.Version != tk.Version || len(after.Assignees) > 0 || after.Status != "todo" {
 		t.Fatalf("denied requests changed the ticket: %+v", after)
 	}
 	if n := len(decodeInto[[]Ticket](t, f.do(AdminID, http.MethodGet, "/api/v1/tickets?include_finished=true", nil), 200)); n != before {
@@ -551,10 +642,11 @@ func TestTicketClaimIsAtomic(t *testing.T) {
 		user string
 		code int
 	}
-	results := make(chan result, len(sessions))
+	results := make(chan result, 2*len(sessions))
 	start := make(chan struct{})
 	var wg sync.WaitGroup
-	for _, s := range sessions {
+	// Every contender claims twice at once: claim joins the assignees, so each user gets in exactly once.
+	for _, s := range append(slices.Clone(sessions), sessions...) {
 		wg.Add(1)
 		go func(s session) {
 			defer wg.Done()
@@ -566,23 +658,24 @@ func TestTicketClaimIsAtomic(t *testing.T) {
 	close(start)
 	wg.Wait()
 	close(results)
-	winners, losers := []string{}, 0
+	joined := map[string]int{}
 	for r := range results {
 		switch r.code {
 		case http.StatusOK:
-			winners = append(winners, r.user)
+			joined[r.user]++
 		case http.StatusConflict:
-			losers++
 		default:
 			t.Errorf("claim by %s: unexpected status %d", r.user, r.code)
 		}
 	}
-	if len(winners) != 1 || losers != len(contenders)-1 {
-		t.Fatalf("winners=%v losers=%d", winners, losers)
+	for _, u := range contenders {
+		if joined[u] != 1 {
+			t.Fatalf("user %s joined %d times", u, joined[u])
+		}
 	}
 	got := f.get(tk.ID)
-	if got.Assignee == nil || got.Assignee.ID != winners[0] || got.Status != "in_progress" || got.Version != tk.Version+1 || got.Round != tk.Round+1 {
-		t.Fatalf("claimed ticket: %+v (winner %s)", got, winners[0])
+	if len(got.Assignees) != len(contenders) || got.Status != "in_progress" || got.Version != tk.Version+len(contenders) {
+		t.Fatalf("claimed ticket: %+v", got)
 	}
 	assignEvents := 0
 	for _, ev := range f.detail(tk.ID).Events {
@@ -590,12 +683,8 @@ func TestTicketClaimIsAtomic(t *testing.T) {
 			assignEvents++
 		}
 	}
-	if assignEvents != 1 {
-		t.Fatalf("expected one assign event, got %d", assignEvents)
-	}
-	// Taken tickets cannot be claimed again, not even by the assignee.
-	for _, u := range []string{winners[0], AdminID} {
-		f.expect(f.do(u, http.MethodPost, "/api/v1/tickets/"+tk.ID+"/claim", nil), http.StatusConflict, "claim of assigned ticket")
+	if assignEvents != len(contenders) {
+		t.Fatalf("expected %d assign events, got %d", len(contenders), assignEvents)
 	}
 	f.expect(f.do(MiaID, http.MethodPost, "/api/v1/tickets/"+tk.ID+"/claim", nil), http.StatusForbidden, "student claim")
 	f.expect(f.do(f.m, http.MethodPost, "/api/v1/tickets/00000000-0000-4000-8000-0000000000ee/claim", nil), http.StatusNotFound, "claim of unknown ticket")
@@ -696,7 +785,7 @@ func TestTicketValidation(t *testing.T) {
 	f.expect(f.editRaw(AdminID, art, map[string]any{"est_pages": nil}), http.StatusBadRequest, "edit artikel without pages")
 	f.expect(f.editRaw(AdminID, art, map[string]any{"est_pages": 0}), http.StatusBadRequest, "edit artikel zero pages")
 	f.expect(f.editRaw(AdminID, tk, map[string]any{"area_id": "00000000-0000-4000-8000-0000000000ee"}), http.StatusBadRequest, "edit unknown area")
-	f.expect(f.editRaw(AdminID, tk, map[string]any{"assignee_id": MiaID}), http.StatusBadRequest, "edit assignee student")
+	f.expect(f.editRaw(AdminID, tk, map[string]any{"assignee_ids": who(MiaID)}), http.StatusBadRequest, "edit assignee student")
 	f.expect(f.editRaw(AdminID, tk, map[string]any{"type": "artikel"}), http.StatusBadRequest, "edit type")
 	if got := f.get(tk.ID); got.Version != tk.Version {
 		t.Fatalf("invalid edits bumped the version: %d", got.Version)
@@ -994,7 +1083,10 @@ func TestDeleteUserWithTicketHistory(t *testing.T) {
 	}
 	newTicket := func(creator string, assignee any) string {
 		id := ID()
-		exec("INSERT INTO tickets(id,type,title,area_id,assignee_id,created_by,size,goal) VALUES($1,'aufgabe','x',$2,$3,$4,'S','g')", id, f.area, assignee, creator)
+		exec("INSERT INTO tickets(id,type,title,area_id,created_by,size,goal) VALUES($1,'aufgabe','x',$2,$3,'S','g')", id, f.area, creator)
+		if assignee != nil {
+			exec("INSERT INTO ticket_assignees(ticket_id,user_id) VALUES($1,$2)", id, assignee)
+		}
 		return id
 	}
 	del := func(id string) *httptest.ResponseRecorder {
@@ -1053,13 +1145,13 @@ func TestTicketClaimOnlyOpensOpenWork(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := f.get(done)
-	if !before.Approved || before.Assignee != nil {
+	if !before.Approved || len(before.Assignees) > 0 {
 		t.Fatalf("setup: %+v", before)
 	}
 	for _, who := range []string{f.m, AdminID, f.r1} {
 		f.expect(f.do(who, http.MethodPost, "/api/v1/tickets/"+done+"/claim", nil), http.StatusConflict, "claim of done ticket")
 	}
-	if after := f.get(done); !after.Approved || after.Status != "done" || after.Assignee != nil || after.Round != before.Round || after.Version != before.Version {
+	if after := f.get(done); !after.Approved || after.Status != "done" || len(after.Assignees) > 0 || after.Round != before.Round || after.Version != before.Version {
 		t.Fatalf("rejected claim changed the ticket: %+v", after)
 	}
 	review := insert("review")
@@ -1067,7 +1159,7 @@ func TestTicketClaimOnlyOpensOpenWork(t *testing.T) {
 	// Open work can be claimed in both open columns.
 	for _, status := range []string{"todo", "in_progress"} {
 		claimed := decodeInto[Ticket](t, f.do(f.m, http.MethodPost, "/api/v1/tickets/"+insert(status)+"/claim", nil), 200)
-		if claimed.Status != "in_progress" || claimed.Assignee == nil || claimed.Assignee.ID != f.m {
+		if claimed.Status != "in_progress" || len(claimed.Assignees) == 0 || claimed.Assignees[0].ID != f.m {
 			t.Fatalf("claim from %s: %+v", status, claimed)
 		}
 	}
@@ -1134,12 +1226,16 @@ func TestTicketPatchRequiresEveryKey(t *testing.T) {
 		f.expect(f.do(AdminID, http.MethodPatch, "/api/v1/tickets/"+tk.ID, partial), http.StatusBadRequest, "PATCH without "+key)
 	}
 	f.expect(f.do(f.m, http.MethodPatch, "/api/v1/tickets/"+tk.ID, map[string]any{"title": "Nur Titel", "version": tk.Version}), http.StatusBadRequest, "partial PATCH by assignee")
-	if got := f.get(tk.ID); got.Version != tk.Version || got.Assignee == nil || got.Title != tk.Title {
+	if got := f.get(tk.ID); got.Version != tk.Version || len(got.Assignees) == 0 || got.Title != tk.Title {
 		t.Fatalf("partial PATCH changed the ticket: %+v", got)
 	}
-	// Explicit nulls for assignee_id and est_pages are valid when the keys are present.
-	released := f.edit(AdminID, tk, map[string]any{"assignee_id": nil})
-	if released.Assignee != nil {
-		t.Fatalf("explicit null did not release: %+v", released)
+	// assignee_ids null must never read as "nobody": only an explicit empty list releases.
+	f.expect(f.editRaw(AdminID, tk, map[string]any{"assignee_ids": nil}), http.StatusBadRequest, "assignee_ids null")
+	if got := f.get(tk.ID); len(got.Assignees) != 1 {
+		t.Fatalf("null assignee_ids changed the ticket: %+v", got)
+	}
+	released := f.edit(AdminID, tk, map[string]any{"assignee_ids": who()})
+	if len(released.Assignees) > 0 {
+		t.Fatalf("empty list did not release: %+v", released)
 	}
 }
