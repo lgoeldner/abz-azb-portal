@@ -56,9 +56,14 @@ function TaskList({ tickets, positions }: { tickets: Ticket[]; positions: Map<st
           <li key={ticket.id}>
             <Link to={`/tickets/${ticket.id}`} className={row}>
               <FileText aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0 text-muted" />
-              <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{ticket.title}</span>
-              <AreaTag name={ticket.area_name} position={positions.get(ticket.area_id) ?? 1} />
-              <StatusPill status={ticket.status} />
+              {/* Phones: title gets its own line, tags wrap below it. */}
+              <span className="min-w-0 flex-1 basis-[calc(100%-1.75rem)] truncate text-[15px] font-semibold sm:basis-0">
+                {ticket.title}
+              </span>
+              <span className="flex gap-2 pl-7 sm:pl-0">
+                <AreaTag name={ticket.area_name} position={positions.get(ticket.area_id) ?? 1} />
+                <StatusPill status={ticket.status} />
+              </span>
             </Link>
           </li>
         ))}
