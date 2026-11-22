@@ -1528,15 +1528,31 @@ function ReviewPanel({
       {mayVote && (
         <div className="grid gap-3">
           {selfApproval && (
-            <label className="flex items-start gap-2 font-bold">
-              <input
-                type="checkbox"
-                className="mt-0.5 size-4"
-                checked={confirmed}
-                onChange={(e) => setConfirmed(e.target.checked)}
-              />
-              Ich bestätige: Das Ergebnis ist für niemand anderen relevant
-            </label>
+            <div className="grid gap-2 rounded-ui bg-wait-tint p-3">
+              <label className="flex items-start gap-2 font-bold">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-5 shrink-0"
+                  aria-describedby="self-approval-help"
+                  checked={confirmed}
+                  onChange={(e) => setConfirmed(e.target.checked)}
+                />
+                Ich nehme meine eigene Aufgabe selbst ab und trage die Verantwortung dafür
+              </label>
+              <div id="self-approval-help" className="grid gap-1 pl-7 text-[13px] leading-snug">
+                <p>
+                  Du bist für den Bereich {area?.name ?? 'dieses Tickets'} verantwortlich. Deshalb darfst du kleine
+                  Aufgaben (XS/S) ohne zweite Person abnehmen.
+                </p>
+                <p>
+                  Niemand prüft das Ergebnis nach: Wenn etwas fehlt, liegt das bei dir. Kreuze das nur an, wenn das
+                  Ergebnis keine andere Gruppe betrifft.
+                </p>
+                <p className="font-bold">
+                  Sag der Gruppe beim nächsten Treffen oder im Chat, dass du es selbst abgenommen hast.
+                </p>
+              </div>
+            </div>
           )}
           <div className="flex flex-wrap gap-2">
             <button

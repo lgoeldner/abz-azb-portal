@@ -391,7 +391,8 @@ describe('area picker', () => {
 
 describe('ticket page review panel', () => {
   const reviewButton = () => screen.queryByRole('button', { name: 'Freigeben' });
-  const selfConfirm = () => screen.queryByLabelText('Ich bestätige: Das Ergebnis ist für niemand anderen relevant');
+  const selfConfirm = () =>
+    screen.queryByLabelText('Ich nehme meine eigene Aufgabe selbst ab und trage die Verantwortung dafür');
 
   it('gives an assignee who is no reviewer no way to vote', async () => {
     installApi([ticket({ status: 'review', assignee: ref(manager) })]);
@@ -405,7 +406,10 @@ describe('ticket page review panel', () => {
   it('offers self approval only for a reviewer assignee on a small Aufgabe, and sends the confirmation', async () => {
     const api = installApi([ticket({ status: 'review', assignee: ref(reviewer), size: 'S', round: 4 })]);
     renderAt('/tickets/ticket-1', reviewer);
-    const checkbox = await screen.findByLabelText('Ich bestätige: Das Ergebnis ist für niemand anderen relevant');
+    const checkbox = await screen.findByLabelText(
+      'Ich nehme meine eigene Aufgabe selbst ab und trage die Verantwortung dafür',
+    );
+    expect(checkbox).toHaveAccessibleDescription(/selbst abgenommen hast/);
     expect(screen.getByRole('button', { name: 'Freigeben' })).toBeDisabled();
     await userEvent.click(checkbox);
     await userEvent.click(screen.getByRole('button', { name: 'Freigeben' }));
