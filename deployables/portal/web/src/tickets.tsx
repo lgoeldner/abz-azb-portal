@@ -154,7 +154,9 @@ function useTicketAction() {
       if (success) toast.success(success);
       return true;
     } catch (e) {
-      setError(errorText(e as Error));
+      // 403 is a toast: the inline notice would stick around although nothing on the form can fix it.
+      if (e instanceof ApiError && e.status === 403) toast.error(errorText(e as Error));
+      else setError(errorText(e as Error));
       return false;
     } finally {
       await client.invalidateQueries();
