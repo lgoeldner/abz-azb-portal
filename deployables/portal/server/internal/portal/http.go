@@ -244,6 +244,9 @@ func (a *App) routes() {
 	m.HandleFunc("POST /internal/email/login", a.endpoint(a.internalEmailLogin))
 	api := http.NewServeMux()
 	for _, rt := range a.apiRoutes() {
+		if !a.Config.ProjectManagement && projectRoute(rt.Pattern) {
+			continue // falls through to the 404 handler below
+		}
 		api.HandleFunc(rt.Pattern, a.endpoint(rt.Handler))
 	}
 	api.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { respondError(w, missing()) })
@@ -272,8 +275,19 @@ func (a *App) me(w http.ResponseWriter, r *http.Request) error {
 	if e != nil {
 		return e
 	}
-	jsonOut(w, 200, Me{User: u.User, CSRFToken: u.CSRF, ConsentRequired: !ok})
+	jsonOut(w, 200, Me{User: u.User, CSRFToken: u.CSRF, ConsentRequired: !ok, ProjectManagement: a.Config.ProjectManagement})
 	return nil
+}
+
+// projectRoute reports whether a route belongs to the PROJECT_MANAGEMENT feature.
+func projectRoute(pattern string) bool {
+	path := pattern[strings.IndexByte(pattern, ' ')+1:]
+	for _, prefix := range []string{"/api/v1/tickets", "/api/v1/areas", "/api/v1/admin/areas", "/api/v1/documents"} {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // apiRoutes is the single list of /api/v1 routes: it feeds the mux and the generated docs/openapi.json.
@@ -334,6 +348,11 @@ func (a *App) apiRoutes() []apiRoute {
 		{"POST /api/v1/tickets/{id}/claim", a.claimTicket, opDoc{Summary: "Claim an unassigned ticket atomically and set it in_progress", Res: Ticket{}}},
 		{"POST /api/v1/tickets/{id}/comments", a.commentTicket, opDoc{Summary: "Add a markdown comment", Req: CommentInput{}, Res: TicketEvent{}, Status: 201}},
 		{"PUT /api/v1/tickets/{id}/review", a.reviewTicket, opDoc{Summary: "Set own review vote in review/done; only binding votes make a ticket approved", Req: ReviewInput{}, Res: Ticket{}}},
+		{"GET /api/v1/documents", a.listDocuments, opDoc{Summary: "List shared Redaktion documents, newest change first, with own unread flag (managers and admins)", Res: []Document{}}},
+		{"POST /api/v1/documents", a.createDocument, opDoc{Summary: "Create a shared document (managers and admins)", Req: DocumentInput{}, Res: Document{}, Status: 201}},
+		{"GET /api/v1/documents/{id}", a.getDocument, opDoc{Summary: "Read a document and record the caller's view, which clears its unread flag", Res: Document{}}},
+		{"PATCH /api/v1/documents/{id}", a.editDocument, opDoc{Summary: "Edit a document with optimistic concurrency (any manager or admin; 409 stale version)", Req: DocumentEdit{}, Res: Document{}}},
+		{"DELETE /api/v1/documents/{id}", a.deleteDocument, opDoc{Summary: "Delete a document (its creator or an admin; 409 stale version)", Req: VersionInput{}, Status: 204}},
 	}
 }
 

@@ -127,6 +127,8 @@ type Me struct {
 	CSRFToken string `json:"csrf_token"`
 	// ConsentRequired is true until the user accepted the current consent version; other API routes return 403 consent_required meanwhile.
 	ConsentRequired bool `json:"consent_required"`
+	// ProjectManagement mirrors the global PROJECT_MANAGEMENT flag; when false the ticket, Bereich and document routes answer 404.
+	ProjectManagement bool `json:"project_management,omitempty"`
 }
 
 type Consent struct {
@@ -285,4 +287,29 @@ type TicketQuery struct {
 	Type            string `query:"type"`
 	Q               string `query:"q"`
 	IncludeFinished string `query:"include_finished"`
+}
+
+// Document is a shared Redaktion note (meeting minutes or a general note). Every admitted manager and admin reads and edits all documents.
+type Document struct {
+	ID        string    `json:"id" format:"uuid"`
+	Title     string    `json:"title"`
+	Kind      string    `json:"kind" enum:"meeting,note"`
+	Body      string    `json:"body" description:"Markdown."`
+	CreatedBy UserRef   `json:"created_by"`
+	UpdatedBy UserRef   `json:"updated_by"`
+	Version   int       `json:"version"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Unread    bool      `json:"unread" description:"Someone else changed the document after the caller last opened it (or the caller never opened it)."`
+}
+type DocumentInput struct {
+	Title string `json:"title"`
+	Kind  string `json:"kind" enum:"meeting,note"`
+	Body  string `json:"body"`
+}
+type DocumentEdit struct {
+	Title   string `json:"title"`
+	Kind    string `json:"kind" enum:"meeting,note"`
+	Body    string `json:"body"`
+	Version int    `json:"version"`
 }

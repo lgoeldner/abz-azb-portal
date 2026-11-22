@@ -354,3 +354,110 @@ export function SubmissionList({
     </ul>
   );
 }
+
+// ---------- project tools (PROJECT_MANAGEMENT): shared tags, avatars and status tones ----------
+export const projectsEnabled = (me: Me) => !!me.project_management;
+export const initialsOf = (name: string) =>
+  name
+    .replace(/\(.*?\)/g, '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]!.toUpperCase())
+    .join('');
+// Notion-like tag tones; full class strings so Tailwind sees them.
+const TAG_TONES = [
+  'bg-[#e3e2e0] text-[#32302c]',
+  'bg-[#d3e5ef] text-[#183347]',
+  'bg-[#e8deee] text-[#412454]',
+  'bg-[#dbeddb] text-[#1c3829]',
+  'bg-[#fadec9] text-[#49290e]',
+  'bg-[#fdecc8] text-[#402c1b]',
+  'bg-[#f5e0e9] text-[#4c2337]',
+  'bg-[#eee0da] text-[#442a1e]',
+  'bg-[#ffe2dd] text-[#5d1715]',
+];
+/** Bereich tag tone from its position, so colours stay stable without a DB column. */
+export const areaTone = (position: number) =>
+  TAG_TONES[(((position - 1) % TAG_TONES.length) + TAG_TONES.length) % TAG_TONES.length]!;
+export function AreaTag({ name, position, className = '' }: { name: string; position: number; className?: string }) {
+  return (
+    <span
+      className={`inline-flex max-w-full items-center truncate rounded-md px-2 py-0.5 text-[13px] font-semibold ${areaTone(position)} ${className}`}
+    >
+      {name}
+    </span>
+  );
+}
+const AVATAR_TONES = [
+  'bg-[#c2185b]',
+  'bg-[#e8590c]',
+  'bg-[#2f80c1]',
+  'bg-[#7b4fb0]',
+  'bg-[#2e7d4f]',
+  'bg-[#b7791f]',
+  'bg-[#5d6270]',
+];
+const hash = (value: string) => [...value].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) | 0, 7);
+export function Avatar({
+  user,
+  className = 'size-6 text-[11px]',
+}: {
+  user: { id: string; name: string };
+  className?: string;
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`grid flex-none place-items-center rounded-full font-bold text-white ${AVATAR_TONES[Math.abs(hash(user.id)) % AVATAR_TONES.length]} ${className}`}
+    >
+      {initialsOf(user.name) || '?'}
+    </span>
+  );
+}
+export type TicketStatus = 'todo' | 'in_progress' | 'review' | 'done';
+/** Board column tones as in the Notion reference: grey, blue, purple, green. */
+export const statusTone: Record<
+  TicketStatus,
+  { label: string; column: string; pill: string; dot: string; text: string }
+> = {
+  todo: {
+    label: 'Offen',
+    column: 'bg-[#f7f6f3]',
+    pill: 'bg-[#e3e2e0] text-[#32302c]',
+    dot: 'bg-[#9b9a97]',
+    text: 'text-[#787774]',
+  },
+  in_progress: {
+    label: 'In Arbeit',
+    column: 'bg-[#f3f8fb]',
+    pill: 'bg-[#d3e5ef] text-[#183347]',
+    dot: 'bg-[#2f80c1]',
+    text: 'text-[#2f80c1]',
+  },
+  review: {
+    label: 'Wartet auf Review',
+    column: 'bg-[#f8f5fb]',
+    pill: 'bg-[#e8deee] text-[#412454]',
+    dot: 'bg-[#9065b0]',
+    text: 'text-[#9065b0]',
+  },
+  done: {
+    label: 'Fertig',
+    column: 'bg-[#f4f8f5]',
+    pill: 'bg-[#dbeddb] text-[#1c3829]',
+    dot: 'bg-[#448361]',
+    text: 'text-[#448361]',
+  },
+};
+export function StatusPill({ status, className = '' }: { status: TicketStatus; className?: string }) {
+  const tone = statusTone[status];
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[13px] font-semibold ${tone.pill} ${className}`}
+    >
+      <span aria-hidden="true" className={`size-2 rounded-full ${tone.dot}`} />
+      {tone.label}
+    </span>
+  );
+}

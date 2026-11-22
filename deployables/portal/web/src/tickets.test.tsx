@@ -48,6 +48,7 @@ function ticket(overrides: Partial<Ticket> = {}): Ticket {
   return {
     id: 'ticket-1',
     number: 1,
+    comment_count: 0,
     type: 'aufgabe',
     title: 'Angebote besorgen',
     body: 'Ergebnis wird abgelegt in: Drive',

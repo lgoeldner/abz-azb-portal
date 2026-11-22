@@ -57,6 +57,7 @@ services:
       SESSION_SECRET: development-only-secret-change-for-production
       MAIL_PROVIDER: capture
       REMINDERS_ENABLED: "false"
+      PROJECT_MANAGEMENT: "true"
       UPLOAD_DIR: /var/lib/portal/uploads
       S3_ENDPOINT: http://s3mock:9090
       S3_REGION: eu-central-3

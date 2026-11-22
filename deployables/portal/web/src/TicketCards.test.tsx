@@ -23,6 +23,7 @@ const areaB = area('area-b', ['someone-else']);
 function ticket(overrides: Partial<Ticket> & Pick<Ticket, 'id'>): Ticket {
   return {
     number: 1,
+    comment_count: 0,
     type: 'aufgabe',
     title: 'Ticket',
     body: '',

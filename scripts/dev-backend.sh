@@ -2,6 +2,7 @@
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/dev-common.sh"
 export BETTER_AUTH_URL="$PUBLIC_URL"
+export PROJECT_MANAGEMENT="${PROJECT_MANAGEMENT:-true}"
 
 if [[ "${SKIP_DEV_DB_SETUP:-0}" != 1 ]]; then
   start_dev_services

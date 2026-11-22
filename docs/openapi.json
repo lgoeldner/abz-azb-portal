@@ -787,6 +787,115 @@
         ],
         "type": "object"
       },
+      "Document": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "description": "Markdown.",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "meeting",
+              "note"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "unread": {
+            "description": "Someone else changed the document after the caller last opened it (or the caller never opened it).",
+            "type": "boolean"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updated_by": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "kind",
+          "body",
+          "created_by",
+          "updated_by",
+          "version",
+          "created_at",
+          "updated_at",
+          "unread"
+        ],
+        "type": "object"
+      },
+      "DocumentEdit": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "meeting",
+              "note"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "title",
+          "kind",
+          "body",
+          "version"
+        ],
+        "type": "object"
+      },
+      "DocumentInput": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "meeting",
+              "note"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "kind",
+          "body"
+        ],
+        "type": "object"
+      },
       "EmailHealth": {
         "additionalProperties": false,
         "properties": {
@@ -1135,6 +1244,9 @@
           },
           "csrf_token": {
             "type": "string"
+          },
+          "project_management": {
+            "type": "boolean"
           },
           "user": {
             "$ref": "#/components/schemas/User"
@@ -1587,6 +1699,9 @@
           "body": {
             "type": "string"
           },
+          "comment_count": {
+            "type": "integer"
+          },
           "created_at": {
             "format": "date-time",
             "type": "string"
@@ -1679,6 +1794,7 @@
           "version",
           "approved",
           "reviews",
+          "comment_count",
           "created_at",
           "updated_at",
           "status_changed_at"
@@ -4635,6 +4751,222 @@
           }
         },
         "summary": "Set own review vote in review/done; only binding votes make a ticket approved"
+      }
+    },
+    "/api/v1/documents": {
+      "get": {
+        "operationId": "getDocuments",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Document"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List shared Redaktion documents, newest change first, with own unread flag (managers and admins)"
+      },
+      "post": {
+        "operationId": "postDocuments",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Document"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Create a shared document (managers and admins)"
+      }
+    },
+    "/api/v1/documents/{id}": {
+      "get": {
+        "operationId": "getDocumentsId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Document"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Read a document and record the caller's view, which clears its unread flag"
+      },
+      "patch": {
+        "operationId": "patchDocumentsId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentEdit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Document"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Edit a document with optimistic concurrency (any manager or admin; 409 stale version)"
+      },
+      "delete": {
+        "operationId": "deleteDocumentsId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Delete a document (its creator or an admin; 409 stale version)"
       }
     }
   },

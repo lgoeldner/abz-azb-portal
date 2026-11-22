@@ -20,9 +20,9 @@ func testStoreConfig(t *testing.T) Config {
 	t.Helper()
 	endpoint := os.Getenv("TEST_S3_ENDPOINT")
 	if endpoint == "" {
-		return Config{UploadDir: t.TempDir()}
+		return Config{UploadDir: t.TempDir(), ProjectManagement: true}
 	}
-	c := Config{UploadDir: t.TempDir(), S3: S3Config{endpoint, "eu-central-3", fmt.Sprintf("portal-test-%x", time.Now().UnixNano()), "test", "test"}}
+	c := Config{UploadDir: t.TempDir(), ProjectManagement: true, S3: S3Config{endpoint, "eu-central-3", fmt.Sprintf("portal-test-%x", time.Now().UnixNano()), "test", "test"}}
 	client := NewBlobStore(c).(s3Store).c
 	ctx := context.Background()
 	if _, err := client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: &c.S3.Bucket}); err != nil {

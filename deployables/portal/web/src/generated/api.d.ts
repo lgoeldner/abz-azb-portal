@@ -758,6 +758,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List shared Redaktion documents, newest change first, with own unread flag (managers and admins) */
+        get: operations["getDocuments"];
+        put?: never;
+        /** Create a shared document (managers and admins) */
+        post: operations["postDocuments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a document and record the caller's view, which clears its unread flag */
+        get: operations["getDocumentsId"];
+        put?: never;
+        post?: never;
+        /** Delete a document (its creator or an admin; 409 stale version) */
+        delete: operations["deleteDocumentsId"];
+        options?: never;
+        head?: never;
+        /** Edit a document with optimistic concurrency (any manager or admin; 409 stale version) */
+        patch: operations["patchDocumentsId"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -973,6 +1010,37 @@ export interface components {
             resolved: boolean;
             submission_id: string;
         };
+        Document: {
+            /** @description Markdown. */
+            body: string;
+            /** Format: date-time */
+            created_at: string;
+            created_by: components["schemas"]["UserRef"];
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "meeting" | "note";
+            title: string;
+            /** @description Someone else changed the document after the caller last opened it (or the caller never opened it). */
+            unread: boolean;
+            /** Format: date-time */
+            updated_at: string;
+            updated_by: components["schemas"]["UserRef"];
+            version: number;
+        };
+        DocumentEdit: {
+            body: string;
+            /** @enum {string} */
+            kind: "meeting" | "note";
+            title: string;
+            version: number;
+        };
+        DocumentInput: {
+            body: string;
+            /** @enum {string} */
+            kind: "meeting" | "note";
+            title: string;
+        };
         EmailHealth: {
             failed: number;
             /** Format: date-time */
@@ -1053,6 +1121,7 @@ export interface components {
         Me: {
             consent_required: boolean;
             csrf_token: string;
+            project_management?: boolean;
             user: components["schemas"]["User"];
         };
         MyBallot: {
@@ -1174,6 +1243,7 @@ export interface components {
             area_name: string;
             assignee: components["schemas"]["UserRef"] | null;
             body: string;
+            comment_count: number;
             /** Format: date-time */
             created_at: string;
             created_by: components["schemas"]["UserRef"];
@@ -3133,6 +3203,173 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Ticket"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDocuments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postDocuments: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentInput"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDocumentsId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteDocumentsId: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionInput"];
+            };
+        };
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    patchDocumentsId: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentEdit"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
                 };
             };
             /** @description Error */

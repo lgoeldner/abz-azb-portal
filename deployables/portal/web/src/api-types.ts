@@ -21,3 +21,4 @@ export type Ticket = components['schemas']['Ticket'];
 export type TicketDetail = components['schemas']['TicketDetail'];
 export type TicketEvent = components['schemas']['TicketEvent'];
 export type TicketReview = components['schemas']['TicketReview'];
+export type Document = components['schemas']['Document'];

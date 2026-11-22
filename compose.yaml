@@ -53,6 +53,7 @@ services:
       MAIL_DAILY_LIMIT: ${MAIL_DAILY_LIMIT:-300}
       REMINDER_DAILY_LIMIT: ${REMINDER_DAILY_LIMIT:-150}
       REMINDERS_ENABLED: ${REMINDERS_ENABLED:-false}
+      PROJECT_MANAGEMENT: ${PROJECT_MANAGEMENT:-false}
     volumes:
       - uploads:/var/lib/portal/uploads
       - backup_status:/var/lib/portal/status:ro
@@ -125,6 +126,7 @@ services:
       MAIL_DAILY_LIMIT: ${MAIL_DAILY_LIMIT:-300}
       REMINDER_DAILY_LIMIT: ${REMINDER_DAILY_LIMIT:-150}
       REMINDERS_ENABLED: ${REMINDERS_ENABLED:-false}
+      PROJECT_MANAGEMENT: ${PROJECT_MANAGEMENT:-false}
     depends_on:
       db: { condition: service_healthy }
       auth: { condition: service_healthy }

@@ -52,6 +52,7 @@ type Ticket struct {
 	Version         int            `json:"version"`
 	Approved        bool           `json:"approved" description:"True when the current round has a binding approval by a still admitted editor. Derived, never client-written."`
 	Reviews         []TicketReview `json:"reviews" description:"Votes of the current round."`
+	CommentCount    int            `json:"comment_count"`
 	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at"`
 	StatusChangedAt time.Time      `json:"status_changed_at"`
@@ -80,9 +81,10 @@ const ticketInner = `SELECT t.id,t.number,t.type,t.title,t.body,t.area_id,a.name
  t.created_by,cb.name AS creator_name,t.size,t.goal,t.est_pages,t.status,t.round,t.version,
  EXISTS(SELECT 1 FROM ticket_reviews r JOIN users v ON v.id=r.user_id
   WHERE r.ticket_id=t.id AND r.round=t.round AND r.verdict='approve' AND r.binding AND v.admitted AND v.role IN ('manager','admin')) AS approved,
- t.created_at,t.updated_at,t.status_changed_at
+ t.created_at,t.updated_at,t.status_changed_at,
+ (SELECT count(*) FROM ticket_events ev WHERE ev.ticket_id=t.id AND ev.kind='comment') AS comment_count
  FROM tickets t JOIN areas a ON a.id=t.area_id JOIN users cb ON cb.id=t.created_by LEFT JOIN users asg ON asg.id=t.assignee_id`
-const ticketCols = "id::text,number,type,title,body,area_id::text,area_name,assignee_id::text,assignee_name,created_by::text,creator_name,size,goal,est_pages,status,round,version,approved,created_at,updated_at,status_changed_at"
+const ticketCols = "id::text,number,type,title,body,area_id::text,area_name,assignee_id::text,assignee_name,created_by::text,creator_name,size,goal,est_pages,status,round,version,approved,created_at,updated_at,status_changed_at,comment_count"
 
 // reviewerPredicate: the user holds a default-reviewer grant for the area and is currently an admitted manager/admin.
 const reviewerPredicate = "EXISTS(SELECT 1 FROM area_reviewers ar JOIN users u ON u.id=ar.user_id WHERE ar.area_id=$1 AND ar.user_id=$2 AND u.admitted AND u.role IN ('manager','admin'))"
@@ -93,7 +95,7 @@ func scanTicket(row scanner) (Ticket, error) {
 	var t Ticket
 	var assigneeID, assigneeName *string
 	var creatorID, creatorName string
-	if e := row.Scan(&t.ID, &t.Number, &t.Type, &t.Title, &t.Body, &t.AreaID, &t.AreaName, &assigneeID, &assigneeName, &creatorID, &creatorName, &t.Size, &t.Goal, &t.EstPages, &t.Status, &t.Round, &t.Version, &t.Approved, &t.CreatedAt, &t.UpdatedAt, &t.StatusChangedAt); e != nil {
+	if e := row.Scan(&t.ID, &t.Number, &t.Type, &t.Title, &t.Body, &t.AreaID, &t.AreaName, &assigneeID, &assigneeName, &creatorID, &creatorName, &t.Size, &t.Goal, &t.EstPages, &t.Status, &t.Round, &t.Version, &t.Approved, &t.CreatedAt, &t.UpdatedAt, &t.StatusChangedAt, &t.CommentCount); e != nil {
 		return t, e
 	}
 	if assigneeID != nil && assigneeName != nil {
