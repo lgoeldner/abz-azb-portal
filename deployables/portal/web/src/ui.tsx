@@ -423,28 +423,28 @@ export const statusTone: Record<
 > = {
   todo: {
     label: 'Offen',
-    column: 'bg-[#f7f6f3]',
+    column: 'bg-[#e9e8e4]',
     pill: 'bg-[#e3e2e0] text-[#32302c]',
     dot: 'bg-[#9b9a97]',
     text: 'text-[#787774]',
   },
   in_progress: {
     label: 'In Arbeit',
-    column: 'bg-[#f3f8fb]',
+    column: 'bg-[#dde9f3]',
     pill: 'bg-[#d3e5ef] text-[#183347]',
     dot: 'bg-[#2f80c1]',
     text: 'text-[#2f80c1]',
   },
   review: {
     label: 'Wartet auf Review',
-    column: 'bg-[#f8f5fb]',
+    column: 'bg-[#eae1f2]',
     pill: 'bg-[#e8deee] text-[#412454]',
     dot: 'bg-[#9065b0]',
     text: 'text-[#9065b0]',
   },
   done: {
     label: 'Fertig',
-    column: 'bg-[#f4f8f5]',
+    column: 'bg-[#deede2]',
     pill: 'bg-[#dbeddb] text-[#1c3829]',
     dot: 'bg-[#448361]',
     text: 'text-[#448361]',
