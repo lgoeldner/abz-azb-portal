@@ -133,6 +133,15 @@ Replaces the Notion ticket workflow. Managers and admins only; students get 403 
 - `round` increases when status returns to todo/in_progress or when area, assignee, size or est_pages change; earlier votes stay as history and stop counting.
 - Deleting a user is blocked by tickets, events or reviews they own; area reviewer grants are removed instead.
 
+## Project tools flag and shared documents
+
+- `PROJECT_MANAGEMENT=true` (env, global, default false; compose.dev.yaml and scripts/dev-backend.sh set true) enables the Redaktion project tools: ticket board, Bereiche, documents and the "Meine Aufgaben" home. When false every `/tickets*`, `/areas*`, `/admin/areas*` and `/documents*` route answers 404 (`projectRoute` in http.go), `GET /me` omits `project_management`, and the web app hides nav entries, home sections and routes. Data stays in the database.
+- Documents are shared Redaktion notes, no per-document ACL: every admitted manager and admin reads, creates and edits all of them; students and guests get 403. Never public, never student-visible.
+- Types: `Document {id,title,kind:'meeting'|'note',body(markdown),created_by,updated_by,version,created_at,updated_at,unread}`. Routes: GET|POST `/documents` `{title,kind,body}`; GET `/documents/{id}` (records the caller's view); PATCH `/documents/{id}` `{title,kind,body,version}`; DELETE `/documents/{id}` `{version}` (creator or admin). Stale version: 409.
+- Validation: title trimmed 1..200 runes, kind meeting|note, body <= 100000 characters.
+- `unread` = updated by someone else after the caller's last view (or never viewed). Own creates and edits never make a document unread for oneself.
+- Erasure deletes the person's `document_views`; documents they wrote stay as team records under the tombstone name. Hard user delete is blocked by documents they created or last edited.
+
 Consent: `GET /me` returns `consent_required`. Until the viewer accepted the current `ConsentVersion`, every `/api/v1` route except `GET /me` and `GET|POST /me/consent` returns 403 `consent_required`. POST with any other version returns 409 `consent_outdated` and stores nothing. The consent text is a draft and not final. `/impressum` and `/datenschutz` are public operator files from LEGAL_DIR. Erasure is the operator CLI `portal erase`, not an API route.
 
 ## Steckbrief collections

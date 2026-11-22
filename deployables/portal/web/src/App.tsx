@@ -3,6 +3,7 @@ import {
   ChevronDown,
   ClipboardList,
   FileText,
+  Files,
   Hourglass,
   House,
   Library,
@@ -53,6 +54,7 @@ import {
   newestOpened,
   notice,
   plural,
+  projectsEnabled,
   roleName,
   since,
   useAction,
@@ -66,7 +68,8 @@ import {
 import { ActivityLog, People } from './admin';
 import { AreasAdmin } from './AreasAdmin';
 import { Board, NewTicket, TicketPage } from './tickets';
-import { TicketCards } from './TicketCards';
+import { MyTasks } from './TicketCards';
+import { DocumentPage, DocumentsPage, DocumentTiles, NewDocument } from './Documents';
 import { EmailAdmin } from './EmailAdmin';
 import { ContributionDetail, Contributions, Editorial, NewContribution, NotFound } from './pages';
 import { SammlungDetail, Sammlungen } from './sammlungen';
@@ -179,9 +182,33 @@ export function App() {
             }
           />
           <Route
+            path="dokumente"
+            element={
+              <RoleGuard projects>
+                <DocumentsPage />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="dokumente/neu"
+            element={
+              <RoleGuard projects>
+                <NewDocument />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="dokumente/:id"
+            element={
+              <RoleGuard projects>
+                <DocumentPage />
+              </RoleGuard>
+            }
+          />
+          <Route
             path="tickets"
             element={
-              <RoleGuard>
+              <RoleGuard projects>
                 <Board />
               </RoleGuard>
             }
@@ -189,7 +216,7 @@ export function App() {
           <Route
             path="tickets/neu"
             element={
-              <RoleGuard>
+              <RoleGuard projects>
                 <NewTicket />
               </RoleGuard>
             }
@@ -197,7 +224,7 @@ export function App() {
           <Route
             path="tickets/:id"
             element={
-              <RoleGuard>
+              <RoleGuard projects>
                 <TicketPage />
               </RoleGuard>
             }
@@ -205,7 +232,7 @@ export function App() {
           <Route
             path="verwaltung/bereiche"
             element={
-              <RoleGuard admin>
+              <RoleGuard admin projects>
                 <AreasAdmin />
               </RoleGuard>
             }
@@ -343,7 +370,7 @@ function Layout() {
   const location = useLocation();
   const [preferredView, setView] = preference;
   const editorialRoute =
-    (editorial(user) && (location.pathname.startsWith('/redaktion') || location.pathname.startsWith('/tickets'))) ||
+    (editorial(user) && ['/redaktion', '/tickets', '/dokumente'].some((p) => location.pathname.startsWith(p))) ||
     (user.role === 'admin' && location.pathname.startsWith('/verwaltung/'));
   // Normalize on route entry; pending navigation must not overwrite an explicit mode switch.
   useEffect(() => {
@@ -433,7 +460,10 @@ function Layout() {
           </div>
         </aside>
         <div className="flex min-h-screen flex-col bg-paper max-[651px]:pt-12 min-[651px]:pl-[260px]">
-          <main id="inhalt" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-8 sm:py-10">
+          <main
+            id="inhalt"
+            className={`mx-auto w-full flex-1 px-4 py-8 sm:px-8 sm:py-10 ${location.pathname === '/tickets' ? 'max-w-[96rem]' : 'max-w-5xl'}`}
+          >
             {localStorage.getItem(offerKey) && <PasskeyOffer />}
             <Outlet />
             {import.meta.env.DEV && (
@@ -511,6 +541,7 @@ function NavItem({ to, icon: Icon, children }: { to: string; icon?: LucideIcon; 
 }
 // Pinned between the scrolling nav and the account block; open state is a per-browser preference.
 function AdminNav({ onNavigate }: { onNavigate: () => void }) {
+  const projects = projectsEnabled(useSession());
   const [open, setOpen] = useState(() => {
     try {
       return localStorage.getItem('verwaltung') !== 'zu';
@@ -557,9 +588,11 @@ function AdminNav({ onNavigate }: { onNavigate: () => void }) {
           <NavItem to="/verwaltung/protokoll" icon={ScrollText}>
             Aktivitätsprotokoll
           </NavItem>
-          <NavItem to="/verwaltung/bereiche" icon={SquareKanban}>
-            Bereiche
-          </NavItem>
+          {projects && (
+            <NavItem to="/verwaltung/bereiche" icon={SquareKanban}>
+              Bereiche
+            </NavItem>
+          )}
           <NavItem to="/verwaltung/email" icon={Settings}>
             E-Mail
           </NavItem>
@@ -718,7 +751,8 @@ function StudentNav() {
 }
 
 function EditorNav() {
-  const { user } = useSession();
+  const session = useSession();
+  const { user } = session;
   const categories = useData<Category[]>('/categories');
   const submissions = useData<Submission[]>('/submissions');
   const groups: [Category['status'], string, string][] = [
@@ -731,9 +765,16 @@ function EditorNav() {
   const ballots = writable.filter((c) => isBallot(c.kind));
   return (
     <>
-      <NavItem to="/tickets" icon={SquareKanban}>
-        Tickets
-      </NavItem>
+      {projectsEnabled(session) && (
+        <>
+          <NavItem to="/tickets" icon={SquareKanban}>
+            Tickets
+          </NavItem>
+          <NavItem to="/dokumente" icon={Files}>
+            Dokumente
+          </NavItem>
+        </>
+      )}
       <NavGroup id="nav-sammlungen" label="Sammlungen">
         {categories.isPending ? (
           <p className={quiet}>Einen Moment …</p>
@@ -799,9 +840,20 @@ function EditorNav() {
   );
 }
 
-function RoleGuard({ children, admin = false }: { children: ReactNode; admin?: boolean }) {
-  const { user } = useSession();
-  return (admin ? user.role === 'admin' : editorial(user)) ? children : <Navigate to="/" replace />;
+// projects: the route belongs to the PROJECT_MANAGEMENT tools and disappears with the flag.
+function RoleGuard({
+  children,
+  admin = false,
+  projects = false,
+}: {
+  children: ReactNode;
+  admin?: boolean;
+  projects?: boolean;
+}) {
+  const session = useSession();
+  const { user } = session;
+  const allowed = (admin ? user.role === 'admin' : editorial(user)) && (!projects || projectsEnabled(session));
+  return allowed ? children : <Navigate to="/" replace />;
 }
 
 // ---------- home ----------
@@ -955,6 +1007,7 @@ function EditorialHome() {
   const session = useSession();
   const { user } = session;
   const isAdmin = user.role === 'admin';
+  const projects = projectsEnabled(session);
   const users = useData<User[]>('/admin/users', isAdmin);
   const categories = useData<Category[]>('/categories');
   const submissions = useData<Submission[]>('/submissions');
@@ -1011,68 +1064,79 @@ function EditorialHome() {
       <PageHead title="Redaktion">
         {isAdmin
           ? 'Zugänge und Sammlungen im Überblick.'
-          : 'Überblick über Rubriken und Beiträge aus den Sammlungen, die dir zugewiesen sind.'}
+          : projects
+            ? undefined
+            : 'Überblick über Rubriken und Beiträge aus den Sammlungen, die dir zugewiesen sind.'}
       </PageHead>
-      <section aria-labelledby="home-sammlungen" className="mb-10">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h2 id="home-sammlungen" className={heading}>
-            Sammlungen
-          </h2>
-        </div>
-        {(isAdmin ? state(categories) : managerCategoriesState) ?? (
-          <ul className="mt-4 grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">
-            {allKinds.map((kind) => {
-              const mine = (categories.data ?? []).filter((c) => c.kind === kind && canEdit(user, c.id));
-              const ids = new Set(mine.map((c) => c.id));
-              const n = writableSubmissions.filter((s) => ids.has(s.category_id)).length;
-              const submissionsKind = isSubmissionCollection(kind);
-              return (
-                <li key={kind} className="min-w-0">
-                  <Link
-                    to={`/sammlungen?klasse=${kind}`}
-                    className="flex h-full flex-col rounded-ui bg-white p-4 transition-transform hover:-translate-y-0.5 hover:bg-pop/40 active:scale-[.99] sm:p-5"
-                  >
-                    <span className="flex items-center gap-2">
-                      <KindIcon icon={kindIcon[kind]} className="size-4 text-muted" />
-                      <strong className="min-w-0 truncate text-[15px] font-bold">{kindLabel[kind]}</strong>
-                    </span>
-                    <span className="mt-5 flex items-baseline gap-2">
-                      <strong className={figure}>{categories.isPending ? '–' : mine.length}</strong>{' '}
-                      <span className="text-[13px] text-muted">{mine.length === 1 ? 'Sammlung' : 'Sammlungen'}</span>
-                    </span>
-                    {submissionsKind ? (
-                      <span className="mt-4 text-[13px] text-muted">
-                        <strong className="text-lg font-extrabold tabular-nums leading-tight text-ink">
-                          {submissions.isPending ? '–' : n}
-                        </strong>{' '}
-                        {n === 1 ? 'Beitrag' : 'Beiträge'}
+      {projects && (
+        <>
+          <div className="mb-10">
+            <MyTasks user={session} />
+          </div>
+          <div className="mb-10">
+            <DocumentTiles limit={6} />
+          </div>
+        </>
+      )}
+      {(isAdmin || !projects) && (
+        <section aria-labelledby="home-sammlungen" className="mb-10">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 id="home-sammlungen" className={heading}>
+              Sammlungen
+            </h2>
+          </div>
+          {(isAdmin ? state(categories) : managerCategoriesState) ?? (
+            <ul className="mt-4 grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">
+              {allKinds.map((kind) => {
+                const mine = (categories.data ?? []).filter((c) => c.kind === kind && canEdit(user, c.id));
+                const ids = new Set(mine.map((c) => c.id));
+                const n = writableSubmissions.filter((s) => ids.has(s.category_id)).length;
+                const submissionsKind = isSubmissionCollection(kind);
+                return (
+                  <li key={kind} className="min-w-0">
+                    <Link
+                      to={`/sammlungen?klasse=${kind}`}
+                      className="flex h-full flex-col rounded-ui bg-white p-4 transition-transform hover:-translate-y-0.5 hover:bg-pop/40 active:scale-[.99] sm:p-5"
+                    >
+                      <span className="flex items-center gap-2">
+                        <KindIcon icon={kindIcon[kind]} className="size-4 text-muted" />
+                        <strong className="min-w-0 truncate text-[15px] font-bold">{kindLabel[kind]}</strong>
                       </span>
-                    ) : (
-                      <span className="mt-4 grid grid-cols-2 gap-2 text-[13px] text-muted">
-                        <span>
-                          <strong className="block text-lg font-extrabold tabular-nums leading-tight text-ink">
-                            {mine.filter((c) => c.status === 'open').length}
+                      <span className="mt-5 flex items-baseline gap-2">
+                        <strong className={figure}>{categories.isPending ? '–' : mine.length}</strong>{' '}
+                        <span className="text-[13px] text-muted">{mine.length === 1 ? 'Sammlung' : 'Sammlungen'}</span>
+                      </span>
+                      {submissionsKind ? (
+                        <span className="mt-4 text-[13px] text-muted">
+                          <strong className="text-lg font-extrabold tabular-nums leading-tight text-ink">
+                            {submissions.isPending ? '–' : n}
                           </strong>{' '}
-                          offen
-                        </span>{' '}
-                        <span>
-                          <strong className="block text-lg font-extrabold tabular-nums leading-tight text-ink">
-                            {mine.filter((c) => c.status === 'closed').length}
-                          </strong>{' '}
-                          beendet
+                          {n === 1 ? 'Beitrag' : 'Beiträge'}
                         </span>
-                      </span>
-                    )}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-      <div className="mb-4 grid items-start gap-4 sm:grid-cols-2">
-        <TicketCards user={session} />
-      </div>
+                      ) : (
+                        <span className="mt-4 grid grid-cols-2 gap-2 text-[13px] text-muted">
+                          <span>
+                            <strong className="block text-lg font-extrabold tabular-nums leading-tight text-ink">
+                              {mine.filter((c) => c.status === 'open').length}
+                            </strong>{' '}
+                            offen
+                          </span>{' '}
+                          <span>
+                            <strong className="block text-lg font-extrabold tabular-nums leading-tight text-ink">
+                              {mine.filter((c) => c.status === 'closed').length}
+                            </strong>{' '}
+                            beendet
+                          </span>
+                        </span>
+                      )}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
       <div className="grid items-start gap-4 lg:grid-cols-[5fr_7fr]">
         {isAdmin ? (
           <section aria-labelledby="home-personen" className={card}>

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from './App';
@@ -1222,7 +1222,12 @@ describe('editor home', () => {
   ];
   function mountEditor(
     grants = ['memory', ...polls.map((p) => p.id)],
-    state: { categories?: 'pending' | 'error'; submissions?: 'pending' | 'error'; view?: string } = {},
+    state: {
+      categories?: 'pending' | 'error';
+      submissions?: 'pending' | 'error';
+      view?: string;
+      projects?: boolean;
+    } = {},
   ) {
     localStorage.clear();
     if (state.view) localStorage.setItem('view', state.view);
@@ -1233,6 +1238,7 @@ describe('editor home', () => {
           user: { ...user, role: 'manager', category_ids: grants },
           consent_required: false,
           csrf_token: 'csrf',
+          project_management: state.projects,
         });
       const endpoint = path === '/categories' ? 'categories' : path === '/submissions' ? 'submissions' : null;
       if (endpoint) {
@@ -1253,6 +1259,24 @@ describe('editor home', () => {
     );
     return fetchMock;
   }
+
+  it('puts Meine Aufgaben and documents first for managers only when the project flag is on', async () => {
+    mountEditor(undefined, { projects: true });
+    const tasks = await screen.findByRole('heading', { name: 'Meine Aufgaben' });
+    const docs = screen.getByRole('heading', { name: 'Dokumente' });
+    expect(tasks.compareDocumentPosition(docs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Sammlungen' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Tickets' })).toHaveAttribute('href', '/tickets');
+    expect(screen.getByRole('link', { name: 'Dokumente' })).toHaveAttribute('href', '/dokumente');
+    cleanup();
+    const fetchMock = mountEditor();
+    await screen.findByRole('region', { name: 'Sammlungen' });
+    expect(screen.queryByRole('heading', { name: 'Meine Aufgaben' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Tickets' })).toBeNull();
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).not.toContainEqual(
+      expect.stringMatching(/tickets|documents|areas/),
+    );
+  });
 
   it('shows every writable poll across lifecycle states and counts only assigned collections', async () => {
     const fetchMock = mountEditor();

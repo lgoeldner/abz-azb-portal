@@ -3,29 +3,30 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import type { Area, Me, Ticket } from './api';
-import { PAGE_TARGET, STALE_AFTER_DAYS, TicketCards, summarizeTickets } from './TicketCards';
+import { MyTasks } from './TicketCards';
 
-const DAY = 86_400_000;
-const NOW = Date.parse('2026-11-16T12:00:00Z');
 const iso = (ms: number) => new Date(ms).toISOString();
+const NOW = Date.parse('2026-11-16T12:00:00Z');
 const viewerId = 'mona';
 
-const area = (id: string, reviewerIds: string[]): Area => ({
+const area = (id: string, position: number, reviewerIds: string[]): Area => ({
   id,
   name: `Bereich ${id}`,
-  position: 1,
+  position,
   version: 1,
   reviewers: reviewerIds.map((r) => ({ id: r, name: r })),
 });
-const areaA = area('area-a', [viewerId]);
-const areaB = area('area-b', ['someone-else']);
+const areaA = area('area-a', 1, [viewerId]);
+const areaB = area('area-b', 2, ['someone-else']);
+const mona = { id: viewerId, name: 'Mona' };
+const other = { id: 'x', name: 'X' };
 
 function ticket(overrides: Partial<Ticket> & Pick<Ticket, 'id'>): Ticket {
   return {
     number: 1,
     comment_count: 0,
     type: 'aufgabe',
-    title: 'Ticket',
+    title: overrides.id,
     body: '',
     area_id: areaA.id,
     area_name: areaA.name,
@@ -39,15 +40,16 @@ function ticket(overrides: Partial<Ticket> & Pick<Ticket, 'id'>): Ticket {
     version: 1,
     approved: false,
     reviews: [],
-    created_at: iso(NOW - 30 * DAY),
-    updated_at: iso(NOW - DAY),
-    status_changed_at: iso(NOW - DAY),
+    created_at: iso(NOW - 30 * 86_400_000),
+    updated_at: iso(NOW),
+    status_changed_at: iso(NOW),
     ...overrides,
   };
 }
-const me = {
-  id: 'x',
-  name: 'x',
+
+const viewer = {
+  id: viewerId,
+  name: 'Mona',
   role: 'manager' as const,
   admitted: true,
   cohort_member: true,
@@ -55,140 +57,109 @@ const me = {
   created_at: iso(0),
 };
 
-describe('summarizeTickets', () => {
-  it('counts pages approved against planned articles and ignores tasks', () => {
-    const tickets = [
-      ticket({ id: '1', type: 'artikel', est_pages: 30, status: 'done', approved: true }),
-      ticket({ id: '2', type: 'artikel', est_pages: 20, status: 'done', approved: true }),
-      ticket({ id: '3', type: 'artikel', est_pages: 15, status: 'done', approved: false }),
-      ticket({ id: '4', type: 'artikel', est_pages: 10, status: 'in_progress' }),
-      ticket({ id: '5', type: 'aufgabe', est_pages: null, status: 'done', approved: true }),
-    ];
-    const s = summarizeTickets(tickets, [areaA], viewerId, false, NOW);
-    expect(s.pagesDone).toBe(50);
-    expect(s.pagesPlanned).toBe(25);
-    expect(PAGE_TARGET).toBe(100);
-  });
-
-  it('marks an assigned ticket stale only when older than seven days', () => {
-    const at = (age: number) => ticket({ id: 'a', assignee: { id: 'x', name: 'Xaver' }, updated_at: iso(NOW - age) });
-    const boundary = summarizeTickets([at(STALE_AFTER_DAYS * DAY)], [areaA], viewerId, false, NOW);
-    expect(boundary.asleep).toHaveLength(0);
-    const justOver = summarizeTickets([at(STALE_AFTER_DAYS * DAY + 60_000)], [areaA], viewerId, false, NOW);
-    expect(justOver.asleep).toHaveLength(1);
-    expect(justOver.asleep[0].days).toBe(7);
-  });
-
-  it('never lists unassigned, approved, or recently changed tickets as asleep', () => {
-    const old = iso(NOW - 30 * DAY);
-    const s = summarizeTickets(
-      [
-        ticket({ id: 'u', updated_at: old }),
-        ticket({ id: 'f', assignee: { id: 'x', name: 'X' }, status: 'done', approved: true, updated_at: old }),
-        ticket({ id: 'r', assignee: { id: 'x', name: 'X' }, updated_at: iso(NOW - DAY) }),
-      ],
-      [areaA],
-      viewerId,
-      false,
-      NOW,
-    );
-    expect(s.asleep).toHaveLength(0);
-  });
-
-  it('shows waiting tickets only for areas the viewer reviews and never own tickets', () => {
-    const tickets = [
-      ticket({ id: 'mine-in-review', area_id: areaA.id, status: 'review', assignee: { id: viewerId, name: 'Mona' } }),
-      ticket({ id: 'in-my-area', area_id: areaA.id, status: 'review', assignee: { id: 'x', name: 'X' } }),
-      ticket({ id: 'other-area', area_id: areaB.id, status: 'review', assignee: { id: 'x', name: 'X' } }),
-      ticket({ id: 'done-unapproved', area_id: areaA.id, status: 'done', assignee: { id: 'x', name: 'X' } }),
-      ticket({
-        id: 'done-approved',
-        area_id: areaA.id,
-        status: 'done',
-        approved: true,
-        assignee: { id: 'x', name: 'X' },
-      }),
-    ];
-    const s = summarizeTickets(tickets, [areaA, areaB], viewerId, false, NOW);
-    expect(s.canReview).toBe(true);
-    expect(s.waiting.map((t) => t.id).sort()).toEqual(['done-unapproved', 'in-my-area']);
-  });
-
-  it('gives a manager who reviews no area an empty waiting list', () => {
-    const s = summarizeTickets(
-      [ticket({ id: 'w', area_id: areaB.id, status: 'review', assignee: { id: 'x', name: 'X' } })],
-      [areaB],
-      viewerId,
-      false,
-      NOW,
-    );
-    expect(s.canReview).toBe(false);
-    expect(s.waiting).toHaveLength(0);
-  });
-
-  it('lets an admin see waiting tickets of every area, but not their own', () => {
-    const tickets = [
-      ticket({ id: 'b', area_id: areaB.id, status: 'review', assignee: { id: 'x', name: 'X' } }),
-      ticket({ id: 'own', area_id: areaB.id, status: 'review', assignee: { id: viewerId, name: 'Mona' } }),
-    ];
-    const s = summarizeTickets(tickets, [areaB], viewerId, true, NOW);
-    expect(s.canReview).toBe(true);
-    expect(s.waiting.map((t) => t.id)).toEqual(['b']);
-  });
-
-  it('lists only open tickets assigned to the viewer', () => {
-    const tickets = [
-      ticket({ id: 'open', assignee: { id: viewerId, name: 'Mona' } }),
-      ticket({ id: 'done', assignee: { id: viewerId, name: 'Mona' }, status: 'done', approved: true }),
-      ticket({ id: 'other', assignee: { id: 'x', name: 'X' } }),
-    ];
-    expect(summarizeTickets(tickets, [areaA], viewerId, false, NOW).mine.map((t) => t.id)).toEqual(['open']);
-  });
-});
-
-function renderCards(tickets: Response, areas: Response, viewer = me) {
+function renderTasks(tickets: Ticket[] | Response, areas: Area[], who: Me['user'] = viewer) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.startsWith('/api/v1/tickets')) return tickets.clone();
-      if (url === '/api/v1/areas') return areas.clone();
+      if (url === '/api/v1/tickets') return tickets instanceof Response ? tickets.clone() : Response.json(tickets);
+      if (url === '/api/v1/areas') return Response.json(areas);
       throw new Error(`unexpected ${url}`);
     }),
   );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const user: Me = { user: viewer, consent_required: false, csrf_token: 'x' };
+  const user: Me = { user: who, consent_required: false, csrf_token: 'x' };
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <TicketCards user={user} />
+        <MyTasks user={user} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
 }
 
-describe('TicketCards', () => {
-  it('hides the waiting card for a manager who reviews no area', async () => {
-    const tickets = [ticket({ id: 't-3', number: 3, title: 'Mein Ticket', assignee: { id: viewerId, name: 'Mona' } })];
-    renderCards(Response.json(tickets), Response.json([areaB]), { ...me, id: viewerId });
-    expect(await screen.findByRole('link', { name: /Mein Ticket/ })).toHaveAttribute('href', '/tickets/t-3');
-    expect(screen.queryByRole('heading', { name: 'Wartet auf deine Abnahme' })).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Seiten fertig' })).toBeInTheDocument();
+const titles = () => screen.getAllByRole('link').map((a) => a.textContent ?? '');
+
+describe('MyTasks', () => {
+  it('lists my unfinished tickets as review, in progress, todo, then done awaiting approval', async () => {
+    renderTasks(
+      [
+        ticket({ id: 'p-done', status: 'done', assignee: mona }),
+        ticket({ id: 'p-todo', status: 'todo', assignee: mona }),
+        ticket({ id: 'p-review', status: 'review', assignee: mona }),
+        ticket({ id: 'p-work', status: 'in_progress', assignee: mona }),
+      ],
+      [areaB],
+    );
+    await screen.findByRole('link', { name: /p-review/ });
+    const order = titles().filter((t) => t.startsWith('p-'));
+    expect(order.findIndex((t) => t.includes('p-review'))).toBeLessThan(order.findIndex((t) => t.includes('p-work')));
+    expect(order.findIndex((t) => t.includes('p-work'))).toBeLessThan(order.findIndex((t) => t.includes('p-todo')));
+    expect(order.findIndex((t) => t.includes('p-todo'))).toBeLessThan(order.findIndex((t) => t.includes('p-done')));
   });
 
-  it('shows the waiting card for a reviewer', async () => {
+  it('links to the ticket and shows its area and status', async () => {
+    renderTasks([ticket({ id: 't-1', title: 'Mein Ticket', status: 'in_progress', assignee: mona })], [areaA]);
+    const link = await screen.findByRole('link', { name: /Mein Ticket/ });
+    expect(link).toHaveAttribute('href', '/tickets/t-1');
+    expect(link).toHaveTextContent('Bereich area-a');
+    expect(link).toHaveTextContent('In Arbeit');
+  });
+
+  it('leaves out finished tickets and tickets of other people', async () => {
+    renderTasks(
+      [
+        ticket({ id: 'open', title: 'Offen eins', assignee: mona }),
+        ticket({ id: 'fin', title: 'Fertig eins', assignee: mona, status: 'done', approved: true }),
+        ticket({ id: 'oth', title: 'Fremd eins', assignee: other }),
+      ],
+      [areaB],
+    );
+    await screen.findByRole('link', { name: /Offen eins/ });
+    expect(screen.queryByText('Fertig eins')).not.toBeInTheDocument();
+    expect(screen.queryByText('Fremd eins')).not.toBeInTheDocument();
+  });
+
+  it('shows what waits for approval only to reviewers, never their own tickets', async () => {
     const tickets = [
-      ticket({ id: 'w', title: 'Zur Abnahme', area_id: areaA.id, status: 'review', assignee: { id: 'x', name: 'X' } }),
+      ticket({ id: 'w1', title: 'In meinem Bereich', status: 'review', assignee: other }),
+      ticket({ id: 'w2', title: 'Im anderen Bereich', status: 'review', assignee: other, area_id: areaB.id }),
+      ticket({ id: 'w3', title: 'Mein eigenes', status: 'review', assignee: mona }),
     ];
-    renderCards(Response.json(tickets), Response.json([areaA]), { ...me, id: viewerId });
-    expect(await screen.findByRole('link', { name: /Zur Abnahme/ })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Wartet auf deine Abnahme' })).toBeInTheDocument();
+    renderTasks(tickets, [areaA, areaB]);
+    expect(await screen.findByRole('heading', { name: 'Wartet auf deine Freigabe' })).toBeInTheDocument();
+    const section = screen.getByRole('heading', { name: 'Wartet auf deine Freigabe' }).parentElement!;
+    expect(section).toHaveTextContent('In meinem Bereich');
+    expect(section).not.toHaveTextContent('Im anderen Bereich');
+    expect(section).not.toHaveTextContent('Mein eigenes');
+  });
+
+  it('hides the waiting list for a manager who reviews no area, shows all areas to an admin', async () => {
+    const tickets = [ticket({ id: 'w', title: 'Wartet', status: 'review', assignee: other, area_id: areaB.id })];
+    const { unmount } = renderTasks(tickets, [areaB]);
+    await screen.findByText('Dir ist gerade nichts zugewiesen.');
+    expect(screen.queryByRole('heading', { name: 'Wartet auf deine Freigabe' })).not.toBeInTheDocument();
+    unmount();
+    renderTasks(tickets, [areaB], { ...viewer, role: 'admin' });
+    expect(await screen.findByRole('heading', { name: 'Wartet auf deine Freigabe' })).toBeInTheDocument();
+  });
+
+  it('shows six rows and a link for the rest', async () => {
+    const many = Array.from({ length: 8 }, (_, i) => ticket({ id: `m${i}`, title: `Aufgabe ${i}`, assignee: mona }));
+    renderTasks(many, [areaB]);
+    const more = await screen.findByRole('link', { name: 'und 2 weitere' });
+    expect(more).toHaveAttribute('href', '/tickets');
+    expect(screen.getAllByRole('link', { name: /Aufgabe/ })).toHaveLength(6);
+  });
+
+  it('shows a short empty state with a link to the board', async () => {
+    renderTasks([], [areaA]);
+    expect(await screen.findByText('Dir ist gerade nichts zugewiesen.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Zum Board' })).toHaveAttribute('href', '/tickets');
   });
 
   it('shows a failure with retry when the tickets cannot be loaded', async () => {
-    renderCards(Response.json({ error: { code: 'boom', message: 'Kaputt' } }, { status: 500 }), Response.json([areaA]));
-    const alerts = await screen.findAllByRole('alert');
-    expect(alerts.length).toBeGreaterThan(0);
-    alerts.forEach((alert) => expect(alert).toHaveTextContent('Das hat noch nicht geklappt.'));
+    renderTasks(Response.json({ error: { code: 'boom', message: 'Kaputt' } }, { status: 500 }), [areaA]);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Das hat noch nicht geklappt.');
   });
 });
