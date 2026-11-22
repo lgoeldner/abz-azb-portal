@@ -1071,7 +1071,8 @@ const eventText: Record<TicketEvent['kind'], { text: string }> = {
   review: { text: 'hat ein Review abgegeben' },
   edit: { text: 'hat das Ticket bearbeitet' },
 };
-const EVENT_LIMIT = 50;
+// Only the latest entries show; older moves and comments collapse into one summary row.
+const EVENT_LIMIT = 3;
 const editedField: Record<string, string> = {
   title: 'Titel',
   body: 'Beschreibung',
@@ -1288,9 +1289,20 @@ function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) 
             <h2 id="ticket-timeline" className={heading + ' mb-4'}>
               Aktivität
             </h2>
-            {events.length > shown.length && (
-              <button type="button" className={btn.text + ' mb-4'} onClick={() => setAllEvents(true)}>
-                Ältere Aktivität anzeigen ({events.length - shown.length})
+            {events.length > EVENT_LIMIT && (
+              <button
+                type="button"
+                aria-expanded={allEvents}
+                className="mb-4 flex min-h-11 w-full items-center gap-2 rounded-lg border border-dashed border-line px-3 text-left text-sm text-muted transition-colors hover:bg-soft"
+                onClick={() => setAllEvents(!allEvents)}
+              >
+                <ChevronDown
+                  aria-hidden="true"
+                  className={'size-4 shrink-0 transition-transform ' + (allEvents ? '' : '-rotate-90')}
+                />
+                {allEvents
+                  ? 'Ältere Änderungen ausblenden'
+                  : `${events.length - EVENT_LIMIT} ${events.length - EVENT_LIMIT === 1 ? 'Änderung' : 'Änderungen'} seit ${date(events[0]!.created_at)}`}
               </button>
             )}
             {shown.length ? (

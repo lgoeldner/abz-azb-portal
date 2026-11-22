@@ -604,6 +604,7 @@ describe('ticket page state transitions', () => {
     installApi([ticket()], { events });
     renderAt('/tickets/ticket-1', manager);
     const section = (await screen.findByRole('heading', { name: 'Aktivität' })).closest('section') as HTMLElement;
+    await userEvent.click(within(section).getByRole('button', { name: /1 Änderung seit/ }));
     const items = within(section).getAllByRole('listitem');
     expect(within(items[0]).getByText('Offen')).toBeInTheDocument();
     expect(within(items[0]).getByText('Wartet auf Review')).toBeInTheDocument();
@@ -613,6 +614,33 @@ describe('ticket page state transitions', () => {
     expect(within(items[2]).getByText('Mona Manager', { selector: 'span' })).toBeInTheDocument();
     expect(items[3]).toHaveTextContent('Änderungen nötig');
     expect(items[3]).not.toHaveTextContent('changes');
+  });
+});
+
+describe('ticket page activity', () => {
+  it('shows only the latest three entries and summarizes the older ones until expanded', async () => {
+    const events: TicketEvent[] = [1, 2, 3, 4, 5].map((n) => ({
+      id: 'e' + n,
+      kind: 'comment',
+      actor: ref(manager),
+      body: 'Kommentar ' + n,
+      detail: '',
+      created_at: '2026-12-0' + n + 'T11:30:00Z',
+    }));
+    installApi([ticket()], { events });
+    renderAt('/tickets/ticket-1', manager);
+    const section = (await screen.findByRole('heading', { name: 'Aktivität' })).closest('section') as HTMLElement;
+    const summary = within(section).getByRole('button', { name: /^2 Änderungen seit / });
+    expect(summary).toHaveAttribute('aria-expanded', 'false');
+    expect(summary).toHaveTextContent(
+      new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium' }).format(new Date(events[0]!.created_at)),
+    );
+    expect(within(section).getAllByRole('listitem')).toHaveLength(3);
+    expect(within(section).queryByText('Kommentar 1')).not.toBeInTheDocument();
+    await userEvent.click(summary);
+    expect(within(section).getAllByRole('listitem')).toHaveLength(5);
+    await userEvent.click(within(section).getByRole('button', { name: 'Ältere Änderungen ausblenden' }));
+    expect(within(section).getAllByRole('listitem')).toHaveLength(3);
   });
 });
 
