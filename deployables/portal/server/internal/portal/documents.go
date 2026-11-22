@@ -43,10 +43,12 @@ func documentFields(title, kind, body string) (string, error) {
 	return title, nil
 }
 
-// markViewed records that the caller has seen the document in its current state.
-func markViewed(ctx context.Context, db DB, userID, id string) error {
-	_, e := db.Exec(ctx, "INSERT INTO document_views(document_id,user_id,viewed_at) VALUES($1,$2,now()) ON CONFLICT(user_id,document_id) DO UPDATE SET viewed_at=now()", id, userID)
-	return e
+// markViewed records that the caller has seen the document in the state it has now. viewed_at is the row's updated_at,
+// not now(): an edit that started earlier but commits later has a smaller now() than the reader's transaction and
+// would otherwise never show as unread.
+func markViewed(ctx context.Context, db DB, userID, id string) (int64, error) {
+	tag, e := db.Exec(ctx, "INSERT INTO document_views(document_id,user_id,viewed_at) SELECT id,$2,updated_at FROM documents WHERE id=$1 ON CONFLICT(user_id,document_id) DO UPDATE SET viewed_at=GREATEST(document_views.viewed_at,EXCLUDED.viewed_at)", id, userID)
+	return tag.RowsAffected(), e
 }
 
 func (a *App) listDocuments(w http.ResponseWriter, r *http.Request) error {
@@ -125,11 +127,11 @@ func (a *App) getDocument(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	defer tx.Rollback(r.Context())
-	tag, e := tx.Exec(r.Context(), "INSERT INTO document_views(document_id,user_id,viewed_at) SELECT id,$2,now() FROM documents WHERE id=$1 ON CONFLICT(user_id,document_id) DO UPDATE SET viewed_at=now()", id, u.ID)
+	n, e := markViewed(r.Context(), tx, u.ID, id)
 	if e != nil {
 		return e
 	}
-	if tag.RowsAffected() != 1 {
+	if n != 1 {
 		return missing()
 	}
 	d, e := loadDocument(r.Context(), tx, u.ID, id)
@@ -173,10 +175,10 @@ func (a *App) editDocument(w http.ResponseWriter, r *http.Request) error {
 	if version != in.Version {
 		return conflict()
 	}
-	if _, e = tx.Exec(r.Context(), "UPDATE documents SET title=$2,kind=$3,body=$4,version=version+1,updated_by=$5,updated_at=now() WHERE id=$1", id, title, in.Kind, in.Body, u.ID); e != nil {
+	if _, e = tx.Exec(r.Context(), "UPDATE documents SET title=$2,kind=$3,body=$4,version=version+1,updated_by=$5,updated_at=GREATEST(now(),updated_at+interval '1 microsecond') WHERE id=$1", id, title, in.Kind, in.Body, u.ID); e != nil {
 		return e
 	}
-	if e = markViewed(r.Context(), tx, u.ID, id); e != nil {
+	if _, e = markViewed(r.Context(), tx, u.ID, id); e != nil {
 		return e
 	}
 	if e = audit(r.Context(), tx, u, "document.updated", id); e != nil {

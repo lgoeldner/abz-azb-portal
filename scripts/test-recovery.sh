@@ -166,11 +166,13 @@ INSERT INTO tickets(id,type,title,area_id,assignee_id,created_by,size,goal,est_p
 VALUES ('90000000-0000-4000-8000-000000000070','artikel','restore-ticket','60000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000003','M','restore goal',2,'done');
 INSERT INTO ticket_events(id,ticket_id,actor_id,kind,body) VALUES ('90000000-0000-4000-8000-000000000071','90000000-0000-4000-8000-000000000070','00000000-0000-4000-8000-000000000003','comment','restore comment');
 INSERT INTO ticket_reviews(ticket_id,user_id,round,verdict,binding) VALUES ('90000000-0000-4000-8000-000000000070','00000000-0000-4000-8000-000000000003',1,'approve',true);
+INSERT INTO documents(id,title,kind,body,created_by,updated_by) VALUES ('90000000-0000-4000-8000-000000000072','restore-document','meeting','restore body','00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000003');
+INSERT INTO document_views(document_id,user_id) VALUES ('90000000-0000-4000-8000-000000000072','00000000-0000-4000-8000-000000000003');
 SQL
 
 capture_signature() {
   local database=$1 table
-  for table in users categories submissions revisions attachments corrections poll_options ballots ballot_audit audit_events schema_migrations auth_accounts auth_rate_limits auth_email_rate_limits mail_policy mail_delivery_events mail_admin_events areas area_reviewers tickets ticket_events ticket_reviews; do
+  for table in users categories submissions revisions attachments corrections poll_options ballots ballot_audit audit_events schema_migrations auth_accounts auth_rate_limits auth_email_rate_limits mail_policy mail_delivery_events mail_admin_events areas area_reviewers tickets ticket_events ticket_reviews documents document_views; do
     dc exec -e PGDATABASE="$database" "$pg" psql -X -qAt -U portal -c \
       "SELECT '$table',count(*),COALESCE(md5(string_agg(row_to_json(t)::text,E'\\n' ORDER BY row_to_json(t)::text)),'') FROM $table t" \
       | tr -d '\r'
@@ -262,5 +264,6 @@ check_count 'delivery event preservation' "SELECT count(*) FROM mail_delivery_ev
 check_count 'local mail budget preservation' 'SELECT daily_limit FROM mail_policy WHERE id=1' 300
 check_count 'pending reminder cancellation' "SELECT count(*) FROM mail_reminder_jobs WHERE id='90000000-0000-4000-8000-000000000060' AND status='cancelled' AND lease_until IS NULL" 1
 check_count 'ticket, event, review and reviewer grant preservation' "SELECT (SELECT count(*) FROM tickets WHERE id='90000000-0000-4000-8000-000000000070')+(SELECT count(*) FROM ticket_events WHERE id='90000000-0000-4000-8000-000000000071')+(SELECT count(*) FROM ticket_reviews WHERE ticket_id='90000000-0000-4000-8000-000000000070')+(SELECT count(*) FROM area_reviewers WHERE area_id='60000000-0000-4000-8000-000000000001' AND user_id='00000000-0000-4000-8000-000000000003')" 4
+check_count 'document and view preservation' "SELECT (SELECT count(*) FROM documents WHERE id='90000000-0000-4000-8000-000000000072' AND title='restore-document' AND body='restore body')+(SELECT count(*) FROM document_views WHERE document_id='90000000-0000-4000-8000-000000000072' AND user_id='00000000-0000-4000-8000-000000000003')" 2
 
 echo "Recovery drill passed for snapshot $snapshot (migrations, seed data, ballots, attachments, credential revocation, and mail audit/quota recovery verified)."

@@ -44,7 +44,7 @@ func categoryID(i int) string { return fmt.Sprintf("10000000-0000-4000-8000-%012
 // areaID addresses the Bereiche created by migration 013 (1 Redaktion ... 8 Orga); ticketID the seeded fixtures.
 func areaID(i int) string   { return fmt.Sprintf("60000000-0000-4000-8000-%012d", i) }
 func ticketID(i int) string { return fmt.Sprintf("70000000-0000-4000-8000-%012d", i) }
-func docID(i int) string    { return fmt.Sprintf("70000000-0000-4000-8000-%012d", i) }
+func docID(i int) string    { return fmt.Sprintf("71000000-0000-4000-8000-%012d", i) }
 func Seed(ctx context.Context, pool *pgxpool.Pool, environment string) error {
 	return SeedWithIssuer(ctx, pool, environment, "http://localhost:9090")
 }

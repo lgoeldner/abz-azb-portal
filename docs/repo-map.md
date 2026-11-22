@@ -57,7 +57,7 @@ cmd `scripts/doctor.sh` :: checks local prerequisites [setup]
 cmd `scripts/env.sh` :: creates .env.dev [env]
 cmd `scripts/check-contract.mjs` :: runs `go run ./cmd/openapi`; verifies docs/openapi.json and api.d.ts are current; `--write` regenerates both [contract, codegen]
 cmd `scripts/check-repo-map.sh` :: fails if a path in this map no longer exists [map, stale]
-cmd `scripts/test-recovery.sh` :: backup/restore against throwaway containers, including word originals, moderation, ballots, history and passkey removal [recovery, backup, words, passkey]
+cmd `scripts/test-recovery.sh` :: backup/restore against throwaway containers, including word originals, moderation, ballots, history, documents with view marks and passkey removal [recovery, backup, words, passkey, documents]
 cmd `scripts/test-compose-startup.sh` :: disposable cold/existing runtime starts before PostgreSQL, then Compose restart and API/Vite readiness checks [docker, startup, restart, regression]
 
 ## Backend (deployables/portal/server)

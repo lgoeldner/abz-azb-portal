@@ -190,6 +190,16 @@ func TestDocumentUnreadFollowsOtherPeoplesChanges(t *testing.T) {
 	if !f.unread(m2, d.ID) {
 		t.Fatal("the other manager was not notified of the change")
 	}
+
+	// An edit whose transaction began before the reader's but committed after it carries an updated_at older than
+	// the reader's wall clock. It must still show as unread, so the view is pinned to the row that was read.
+	f.get(m2, d.ID)
+	if _, err := f.pool.Exec(context.Background(), "UPDATE documents SET updated_by=$2,version=version+1,updated_at=updated_at+interval '1 microsecond' WHERE id=$1", d.ID, m1); err != nil {
+		t.Fatal(err)
+	}
+	if !f.unread(m2, d.ID) {
+		t.Fatal("an edit committed after the read but stamped before it was not shown as unread")
+	}
 }
 
 func TestDocumentDeleteIsForCreatorAndAdmins(t *testing.T) {
