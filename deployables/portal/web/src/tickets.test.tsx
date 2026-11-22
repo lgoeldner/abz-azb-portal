@@ -85,7 +85,7 @@ interface Write {
 }
 function installApi(
   tickets: Ticket[],
-  options: { events?: TicketEvent[]; statusError?: number; reviewError?: number } = {},
+  options: { events?: TicketEvent[]; statusError?: number; reviewError?: number; patchError?: number } = {},
 ) {
   const writes: Write[] = [];
   const gets: string[] = [];
@@ -100,7 +100,13 @@ function installApi(
         return Response.json({ error: { code: 'stale', message: 'stale' } }, { status: options.reviewError });
       if (path.endsWith('/status') && options.statusError)
         return Response.json({ error: { code: 'stale', message: 'stale' } }, { status: options.statusError });
-      if (path === '/tickets') return Response.json(ticket({ id: 'created-1', ...(body as Partial<Ticket>) }));
+      if (method === 'PATCH' && options.patchError)
+        return Response.json({ error: { code: 'stale', message: 'stale' } }, { status: options.patchError });
+      // Like the server: a ticket with an assignee starts in progress.
+      if (path === '/tickets')
+        return Response.json(
+          ticket({ id: 'created-1', ...(body as Partial<Ticket>), status: body.assignee_id ? 'in_progress' : 'todo' }),
+        );
       return Response.json(tickets[0] ?? {});
     }
     gets.push(path + url.search);
@@ -653,8 +659,34 @@ describe('new ticket', () => {
     await user.selectOptions(screen.getByLabelText('Größe'), 'S');
     await user.type(screen.getByLabelText('Zieldefinition'), 'Ziel');
     await user.click(screen.getByRole('button', { name: 'Ticket anlegen' }));
-    await waitFor(() => expect(api.writes).toHaveLength(1));
+    await waitFor(() => expect(api.writes).toHaveLength(2));
     expect(api.writes[0].path).toBe('/tickets');
+    expect(api.writes[1]).toMatchObject({ path: '/tickets/created-1/status', body: { status: 'todo' } });
+  });
+
+  async function createFrom(query: string) {
+    const api = installApi([]);
+    const user = userEvent.setup();
+    renderAt('/tickets/neu?' + query, manager);
+    await user.type(await screen.findByLabelText('Titel'), 'Sponsoren');
+    await user.selectOptions(screen.getByLabelText('Größe'), 'S');
+    await user.type(screen.getByLabelText('Zieldefinition'), 'Ziel');
+    await user.click(screen.getByRole('button', { name: 'Ticket anlegen' }));
+    return api;
+  }
+
+  it('moves a self-assigned ticket back to todo when created from the Offen column', async () => {
+    const api = await createFrom('bereich=area-redaktion&status=todo');
+    await waitFor(() => expect(api.writes).toHaveLength(2));
+    expect(api.writes[1]).toMatchObject({ path: '/tickets/created-1/status', body: { version: 3, status: 'todo' } });
+  });
+
+  it('sends no extra status move when the created ticket already is in the requested column', async () => {
+    const api = await createFrom('bereich=area-redaktion&status=in_progress');
+    await waitFor(() => expect(api.writes).toHaveLength(1));
+    // Give a wrongly sent second request the chance to show up.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(api.writes).toHaveLength(1);
   });
 
   async function fill(user: ReturnType<typeof userEvent.setup>, size?: string, goal?: string) {
@@ -691,7 +723,7 @@ describe('new ticket', () => {
     await user.clear(screen.getByLabelText('Seiten'));
     await user.type(screen.getByLabelText('Seiten'), '2');
     await user.click(screen.getByRole('button', { name: 'Ticket anlegen' }));
-    await waitFor(() => expect(api.writes).toHaveLength(1));
+    await waitFor(() => expect(api.writes).toHaveLength(2)); // create, then the move to todo
     expect(api.writes[0].body).toMatchObject({ type: 'artikel', est_pages: 2, size: 'M', area_id: 'area-redaktion' });
   });
 
@@ -702,7 +734,7 @@ describe('new ticket', () => {
     await fill(user, 'S', '5 Angebote');
     expect(screen.queryByLabelText('Seiten')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Ticket anlegen' }));
-    await waitFor(() => expect(api.writes).toHaveLength(1));
+    await waitFor(() => expect(api.writes).toHaveLength(2));
     expect(api.writes[0]).toMatchObject({ path: '/tickets', method: 'POST' });
     expect(api.writes[0].body).toMatchObject({
       type: 'aufgabe',
@@ -744,5 +776,113 @@ describe('new ticket', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
       'Muss messbar sein (begrenzte Anzahl statt offener Aufgabe, z. B. 5 Angebote besorgen statt mehrere) und innerhalb einer Arbeitsphase (zwei Wochen) erfüllbar sein, sonst in Unteraufgaben teilen.',
     );
+  });
+});
+
+describe('ticket board permissions and drag', () => {
+  const mine = ticket({ id: 't-mine', number: 1, title: 'Meins', status: 'todo' });
+  const foreign = ticket({ id: 't-foreign', number: 2, title: 'Fremdes', status: 'todo', assignee: ref(reviewer) });
+  const layout = ticket({
+    id: 't-layout',
+    number: 3,
+    title: 'Layout bauen',
+    status: 'todo',
+    area_id: 'area-layout',
+    area_name: 'Layout',
+  });
+
+  it('offers status changes and dragging only to the assignee, area reviewers and admins', async () => {
+    installApi([mine, foreign]);
+    const { unmount } = renderAt('/tickets', manager);
+    const own = await screen.findByRole('article', { name: '#1 Meins' });
+    const other = screen.getByRole('article', { name: '#2 Fremdes' });
+    expect(own).toHaveAttribute('draggable', 'true');
+    expect(within(own).getByRole('button', { name: 'Status von #1 ändern' })).toBeInTheDocument();
+    expect(other).toHaveAttribute('draggable', 'false');
+    expect(within(other).queryByRole('button', { name: /Status von/ })).not.toBeInTheDocument();
+    expect(within(other).getByText('Offen')).toBeInTheDocument();
+    unmount();
+
+    for (const person of [reviewer, admin]) {
+      const view = renderAt('/tickets', person);
+      const card = await screen.findByRole('article', { name: '#1 Meins' });
+      expect(card).toHaveAttribute('draggable', 'true');
+      expect(within(card).getByRole('button', { name: 'Status von #1 ändern' })).toBeInTheDocument();
+      view.unmount();
+    }
+  });
+
+  it('refuses drops into another Bereich and does not send a status move', async () => {
+    const api = installApi([mine, layout, ticket({ ...layout, id: 't-layout-2', number: 4, assignee: ref(manager) })]);
+    renderAt('/tickets', manager);
+    const card = await screen.findByRole('article', { name: '#4 Layout bauen' });
+    const own = within(screen.getByRole('region', { name: 'Bereich Layout' }));
+    const foreignColumn = within(screen.getByRole('region', { name: 'Bereich Redaktion' })).getByRole('region', {
+      name: 'Fertig',
+    });
+    const sameColumn = own.getByRole('region', { name: 'Fertig' });
+    const dataTransfer = { setData: vi.fn(), effectAllowed: '' };
+    fireEvent(card, Object.assign(createEvent.dragStart(card), { dataTransfer }));
+    expect(fireEvent.dragOver(foreignColumn)).toBe(true); // not cancelled: no drop target
+    fireEvent.drop(foreignColumn);
+    expect(api.writes).toHaveLength(0);
+    fireEvent(card, Object.assign(createEvent.dragStart(card), { dataTransfer }));
+    expect(fireEvent.dragOver(sameColumn)).toBe(false); // cancelled: valid drop target
+    fireEvent.drop(sameColumn);
+    await waitFor(() => expect(api.writes).toHaveLength(1));
+    expect(api.writes[0]).toMatchObject({ path: '/tickets/t-layout-2/status', body: { status: 'done' } });
+  });
+
+  it('keeps focus inside the status sheet: first option focused, Tab and Shift+Tab wrap', async () => {
+    installApi([mine]);
+    const user = userEvent.setup();
+    renderAt('/tickets', manager);
+    await user.click(await screen.findByRole('button', { name: 'Status von #1 ändern' }));
+    const sheet = screen.getByRole('dialog', { name: 'Status von #1 wählen' });
+    expect(sheet).toHaveAttribute('aria-modal', 'true');
+    const options = within(sheet).getAllByRole('button');
+    expect(options[0]).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(options[options.length - 1]).toHaveFocus();
+    await user.tab();
+    expect(options[0]).toHaveFocus();
+  });
+
+  it('closes the area picker when focus leaves it', async () => {
+    installApi([mine]);
+    const user = userEvent.setup();
+    renderAt('/tickets/neu', manager);
+    await user.click(await screen.findByRole('button', { name: 'Bereich' }));
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    await user.tab();
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+});
+
+describe('ticket edit versions', () => {
+  it('sends the version the edit started from, even when a refetch brought a newer one', async () => {
+    const current = ticket({ version: 3 });
+    const api = installApi([current]);
+    renderAt('/tickets/ticket-1', manager);
+    await userEvent.click(await screen.findByRole('button', { name: /Bearbeiten/ }));
+    // Someone else saves meanwhile; the open page refetches.
+    current.version = 4;
+    const loads = () => api.gets.filter((g) => g === '/tickets/ticket-1').length;
+    const before = loads();
+    window.dispatchEvent(new Event('visibilitychange'));
+    await waitFor(() => expect(loads()).toBeGreaterThan(before));
+    await userEvent.click(screen.getByRole('button', { name: 'Speichern' }));
+    await waitFor(() => expect(api.writes).toHaveLength(1));
+    expect(api.writes[0]).toMatchObject({ method: 'PATCH', body: { version: 3 } });
+  });
+
+  it('shows the conflict hint and stays in the form when the save is rejected', async () => {
+    const api = installApi([ticket()], { patchError: 409 });
+    renderAt('/tickets/ticket-1', manager);
+    await userEvent.click(await screen.findByRole('button', { name: /Bearbeiten/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Speichern' }));
+    expect((await screen.findAllByRole('alert'))[0]).toHaveTextContent('inzwischen geändert');
+    expect(screen.getByRole('button', { name: 'Speichern' })).toBeInTheDocument();
+    expect(api.writes).toHaveLength(1);
   });
 });

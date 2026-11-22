@@ -116,11 +116,19 @@ function useDismiss(open: boolean, close: () => void) {
       close();
       ref.current?.querySelector('button')?.focus();
     };
+    // Tabbing out of the popover closes it as well.
+    const leave = (e: FocusEvent) => {
+      const next = e.relatedTarget as Node | null;
+      if (next && !ref.current?.contains(next)) close();
+    };
+    const node = ref.current;
     document.addEventListener('pointerdown', press);
     document.addEventListener('keydown', key);
+    node?.addEventListener('focusout', leave);
     return () => {
       document.removeEventListener('pointerdown', press);
       document.removeEventListener('keydown', key);
+      node?.removeEventListener('focusout', leave);
     };
   });
   return ref;
@@ -178,7 +186,7 @@ function Hint({ name, children }: { name: string; children: string }) {
         aria-label={'Hilfe: ' + name}
         aria-expanded={open}
         aria-describedby={open ? id : undefined}
-        className="inline-flex size-6 items-center justify-center rounded-full bg-transparent text-muted hover:text-ink"
+        className="relative inline-flex size-6 items-center justify-center rounded-full bg-transparent text-muted before:absolute before:-inset-2.5 hover:text-ink"
         onClick={() => setOpen(!open)}
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
@@ -410,13 +418,15 @@ export function Board() {
     if (ticket.status === status) return;
     void action.run(() => api('/tickets/' + ticket.id + '/status', json('POST', { version: ticket.version, status })));
   }
-  function drop(event: DragEvent, status: Status) {
+  const dragged = tickets.data?.find((t) => t.id === dragId);
+  // A card only moves within its own Bereich.
+  function drop(event: DragEvent, areaOfColumn: string, status: Status) {
     event.preventDefault();
     setOver('');
-    const ticket = tickets.data?.find((t) => t.id === dragId);
     setDragId('');
-    if (ticket) move(ticket, status);
+    if (dragged && dragged.area_id === areaOfColumn) move(dragged, status);
   }
+  const mayMove = (t: Ticket, area: Area) => isReviewer(user, area) || t.assignee?.id === user.id;
 
   const typeFilter = (
     <div className="flex flex-wrap gap-2" role="group" aria-label="Typ">
@@ -528,15 +538,15 @@ export function Board() {
                           className={
                             'w-[85vw] max-w-sm flex-none snap-start rounded-xl p-3 md:w-auto md:max-w-none ' +
                             tone.column +
-                            (over === key && dragId ? ' outline outline-2 outline-ink/30' : '')
+                            (over === key && dragged ? ' outline outline-2 outline-ink/30' : '')
                           }
                           onDragOver={(e) => {
-                            if (!dragId) return;
+                            if (!dragged || dragged.area_id !== area.id) return;
                             e.preventDefault();
                             setOver(key);
                           }}
                           onDragLeave={() => setOver('')}
-                          onDrop={(e) => drop(e, status)}
+                          onDrop={(e) => drop(e, area.id, status)}
                         >
                           <h3 className="mb-3 flex items-center gap-2 px-1">
                             <StatusPill status={status} />
@@ -550,6 +560,7 @@ export function Board() {
                                 ticket={t}
                                 position={area.position}
                                 busy={action.busy}
+                                movable={mayMove(t, area)}
                                 onDragStart={() => setDragId(t.id)}
                                 onDragEnd={() => {
                                   setDragId('');
@@ -591,6 +602,19 @@ export function Board() {
 function StatusMenu({ ticket: t, busy, onMove }: { ticket: Ticket; busy: boolean; onMove: (status: Status) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useDismiss(open, () => setOpen(false));
+  // Keeps Tab inside the modal sheet.
+  function trapTab(e: KeyboardEvent) {
+    if (e.key !== 'Tab') return;
+    const buttons = e.currentTarget.querySelectorAll('button');
+    const [first, last] = [buttons[0], buttons[buttons.length - 1]];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last?.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first?.focus();
+    }
+  }
   return (
     // Above the card's stretched link; the open menu rises above the neighbouring cards.
     <div ref={ref} className={'relative flex-none ' + (open ? 'z-50' : 'z-10')}>
@@ -615,15 +639,17 @@ function StatusMenu({ ticket: t, busy, onMove }: { ticket: Ticket; busy: boolean
           />
           <div
             role="dialog"
+            aria-modal="true"
             aria-label={'Status von #' + t.number + ' wählen'}
+            onKeyDown={trapTab}
             className="fixed inset-x-0 bottom-0 z-50 grid gap-1 rounded-t-2xl bg-white p-3 pb-8 shadow-lg md:absolute md:inset-x-auto md:bottom-auto md:right-0 md:top-full md:mt-1 md:w-64 md:rounded-lg md:border md:border-[#e9e9e7] md:p-1.5"
           >
             <p className="px-3 pb-1 pt-1 text-sm font-bold text-muted md:hidden">Status ändern</p>
-            {STATUSES.map((s) => (
+            {STATUSES.map((s, i) => (
               <button
                 key={s}
                 type="button"
-                autoFocus={s === t.status}
+                autoFocus={i === 0}
                 aria-pressed={s === t.status}
                 className="flex min-h-12 items-center justify-between gap-3 rounded-lg px-3 text-left hover:bg-soft"
                 onClick={() => {
@@ -646,6 +672,7 @@ function TicketCard({
   ticket: t,
   position,
   busy,
+  movable,
   onDragStart,
   onDragEnd,
   onMove,
@@ -653,6 +680,8 @@ function TicketCard({
   ticket: Ticket;
   position: number;
   busy: boolean;
+  /** Only the assignee, a reviewer of the Bereich and admins may change the status (the server answers 403 otherwise). */
+  movable: boolean;
   onDragStart: () => void;
   onDragEnd: () => void;
   onMove: (status: Status) => void;
@@ -660,9 +689,12 @@ function TicketCard({
   return (
     <li>
       <article
-        draggable
+        draggable={movable}
         aria-label={'#' + t.number + ' ' + t.title}
-        className="relative grid cursor-grab gap-2 rounded-[10px] border border-[#e9e9e7] bg-white p-3.5 shadow-[0_1px_2px_rgba(15,15,15,0.06)] transition-colors hover:bg-[#fbfbfa] active:cursor-grabbing"
+        className={
+          'relative grid gap-2 rounded-[10px] border border-[#e9e9e7] bg-white p-3.5 shadow-[0_1px_2px_rgba(15,15,15,0.06)] transition-colors hover:bg-[#fbfbfa] ' +
+          (movable ? 'cursor-grab active:cursor-grabbing' : '')
+        }
         onDragStart={(e) => {
           e.dataTransfer.setData('text/plain', t.id);
           e.dataTransfer.effectAllowed = 'move';
@@ -701,7 +733,7 @@ function TicketCard({
             )}
             {awaitingApproval(t) && <span className="text-xs font-bold text-wait">Wartet auf Abnahme</span>}
           </span>
-          <StatusMenu ticket={t} busy={busy} onMove={onMove} />
+          {movable ? <StatusMenu ticket={t} busy={busy} onMove={onMove} /> : <StatusPill status={t.status} />}
         </div>
       </article>
     </li>
@@ -999,7 +1031,8 @@ export function NewTicket() {
                 }, 'Ticket angelegt.');
                 if (!ok || !created) return;
                 // TicketInput has no status: tickets start in todo, other columns need one status change.
-                if (start !== 'todo') {
+                // The server starts assigned tickets in progress, and a no-op move is answered with 409.
+                if (start !== created.status) {
                   try {
                     await api(
                       '/tickets/' + created.id + '/status',
@@ -1113,6 +1146,8 @@ function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) 
   const reviewerHere = isReviewer(user, area);
   const mayEdit = reviewerHere || isAssignee;
   const [editing, setEditing] = useState(false);
+  // The version the edit started from: a refetch while editing must not turn into a silent overwrite.
+  const [baseVersion, setBaseVersion] = useState(0);
   const [draft, setDraft] = useState('');
   const [composer, setComposer] = useState(0);
   const [allEvents, setAllEvents] = useState(false);
@@ -1144,7 +1179,14 @@ function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) 
           </p>
         </div>
         {mayEdit && !editing && (
-          <button type="button" className={btn.secondary} onClick={() => setEditing(true)}>
+          <button
+            type="button"
+            className={btn.secondary}
+            onClick={() => {
+              setBaseVersion(ticket.version);
+              setEditing(true);
+            }}
+          >
             <Pencil aria-hidden="true" className="size-4" /> Bearbeiten
           </button>
         )}
@@ -1207,7 +1249,7 @@ function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) 
                     // The type is immutable and not part of TicketEdit.
                     const fields = { ...payload, type: undefined };
                     const ok = await action.run(
-                      () => api('/tickets/' + ticket.id, json('PATCH', { ...fields, version: ticket.version })),
+                      () => api('/tickets/' + ticket.id, json('PATCH', { ...fields, version: baseVersion })),
                       'Ticket gespeichert.',
                     );
                     if (ok) setEditing(false);

@@ -187,13 +187,12 @@ export function DocumentsPage() {
 
 function KindPicker({ value, onChange }: { value: Kind; onChange: (kind: Kind) => void }) {
   return (
-    <div role="radiogroup" aria-label="Art" className="mt-1.5 inline-flex rounded-full bg-pill p-1">
+    <div role="group" aria-label="Art" className="mt-1.5 inline-flex rounded-full bg-pill p-1">
       {KINDS.map((k) => (
         <button
           key={k}
           type="button"
-          role="radio"
-          aria-checked={value === k}
+          aria-pressed={value === k}
           onClick={() => onChange(k)}
           className={`inline-flex min-h-11 items-center gap-2 rounded-full px-5 text-sm font-bold ${value === k ? 'bg-white shadow-sm' : 'text-muted'}`}
         >

@@ -134,14 +134,44 @@ describe('MyTasks', () => {
     expect(section).not.toHaveTextContent('Mein eigenes');
   });
 
-  it('hides the waiting list for a manager who reviews no area, shows all areas to an admin', async () => {
+  it('hides the waiting list for a viewer who is no listed reviewer of any area, admins included', async () => {
     const tickets = [ticket({ id: 'w', title: 'Wartet', status: 'review', assignee: other, area_id: areaB.id })];
     const { unmount } = renderTasks(tickets, [areaB]);
     await screen.findByText('Dir ist gerade nichts zugewiesen.');
     expect(screen.queryByRole('heading', { name: 'Wartet auf deine Freigabe' })).not.toBeInTheDocument();
     unmount();
     renderTasks(tickets, [areaB], { ...viewer, role: 'admin' });
-    expect(await screen.findByRole('heading', { name: 'Wartet auf deine Freigabe' })).toBeInTheDocument();
+    await screen.findByText('Dir ist gerade nichts zugewiesen.');
+    expect(screen.queryByRole('heading', { name: 'Wartet auf deine Freigabe' })).not.toBeInTheDocument();
+  });
+
+  it('lists an admin only the tickets of areas they review', async () => {
+    const tickets = [
+      ticket({ id: 'a', title: 'Eigener Bereich', status: 'review', assignee: other, area_id: areaA.id }),
+      ticket({ id: 'b', title: 'Fremder Bereich', status: 'review', assignee: other, area_id: areaB.id }),
+    ];
+    renderTasks(tickets, [areaA, areaB], { ...viewer, role: 'admin' });
+    const heading = await screen.findByRole('heading', { name: 'Wartet auf deine Freigabe' });
+    expect(heading.parentElement).toHaveTextContent('Eigener Bereich');
+    expect(heading.parentElement).not.toHaveTextContent('Fremder Bereich');
+  });
+
+  it('drops tickets the viewer already voted on, keeps those voted on only by others', async () => {
+    const vote = (id: string): Ticket['reviews'][number] => ({
+      binding: true,
+      self_confirmed: false,
+      updated_at: iso(NOW),
+      user: { id, name: id },
+      verdict: 'approve',
+    });
+    const tickets = [
+      ticket({ id: 'v1', title: 'Schon bewertet', status: 'review', assignee: other, reviews: [vote(viewerId)] }),
+      ticket({ id: 'v2', title: 'Noch offen', status: 'review', assignee: other, reviews: [vote('someone-else')] }),
+    ];
+    renderTasks(tickets, [areaA]);
+    const heading = await screen.findByRole('heading', { name: 'Wartet auf deine Freigabe' });
+    expect(heading.parentElement).toHaveTextContent('Noch offen');
+    expect(heading.parentElement).not.toHaveTextContent('Schon bewertet');
   });
 
   it('shows six rows and a link for the rest', async () => {

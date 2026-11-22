@@ -482,6 +482,9 @@ function actionName(action: string) {
     'ticket.reviewed': 'Ticket abgenommen',
     'area.created': 'Bereich erstellt',
     'area.updated': 'Bereich geändert',
+    'document.created': 'Dokument angelegt',
+    'document.updated': 'Dokument bearbeitet',
+    'document.deleted': 'Dokument gelöscht',
   };
   return names[action] ?? action.replaceAll('_', ' ').replaceAll('.', ' ');
 }

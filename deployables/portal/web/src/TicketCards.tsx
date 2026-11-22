@@ -14,19 +14,20 @@ const byUpdatedDesc = (a: Ticket, b: Ticket) => Date.parse(b.updated_at) - Date.
 const taskRank = (ticket: Ticket) => ['review', 'in_progress', 'todo', 'done'].indexOf(ticket.status);
 
 export type MyTasksData = {
-  /** The viewer reviews at least one area, or is admin. Otherwise the waiting list is hidden. */
+  /** The viewer is a listed reviewer of at least one area. Otherwise the waiting list is hidden. */
   canReview: boolean;
   /** Unfinished tickets assigned to the viewer: review, in progress, todo, then done awaiting approval. */
   mine: Ticket[];
-  /** Tickets waiting for a review by the viewer, oldest change first. Never the viewer's own tickets. */
+  /** Tickets in the viewer's review areas without a vote of the viewer, oldest change first. Never their own tickets. */
   waiting: Ticket[];
 };
 
-export function summarizeTickets(tickets: Ticket[], areas: Area[], viewerId: string, isAdmin: boolean): MyTasksData {
+export function summarizeTickets(tickets: Ticket[], areas: Area[], viewerId: string): MyTasksData {
   const reviewAreaIds = new Set(
     areas.filter((area) => area.reviewers.some((reviewer) => reviewer.id === viewerId)).map((area) => area.id),
   );
-  const canReview = isAdmin || reviewAreaIds.size > 0;
+  // A vote only binds in an area the viewer is a listed reviewer of, admins included.
+  const canReview = reviewAreaIds.size > 0;
   const mine = tickets
     .filter((ticket) => ticket.assignee?.id === viewerId && !isFinishedTicket(ticket))
     .sort((a, b) => taskRank(a) - taskRank(b) || byUpdatedDesc(a, b));
@@ -36,7 +37,8 @@ export function summarizeTickets(tickets: Ticket[], areas: Area[], viewerId: str
           (ticket) =>
             (ticket.status === 'review' || (ticket.status === 'done' && !ticket.approved)) &&
             ticket.assignee?.id !== viewerId &&
-            (isAdmin || reviewAreaIds.has(ticket.area_id)),
+            reviewAreaIds.has(ticket.area_id) &&
+            !ticket.reviews.some((review) => review.user.id === viewerId),
         )
         .sort(byUpdatedAsc)
     : [];
@@ -78,8 +80,7 @@ export function MyTasks({ user }: { user: Me }) {
   const tickets = useData<Ticket[]>('/tickets');
   const areas = useData<Area[]>('/areas');
   const error = tickets.error ?? areas.error;
-  const s =
-    tickets.data && areas.data ? summarizeTickets(tickets.data, areas.data, viewer.id, viewer.role === 'admin') : null;
+  const s = tickets.data && areas.data ? summarizeTickets(tickets.data, areas.data, viewer.id) : null;
   const positions = new Map((areas.data ?? []).map((area) => [area.id, area.position]));
   return (
     <section aria-labelledby="my-tasks" className="min-w-0">

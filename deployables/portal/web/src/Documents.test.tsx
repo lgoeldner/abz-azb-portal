@@ -148,7 +148,10 @@ describe('NewDocument', () => {
       '/dokumente/neu',
     );
     expect((screen.getByLabelText('Titel') as HTMLInputElement).value).toMatch(/^Treffen \d{2}\.\d{2}\.$/);
-    await user.click(screen.getByRole('radio', { name: 'Notiz' }));
+    expect(screen.getByRole('button', { name: 'Protokoll' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: 'Notiz' }));
+    expect(screen.getByRole('button', { name: 'Notiz' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Protokoll' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByLabelText('Titel')).toHaveValue('');
     await user.type(screen.getByLabelText('Titel'), 'Wunschliste');
     await user.type(await screen.findByLabelText('Inhalt'), 'Eis');
