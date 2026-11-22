@@ -461,3 +461,13 @@ export function StatusPill({ status, className = '' }: { status: TicketStatus; c
     </span>
   );
 }
+
+/** Short relative time ("vor 5 Min.", "vor 2 Tagen"), the full date after a week. */
+export function ago(value: string) {
+  const minutes = Math.floor((Date.now() - new Date(value).getTime()) / 60_000);
+  if (minutes < 1) return 'gerade eben';
+  if (minutes < 60) return 'vor ' + minutes + ' Min.';
+  if (minutes < 1440) return 'vor ' + Math.floor(minutes / 60) + ' Std.';
+  const days = Math.floor(minutes / 1440);
+  return days < 7 ? (days === 1 ? 'vor 1 Tag' : 'vor ' + days + ' Tagen') : date(value);
+}

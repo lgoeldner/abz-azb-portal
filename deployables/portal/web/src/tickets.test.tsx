@@ -101,7 +101,7 @@ function installApi(
       if (path.endsWith('/status') && options.statusError)
         return Response.json({ error: { code: 'stale', message: 'stale' } }, { status: options.statusError });
       if (path === '/tickets') return Response.json(ticket({ id: 'created-1', ...(body as Partial<Ticket>) }));
-      return Response.json(tickets[0]);
+      return Response.json(tickets[0] ?? {});
     }
     gets.push(path + url.search);
     if (path === '/areas') return Response.json(areas);
@@ -134,6 +134,14 @@ function renderAt(path: string, user: Me['user']) {
   );
 }
 
+const openFilter = async () => userEvent.click(screen.getByRole('button', { name: /^Filter/ }));
+const findColumn = async (area: string, name: string) =>
+  within(await screen.findByRole('region', { name: 'Bereich ' + area })).getByRole('region', { name });
+async function pickArea(user: ReturnType<typeof userEvent.setup>, name: string, picker = 'Bereich') {
+  await user.click(screen.getByRole('button', { name: picker }));
+  await user.click(await screen.findByRole('option', { name }));
+}
+
 describe('ticket board', () => {
   const todo = ticket({ id: 't-todo', number: 1, title: 'Fotos sichten', status: 'todo', assignee: null });
   const work = ticket({
@@ -148,47 +156,98 @@ describe('ticket board', () => {
   const waiting = ticket({ id: 't-wait', number: 4, title: 'Abizeitung drucken', status: 'done', approved: false });
   const approved = ticket({ id: 't-ok', number: 5, title: 'Cover entwerfen', status: 'done', approved: true });
 
-  it('puts every ticket into its status column and keeps finished tickets behind the toggle', async () => {
-    const api = installApi([todo, work, review, waiting, approved]);
+  it('groups by Bereich in position order and puts every ticket into its status column', async () => {
+    const api = installApi([work, todo, review, waiting, approved]);
     renderAt('/tickets', manager);
-    for (const [column, title] of [
-      ['TODO', 'Fotos sichten'],
-      ['In Arbeit', 'Layout bauen'],
-      ['Wartet auf Review', 'Steckbriefe'],
-      ['Fertig', 'Abizeitung drucken'],
-    ]) {
-      const section = await screen.findByRole('region', { name: column });
-      expect(within(section).getByText(title)).toBeInTheDocument();
+    for (const [area, name, title] of [
+      ['Redaktion', 'Offen', 'Fotos sichten'],
+      ['Layout', 'In Arbeit', 'Layout bauen'],
+      ['Redaktion', 'Wartet auf Review', 'Steckbriefe'],
+      ['Redaktion', 'Fertig', 'Abizeitung drucken'],
+    ] as const) {
+      expect(await within(await findColumn(area, name)).findByText(title)).toBeInTheDocument();
     }
+    expect(screen.getAllByRole('region', { name: /^Bereich / }).map((r) => r.getAttribute('aria-label'))).toEqual([
+      'Bereich Redaktion',
+      'Bereich Layout',
+    ]);
     expect(screen.queryByText('Cover entwerfen')).not.toBeInTheDocument();
 
+    await openFilter();
     await userEvent.click(screen.getByLabelText('Abgeschlossene zeigen'));
     expect(await screen.findByText('Cover entwerfen')).toBeInTheDocument();
     expect(api.gets).toContain('/tickets?include_finished=true');
   });
 
-  it('distinguishes waiting for approval from approved', async () => {
+  it('hides empty Bereiche, but keeps a chosen one with its "+ Neu" rows', async () => {
+    installApi([todo]);
+    const user = userEvent.setup();
+    renderAt('/tickets', manager);
+    await screen.findByText('Fotos sichten');
+    expect(screen.queryByRole('region', { name: 'Bereich Layout' })).not.toBeInTheDocument();
+    await pickArea(user, 'Layout', 'Alle Bereiche');
+    const layout = screen.getByRole('region', { name: 'Bereich Layout' });
+    expect(within(layout).getAllByRole('link', { name: /^Neu in Layout/ })).toHaveLength(4);
+    expect(within(layout).queryByRole('article')).not.toBeInTheDocument();
+  });
+
+  it('links each "+ Neu" row to the new-ticket form with Bereich and status', async () => {
+    installApi([todo]);
+    renderAt('/tickets', manager);
+    const link = await screen.findByRole('link', { name: 'Neu in Redaktion: Wartet auf Review' });
+    expect(link).toHaveAttribute('href', '/tickets/neu?bereich=area-redaktion&status=review');
+  });
+
+  it('makes the whole card one link to the ticket and shows goal, assignee and comment count only when set', async () => {
+    installApi([ticket({ id: 't-talk', number: 7, title: 'Mit Kommentaren', comment_count: 3 }), todo]);
+    renderAt('/tickets', manager);
+    const talk = await screen.findByRole('article', { name: '#7 Mit Kommentaren' });
+    expect(within(talk).getByRole('link', { name: 'Mit Kommentaren' })).toHaveAttribute('href', '/tickets/t-talk');
+    expect(within(talk).getByText('5 Angebote')).toBeInTheDocument();
+    expect(within(talk).getByText('Mona Manager')).toBeInTheDocument();
+    expect(within(talk).getByText('3')).toBeInTheDocument();
+    expect(within(talk).getByText('Kommentare')).toBeInTheDocument();
+    const quiet = screen.getByRole('article', { name: '#1 Fotos sichten' });
+    expect(within(quiet).queryByText(/Kommentar/)).not.toBeInTheDocument();
+    expect(within(quiet).queryByText('0')).not.toBeInTheDocument();
+  });
+
+  it('marks only done cards that wait for approval', async () => {
     installApi([waiting, approved]);
     renderAt('/tickets', manager);
-    await userEvent.click(await screen.findByLabelText('Abgeschlossene zeigen'));
-    const cardWaiting = await screen.findByRole('article', { name: '#4 Abizeitung drucken' });
+    await screen.findByRole('article', { name: '#4 Abizeitung drucken' });
+    await openFilter();
+    await userEvent.click(screen.getByLabelText('Abgeschlossene zeigen'));
     const cardApproved = await screen.findByRole('article', { name: '#5 Cover entwerfen' });
+    const cardWaiting = screen.getByRole('article', { name: '#4 Abizeitung drucken' });
     expect(within(cardWaiting).getByText('Wartet auf Abnahme')).toBeInTheDocument();
-    expect(within(cardWaiting).queryByText('Abgenommen')).not.toBeInTheDocument();
-    expect(within(cardApproved).getByText('Abgenommen')).toBeInTheDocument();
     expect(within(cardApproved).queryByText('Wartet auf Abnahme')).not.toBeInTheDocument();
   });
 
-  it('moves a ticket with the status select and sends the current version', async () => {
+  it('moves a ticket through the status sheet, marks the current status and sends the current version', async () => {
     const api = installApi([work]);
     renderAt('/tickets', manager);
-    await userEvent.selectOptions(await screen.findByLabelText('Status von #2'), 'review');
+    await userEvent.click(await screen.findByRole('button', { name: 'Status von #2 ändern' }));
+    const sheet = screen.getByRole('dialog', { name: 'Status von #2 wählen' });
+    expect(within(sheet).getByRole('button', { name: 'In Arbeit' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(sheet).getByRole('button', { name: 'Fertig' })).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Wartet auf Review' }));
     await waitFor(() => expect(api.writes).toHaveLength(1));
     expect(api.writes[0]).toMatchObject({
       path: '/tickets/t-work/status',
       method: 'POST',
       body: { version: 3, status: 'review' },
     });
+    expect(screen.queryByRole('dialog', { name: /Status von #2/ })).not.toBeInTheDocument();
+  });
+
+  it('closes the status sheet with Escape without sending anything', async () => {
+    const api = installApi([work]);
+    renderAt('/tickets', manager);
+    await userEvent.click(await screen.findByRole('button', { name: 'Status von #2 ändern' }));
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: /Status von #2/ })).not.toBeInTheDocument();
+    expect(api.writes).toHaveLength(0);
   });
 
   it('moves a ticket by dragging its card to another column', async () => {
@@ -208,12 +267,13 @@ describe('ticket board', () => {
     const api = installApi([work], { statusError: 409 });
     renderAt('/tickets', manager);
     const before = () => api.gets.filter((g) => g === '/tickets').length;
-    await userEvent.selectOptions(await screen.findByLabelText('Status von #2'), 'done');
+    await userEvent.click(await screen.findByRole('button', { name: 'Status von #2 ändern' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Fertig' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('geändert');
     await waitFor(() => expect(before()).toBeGreaterThan(1));
   });
 
-  it('filters by Bereich, Typ, Meine and text', async () => {
+  it('filters by Bereich (picker), Typ (filter menu), Meine and text', async () => {
     const article = ticket({
       id: 't-art',
       number: 6,
@@ -223,40 +283,103 @@ describe('ticket board', () => {
       assignee: ref(reviewer),
     });
     installApi([todo, work, review, article]);
+    const user = userEvent.setup();
     renderAt('/tickets', manager);
     await screen.findByText('Layout bauen');
 
-    await userEvent.click(
-      within(screen.getByRole('group', { name: 'Bereich' })).getByRole('button', { name: 'Layout' }),
-    );
+    await pickArea(user, 'Layout', 'Alle Bereiche');
     expect(screen.queryByText('Fotos sichten')).not.toBeInTheDocument();
     expect(screen.getByText('Layout bauen')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Alle Bereiche' }));
+    await pickArea(user, 'Alle Bereiche', 'Layout');
+    expect(screen.getByText('Fotos sichten')).toBeInTheDocument();
 
-    await userEvent.click(within(screen.getByRole('group', { name: 'Typ' })).getByRole('button', { name: 'Artikel' }));
+    await openFilter();
+    await user.click(within(screen.getByRole('group', { name: 'Typ' })).getByRole('button', { name: 'Artikel' }));
     expect(screen.getByText('Lehrerumfrage')).toBeInTheDocument();
     expect(screen.queryByText('Layout bauen')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Alle Typen' }));
+    await user.click(screen.getByRole('button', { name: 'Alle Typen' }));
 
-    await userEvent.click(screen.getByRole('button', { name: 'Meine' }));
+    await user.click(screen.getByRole('button', { name: 'Meine' }));
     expect(screen.getByText('Layout bauen')).toBeInTheDocument();
     expect(screen.queryByText('Lehrerumfrage')).not.toBeInTheDocument();
     expect(screen.queryByText('Fotos sichten')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Meine' }));
+    await user.click(screen.getByRole('button', { name: 'Meine' }));
 
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Suche' }), '#6');
+    await user.type(screen.getByRole('searchbox', { name: 'Suche' }), '#6');
     expect(screen.getByText('Lehrerumfrage')).toBeInTheDocument();
     expect(screen.queryByText('Layout bauen')).not.toBeInTheDocument();
   });
 
-  it('offers the Fertig help as a keyboard-reachable info button', async () => {
+  it('keeps Typ and finished filters in a Filter menu for managers but inline for admins', async () => {
     installApi([work]);
-    renderAt('/tickets', manager);
+    const { unmount } = renderAt('/tickets', manager);
+    await screen.findByText('Layout bauen');
+    expect(screen.queryByLabelText('Abgeschlossene zeigen')).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Typ' })).not.toBeInTheDocument();
+    await openFilter();
+    expect(screen.getByLabelText('Abgeschlossene zeigen')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Typ' })).toBeInTheDocument();
+    unmount();
+
+    renderAt('/tickets', admin);
+    await screen.findByText('Layout bauen');
+    expect(screen.queryByRole('button', { name: /^Filter/ })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Abgeschlossene zeigen')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Typ' })).toBeInTheDocument();
+  });
+
+  it('offers the Fertig help as a keyboard-reachable info button to admins only', async () => {
+    installApi([work]);
+    const { unmount } = renderAt('/tickets', manager);
+    await screen.findByText('Layout bauen');
+    expect(screen.queryByRole('button', { name: 'Hilfe: Fertig' })).not.toBeInTheDocument();
+    unmount();
+
+    renderAt('/tickets', admin);
     const hint = await screen.findByRole('button', { name: 'Hilfe: Fertig' });
     hint.focus();
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
       'Status auf Fertig setzen und den Bereichsverantwortlichen schreiben.',
     );
+  });
+});
+
+describe('area picker', () => {
+  it('searches, selects with the keyboard and closes with Escape or an outside click', async () => {
+    installApi([ticket({ status: 'todo' })]);
+    const user = userEvent.setup();
+    renderAt('/tickets/neu', manager);
+    const trigger = await screen.findByRole('button', { name: 'Bereich' });
+    expect(trigger).toHaveTextContent('Bitte wählen');
+
+    await user.click(trigger);
+    expect(
+      within(screen.getByRole('listbox'))
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Redaktion', 'Layout']);
+    await user.type(screen.getByRole('combobox', { name: 'Bereich suchen' }), 'lay');
+    expect(
+      within(screen.getByRole('listbox'))
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Layout']);
+    await user.keyboard('{Enter}');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(trigger).toHaveTextContent('Layout');
+
+    await user.click(trigger);
+    expect(screen.getByRole('option', { name: 'Layout' })).toHaveAttribute('aria-selected', 'true');
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(trigger).toHaveTextContent('Redaktion');
+
+    await user.click(trigger);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    await user.click(trigger);
+    await user.click(document.body);
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(trigger).toHaveTextContent('Redaktion');
   });
 });
 
@@ -299,7 +422,7 @@ describe('ticket page review panel', () => {
     expect(reviewButton()).not.toBeInTheDocument();
   });
 
-  it('lets another manager vote, shows every vote and labels binding and non-binding', async () => {
+  it('lets another manager vote, shows every vote with its verdict and marks only non-binding ones', async () => {
     const api = installApi([
       ticket({
         status: 'done',
@@ -309,9 +432,11 @@ describe('ticket page review panel', () => {
     ]);
     renderAt('/tickets/ticket-1', admin);
     const panel = (await screen.findByRole('heading', { name: 'Review' })).closest('section') as HTMLElement;
-    expect(within(panel).getByText('Bindend')).toBeInTheDocument();
-    expect(within(panel).getByText('Nicht bindend')).toBeInTheDocument();
+    expect(within(panel).getByText('nicht bindend')).toBeInTheDocument();
+    expect(within(panel).queryByText(/^bindend$/i)).not.toBeInTheDocument();
     expect(within(panel).getByText(/Rita Review/)).toBeInTheDocument();
+    expect(within(panel).getByRole('img', { name: 'Freigegeben' })).toBeInTheDocument();
+    expect(within(panel).getByRole('img', { name: 'Änderungen nötig' })).toBeInTheDocument();
     expect(within(panel).getByText('Wartet auf Abnahme')).toBeInTheDocument();
     expect(selfConfirm()).not.toBeInTheDocument();
     await userEvent.click(within(panel).getByRole('button', { name: /Änderungen nötig/ }));
@@ -423,10 +548,118 @@ describe('ticket page', () => {
   });
 });
 
+describe('ticket page state transitions', () => {
+  it('moves through the stepper, marking earlier steps and the current one', async () => {
+    const api = installApi([ticket({ status: 'review' })]);
+    renderAt('/tickets/ticket-1', manager);
+    const stepper = await screen.findByRole('group', { name: 'Status' });
+    expect(within(stepper).getByRole('button', { name: 'Wartet auf Review' })).toHaveAttribute('aria-current', 'step');
+    expect(within(stepper).getByRole('button', { name: 'Offen' })).not.toHaveAttribute('aria-current');
+    await userEvent.click(within(stepper).getByRole('button', { name: 'Fertig' }));
+    await waitFor(() => expect(api.writes).toHaveLength(1));
+    expect(api.writes[0]).toMatchObject({
+      path: '/tickets/ticket-1/status',
+      method: 'POST',
+      body: { version: 3, status: 'done' },
+    });
+  });
+
+  it('offers the assignee "Zur Review geben" while the ticket is in progress', async () => {
+    const api = installApi([ticket({ status: 'in_progress' })]);
+    renderAt('/tickets/ticket-1', manager);
+    await userEvent.click(await screen.findByRole('button', { name: /Zur Review geben/ }));
+    await waitFor(() => expect(api.writes).toHaveLength(1));
+    expect(api.writes[0]).toMatchObject({ path: '/tickets/ticket-1/status', body: { version: 3, status: 'review' } });
+  });
+
+  it.each(['todo', 'review'] as const)('does not offer "Zur Review geben" in %s', async (status) => {
+    installApi([ticket({ status })]);
+    renderAt('/tickets/ticket-1', manager);
+    await screen.findByRole('heading', { name: /Angebote besorgen/ });
+    expect(screen.queryByRole('button', { name: /Zur Review geben/ })).not.toBeInTheDocument();
+  });
+
+  it('shows a read-only status pill instead of the stepper to people who may not move the ticket', async () => {
+    installApi([ticket({ assignee: ref(reviewer) })]);
+    renderAt('/tickets/ticket-1', manager);
+    await screen.findByRole('heading', { name: /Angebote besorgen/ });
+    expect(screen.queryByRole('group', { name: 'Status' })).not.toBeInTheDocument();
+    expect(screen.getByText('In Arbeit')).toBeInTheDocument();
+  });
+
+  it('renders status, assignment and review events compactly and falls back to the raw text', async () => {
+    const at = (n: number) => '2026-10-02T1' + n + ':00:00Z';
+    const events: TicketEvent[] = [
+      { id: 'e1', kind: 'status', actor: ref(manager), body: '', detail: 'todo->review', created_at: at(1) },
+      { id: 'e2', kind: 'status', actor: ref(manager), body: '', detail: 'kaputt', created_at: at(2) },
+      { id: 'e3', kind: 'assign', actor: ref(manager), body: '', detail: 'niemand -> Mona Manager', created_at: at(3) },
+      { id: 'e4', kind: 'review', actor: ref(reviewer), body: '', detail: 'changes:binding', created_at: at(4) },
+    ];
+    installApi([ticket()], { events });
+    renderAt('/tickets/ticket-1', manager);
+    const section = (await screen.findByRole('heading', { name: 'Aktivität' })).closest('section') as HTMLElement;
+    const items = within(section).getAllByRole('listitem');
+    expect(within(items[0]).getByText('Offen')).toBeInTheDocument();
+    expect(within(items[0]).getByText('Wartet auf Review')).toBeInTheDocument();
+    expect(items[0]).not.toHaveTextContent('hat den Status geändert');
+    expect(items[1]).toHaveTextContent('hat den Status geändert: kaputt');
+    expect(within(items[2]).getByText('niemand')).toBeInTheDocument();
+    expect(within(items[2]).getByText('Mona Manager', { selector: 'span' })).toBeInTheDocument();
+    expect(items[3]).toHaveTextContent('Änderungen nötig');
+    expect(items[3]).not.toHaveTextContent('changes');
+  });
+});
+
+describe('ticket page decluttering', () => {
+  it('shows the Runde only to admins and no info hints in the read-only details', async () => {
+    installApi([ticket({ round: 4 })]);
+    const { unmount } = renderAt('/tickets/ticket-1', manager);
+    await screen.findByRole('heading', { name: /Angebote besorgen/ });
+    expect(screen.queryByText('Runde')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Hilfe:/ })).not.toBeInTheDocument();
+    unmount();
+
+    renderAt('/tickets/ticket-1', admin);
+    expect(await screen.findByText('Runde')).toBeInTheDocument();
+  });
+});
+
 describe('new ticket', () => {
+  it('prefills Bereich and creates the ticket in the status of the "+ Neu" column', async () => {
+    const api = installApi([]);
+    const user = userEvent.setup();
+    renderAt('/tickets/neu?bereich=area-layout&status=review', manager);
+    await user.type(await screen.findByLabelText('Titel'), 'Seiten gestalten');
+    expect(screen.getByRole('button', { name: 'Bereich' })).toHaveTextContent('Layout');
+    await user.selectOptions(screen.getByLabelText('Größe'), 'S');
+    await user.type(screen.getByLabelText('Zieldefinition'), '10 Seiten');
+    await user.click(screen.getByRole('button', { name: 'Ticket anlegen' }));
+    await waitFor(() => expect(api.writes).toHaveLength(2));
+    expect(api.writes[0]).toMatchObject({ path: '/tickets', body: { area_id: 'area-layout' } });
+    expect(api.writes[1]).toMatchObject({
+      path: '/tickets/created-1/status',
+      method: 'POST',
+      body: { version: 3, status: 'review' },
+    });
+  });
+
+  it('ignores unknown Bereich and status parameters and starts in todo', async () => {
+    const api = installApi([]);
+    const user = userEvent.setup();
+    renderAt('/tickets/neu?bereich=nope&status=bogus', manager);
+    await user.type(await screen.findByLabelText('Titel'), 'Sponsoren');
+    expect(screen.getByRole('button', { name: 'Bereich' })).toHaveTextContent('Bitte wählen');
+    await pickArea(user, 'Redaktion');
+    await user.selectOptions(screen.getByLabelText('Größe'), 'S');
+    await user.type(screen.getByLabelText('Zieldefinition'), 'Ziel');
+    await user.click(screen.getByRole('button', { name: 'Ticket anlegen' }));
+    await waitFor(() => expect(api.writes).toHaveLength(1));
+    expect(api.writes[0].path).toBe('/tickets');
+  });
+
   async function fill(user: ReturnType<typeof userEvent.setup>, size?: string, goal?: string) {
     await user.type(await screen.findByLabelText('Titel'), 'Sponsoren anfragen');
-    await user.selectOptions(screen.getByLabelText('Bereich'), 'Redaktion');
+    await pickArea(user, 'Redaktion');
     if (size) await user.selectOptions(screen.getByLabelText('Größe'), size);
     if (goal) await user.type(screen.getByLabelText('Zieldefinition'), goal);
   }
@@ -485,7 +718,8 @@ describe('new ticket', () => {
     installApi([]);
     const user = userEvent.setup();
     const { unmount } = renderAt('/tickets/neu', manager);
-    await user.selectOptions(await screen.findByLabelText('Bereich'), 'Redaktion');
+    await screen.findByLabelText('Titel');
+    await pickArea(user, 'Redaktion');
     expect(
       within(screen.getByLabelText('Wer'))
         .getAllByRole('option')
@@ -494,7 +728,8 @@ describe('new ticket', () => {
     unmount();
 
     renderAt('/tickets/neu', reviewer);
-    await user.selectOptions(await screen.findByLabelText('Bereich'), 'Redaktion');
+    await screen.findByLabelText('Titel');
+    await pickArea(user, 'Redaktion');
     const names = within(screen.getByLabelText('Wer'))
       .getAllByRole('option')
       .map((o) => o.textContent);

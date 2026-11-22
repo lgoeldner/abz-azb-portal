@@ -1,7 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowRightLeft,
+  ArrowRight,
+  Check,
+  ChevronDown,
   ClipboardCheck,
+  FileText,
   Hand,
   Info,
   ListChecks,
@@ -11,15 +14,30 @@ import {
   Plus,
   RefreshCw,
   Search,
+  SlidersHorizontal,
   UserRound,
   type LucideIcon,
 } from 'lucide-react';
-import { lazy, Suspense, useId, useState, type DragEvent, type FormEvent, type ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type DragEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { api, ApiError, date, json } from './api';
 import type { Area, Ticket, TicketDetail, TicketEvent, UserRef } from './api';
 import {
+  ago,
+  AreaTag,
+  Avatar,
   btn,
   Empty,
   Failure,
@@ -30,8 +48,11 @@ import {
   Loading,
   PageHead,
   panel,
+  StatusPill,
+  statusTone,
   useData,
   useSession,
+  type TicketStatus,
 } from './ui';
 
 // The editor (Milkdown) is large: it is only fetched when a ticket page or the new-ticket form is opened.
@@ -49,15 +70,10 @@ function Markdown({ value, name }: { value: string; name: string }) {
   );
 }
 
-type Status = Ticket['status'];
+type Status = TicketStatus;
 type Size = Ticket['size'];
-const COLUMNS: { status: Status; title: string }[] = [
-  { status: 'todo', title: 'TODO' },
-  { status: 'in_progress', title: 'In Arbeit' },
-  { status: 'review', title: 'Wartet auf Review' },
-  { status: 'done', title: 'Fertig' },
-];
-const statusTitle = Object.fromEntries(COLUMNS.map((c) => [c.status, c.title])) as Record<Status, string>;
+const STATUSES: Status[] = ['todo', 'in_progress', 'review', 'done'];
+const isStatus = (value: string | null | undefined): value is Status => STATUSES.includes(value as Status);
 const SIZES: Size[] = ['XS', 'S', 'M', 'L', 'XL'];
 const typeLabel: Record<Ticket['type'], string> = { aufgabe: 'Aufgabe', artikel: 'Artikel' };
 const typeIcon: Record<Ticket['type'], LucideIcon> = { aufgabe: ListChecks, artikel: Newspaper };
@@ -84,6 +100,35 @@ const errorText = (e: Error) => {
   if (e instanceof ApiError && e.status === 403) return 'Dafür fehlt dir die Berechtigung.';
   return e.message;
 };
+
+/** "vor 2 Std."; older than a week falls back to the date. */
+
+/** Closes a popover on Escape (focus goes back to its trigger, the first button) and on a press outside of it. */
+function useDismiss(open: boolean, close: () => void) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const press = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) close();
+    };
+    const key = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      close();
+      ref.current?.querySelector('button')?.focus();
+    };
+    document.addEventListener('pointerdown', press);
+    document.addEventListener('keydown', key);
+    return () => {
+      document.removeEventListener('pointerdown', press);
+      document.removeEventListener('keydown', key);
+    };
+  });
+  return ref;
+}
+
+/** Below md the popovers span the screen width (fixed, left in the flow); from md they hang under their trigger. */
+const popover =
+  'z-30 rounded-lg border border-[#e9e9e7] bg-white shadow-lg max-md:fixed max-md:inset-x-4 md:absolute md:left-0 md:top-full mt-1';
 
 /**
  * Runs one ticket write. Unlike useAction it also refetches after a failure, so a 409 never leaves a card
@@ -173,21 +218,176 @@ function ApprovalBadge({ ticket }: { ticket: Ticket }) {
   );
 }
 
+// ---------------------------------------------------------------- Area picker
+
+/** Notion-like Bereich select: tag button, popover with search, options as tags. */
+function AreaPicker({
+  areas,
+  value,
+  onChange,
+  id,
+  all = false,
+}: {
+  areas: Area[];
+  value: string;
+  onChange: (id: string) => void;
+  id?: string;
+  /** Filter mode: adds an "Alle Bereiche" option and shows it when nothing is selected. */
+  all?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [active, setActive] = useState(0);
+  const listId = useId();
+  const close = () => {
+    setOpen(false);
+    setQuery('');
+  };
+  const ref = useDismiss(open, close);
+  const current = areas.find((a) => a.id === value);
+  const needle = query.trim().toLowerCase();
+  const options: (Area | null)[] = [
+    ...(all && !needle ? [null] : []),
+    ...areas.filter((a) => a.name.toLowerCase().includes(needle)),
+  ];
+  const pick = (area: Area | null) => {
+    onChange(area?.id ?? '');
+    close();
+    ref.current?.querySelector('button')?.focus();
+  };
+  function onKeyDown(e: KeyboardEvent) {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (options.length) setActive((active + (e.key === 'ArrowDown' ? 1 : options.length - 1)) % options.length);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const chosen = options[Math.min(active, options.length - 1)];
+      if (chosen !== undefined) pick(chosen);
+    }
+  }
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        id={id}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={
+          (all
+            ? 'flex min-h-11 items-center gap-2 rounded-lg border border-line bg-white px-3 '
+            : 'mt-1.5 flex min-h-12 w-full items-center gap-2 rounded-ui border-2 border-line bg-white px-4 py-2 text-left ') +
+          'text-[15px] focus:border-ink'
+        }
+        onClick={() => {
+          setActive(
+            Math.max(
+              0,
+              options.findIndex((o) => (o?.id ?? '') === value),
+            ),
+          );
+          setOpen(!open);
+        }}
+      >
+        {current ? (
+          <AreaTag name={current.name} position={current.position} />
+        ) : (
+          <span className={all ? 'font-semibold' : 'text-muted'}>{all ? 'Alle Bereiche' : 'Bitte wählen'}</span>
+        )}
+        <ChevronDown aria-hidden="true" className="ml-auto size-4 flex-none text-muted" />
+      </button>
+      {open && (
+        <div className={popover + ' p-1.5 md:w-80'}>
+          <input
+            autoFocus
+            role="combobox"
+            aria-expanded="true"
+            aria-controls={listId}
+            aria-activedescendant={options.length ? listId + '-' + Math.min(active, options.length - 1) : undefined}
+            aria-label="Bereich suchen"
+            placeholder="Bereich suchen …"
+            className="mb-1 block min-h-11 w-full rounded-md border border-line bg-white px-3 text-[15px] focus:border-ink"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setActive(0);
+            }}
+            onKeyDown={onKeyDown}
+          />
+          <div role="listbox" id={listId} aria-label="Bereiche" className="max-h-72 overflow-y-auto">
+            {options.map((a, i) => {
+              const selected = (a?.id ?? '') === value;
+              return (
+                <button
+                  key={a?.id ?? 'all'}
+                  type="button"
+                  role="option"
+                  id={listId + '-' + i}
+                  tabIndex={-1}
+                  aria-selected={selected}
+                  className={
+                    'flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left text-[15px] hover:bg-soft ' +
+                    (i === active ? 'bg-soft' : '')
+                  }
+                  onClick={() => pick(a)}
+                >
+                  {a ? (
+                    <AreaTag name={a.name} position={a.position} />
+                  ) : (
+                    <span className="font-semibold">Alle Bereiche</span>
+                  )}
+                  {selected && <Check aria-hidden="true" className="ml-auto size-4 flex-none" />}
+                </button>
+              );
+            })}
+            {!options.length && <p className="px-2 py-3 text-sm text-muted">Kein Bereich gefunden</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- Board
 
 const chip = (active: boolean) =>
-  'inline-flex min-h-9 items-center rounded-full px-3.5 text-sm font-bold transition-colors ' +
+  'inline-flex min-h-11 items-center rounded-full px-4 text-sm font-bold transition-colors ' +
   (active ? 'bg-ink text-white' : 'bg-pill text-ink hover:bg-soft');
+
+/** Small "Filter" popover that keeps the less used board filters out of the way. */
+function FilterMenu({ count, children }: { count: number; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        className={chip(count > 0) + ' gap-2'}
+        onClick={() => setOpen(!open)}
+      >
+        <SlidersHorizontal aria-hidden="true" className="size-4" /> Filter
+        {count > 0 && <span className="text-xs">({count})</span>}
+      </button>
+      {open && (
+        <div role="dialog" aria-label="Filter" className={popover + ' grid gap-4 p-4 md:w-72'}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Board() {
   const { user } = useSession();
+  const admin = user.role === 'admin';
   const [showFinished, setShowFinished] = useState(false);
   const [areaId, setAreaId] = useState('');
   const [type, setType] = useState<Ticket['type'] | ''>('');
   const [mine, setMine] = useState(false);
   const [query, setQuery] = useState('');
   const [dragId, setDragId] = useState('');
-  const [over, setOver] = useState<Status | ''>('');
+  const [over, setOver] = useState('');
   const tickets = useData<Ticket[]>('/tickets' + (showFinished ? '?include_finished=true' : ''));
   const areas = useData<Area[]>('/areas');
   const action = useTicketAction();
@@ -201,7 +401,10 @@ export function Board() {
       (!needle ||
         [String(t.number), t.title, t.area_name, t.assignee?.name ?? ''].some((s) => s.toLowerCase().includes(needle))),
   );
-  const selectedArea = areas.data?.find((a) => a.id === areaId);
+  // A chosen Bereich always shows, even without tickets, so its "+ Neu" rows stay reachable.
+  const groups = (areas.data ?? [])
+    .filter((a) => (areaId ? a.id === areaId : visible.some((t) => t.area_id === a.id)))
+    .sort((a, b) => a.position - b.position);
 
   function move(ticket: Ticket, status: Status) {
     if (ticket.status === status) return;
@@ -215,6 +418,33 @@ export function Board() {
     if (ticket) move(ticket, status);
   }
 
+  const typeFilter = (
+    <div className="flex flex-wrap gap-2" role="group" aria-label="Typ">
+      {(['', 'aufgabe', 'artikel'] as const).map((t) => (
+        <button
+          key={t || 'alle'}
+          type="button"
+          aria-pressed={type === t}
+          className={chip(type === t)}
+          onClick={() => setType(t)}
+        >
+          {t ? typeLabel[t] + (t === 'aufgabe' ? 'n' : '') : 'Alle Typen'}
+        </button>
+      ))}
+    </div>
+  );
+  const finishedFilter = (
+    <label className="flex min-h-11 items-center gap-3 text-sm font-bold">
+      <input
+        type="checkbox"
+        checked={showFinished}
+        onChange={(e) => setShowFinished(e.target.checked)}
+        className="size-5"
+      />
+      Abgeschlossene zeigen
+    </label>
+  );
+
   return (
     <div>
       <PageHead
@@ -225,11 +455,12 @@ export function Board() {
           </Link>
         }
       >
-        Aufgaben und Artikel der Abizeitung. Ziehe Karten in eine andere Spalte oder nutze die Statusauswahl auf der
-        Karte.
+        {admin
+          ? 'Aufgaben und Artikel der Abizeitung. Ziehe Karten in eine andere Spalte oder tippe auf den Status einer Karte.'
+          : undefined}
       </PageHead>
-      <div className="mb-6 flex flex-wrap items-center gap-x-6 gap-y-3" role="group" aria-label="Filter">
-        <label className="relative block min-w-56 text-sm font-bold">
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <label className="relative block min-w-48 flex-1 text-sm font-bold sm:max-w-xs">
           <span className="sr-only">Suche</span>
           <Search
             aria-hidden="true"
@@ -239,109 +470,173 @@ export function Board() {
             type="search"
             placeholder="Titel, Nummer, Person …"
             aria-label="Suche"
-            className={field + ' !mt-0 !min-h-10 pl-9'}
+            className={field + ' !mt-0 !min-h-11 pl-9'}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </label>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Bereich">
-          <button type="button" aria-pressed={!areaId} className={chip(!areaId)} onClick={() => setAreaId('')}>
-            Alle Bereiche
-          </button>
-          {areas.data?.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              aria-pressed={areaId === a.id}
-              className={chip(areaId === a.id)}
-              onClick={() => setAreaId(areaId === a.id ? '' : a.id)}
-            >
-              {a.name}
-            </button>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Typ">
-          {(['', 'aufgabe', 'artikel'] as const).map((t) => (
-            <button
-              key={t || 'alle'}
-              type="button"
-              aria-pressed={type === t}
-              className={chip(type === t)}
-              onClick={() => setType(t)}
-            >
-              {t ? typeLabel[t] + (t === 'aufgabe' ? 'n' : '') : 'Alle Typen'}
-            </button>
-          ))}
-        </div>
+        {areas.data && <AreaPicker all areas={areas.data} value={areaId} onChange={setAreaId} />}
         <button type="button" aria-pressed={mine} className={chip(mine)} onClick={() => setMine(!mine)}>
           Meine
         </button>
-        <label className="flex items-center gap-2 text-sm font-bold">
-          <input
-            type="checkbox"
-            checked={showFinished}
-            onChange={(e) => setShowFinished(e.target.checked)}
-            className="size-4"
-          />
-          Abgeschlossene zeigen
-        </label>
+        {admin ? (
+          <>
+            {typeFilter}
+            {finishedFilter}
+          </>
+        ) : (
+          <FilterMenu count={(type ? 1 : 0) + (showFinished ? 1 : 0)}>
+            {typeFilter}
+            {finishedFilter}
+          </FilterMenu>
+        )}
       </div>
       <div className="mb-4">
         <ErrorNotice error={action.error} />
       </div>
-      {tickets.isPending ? (
+      {tickets.isPending || areas.isPending ? (
         <Loading />
       ) : tickets.error ? (
         <Failure error={tickets.error} retry={() => void tickets.refetch()} />
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {COLUMNS.map(({ status, title }) => {
-            const cards = visible.filter((t) => t.status === status);
+      ) : areas.error ? (
+        <Failure error={areas.error} retry={() => void areas.refetch()} />
+      ) : groups.length ? (
+        <div className="grid grid-cols-1 gap-8">
+          {groups.map((area) => {
+            const inArea = visible.filter((t) => t.area_id === area.id);
             return (
-              <section
-                key={status}
-                aria-label={title}
-                data-column={status}
-                className={
-                  'min-w-0 rounded-ui bg-soft p-3 ' +
-                  (over === status && dragId ? 'outline outline-2 outline-accent' : '')
-                }
-                onDragOver={(e) => {
-                  if (!dragId) return;
-                  e.preventDefault();
-                  setOver(status);
-                }}
-                onDragLeave={() => setOver('')}
-                onDrop={(e) => drop(e, status)}
-              >
-                <h2 className="mb-3 flex items-center gap-2 px-1 text-sm font-extrabold uppercase tracking-wide">
-                  {title}
-                  <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-muted">{cards.length}</span>
-                  {status === 'done' && <Hint name="Fertig">{fertigHelp(selectedArea?.reviewers ?? [])}</Hint>}
-                </h2>
-                {cards.length ? (
-                  <ul className="grid gap-3">
-                    {cards.map((t) => (
-                      <TicketCard
-                        key={t.id}
-                        ticket={t}
-                        busy={action.busy}
-                        onDragStart={() => setDragId(t.id)}
-                        onDragEnd={() => {
-                          setDragId('');
-                          setOver('');
-                        }}
-                        onMove={(s) => move(t, s)}
-                      />
-                    ))}
-                  </ul>
-                ) : (
-                  <Empty>Keine Tickets</Empty>
-                )}
+              <section key={area.id} aria-label={'Bereich ' + area.name}>
+                <details open className="group">
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
+                    <ChevronDown
+                      aria-hidden="true"
+                      className="size-5 text-muted transition-transform -rotate-90 group-open:rotate-0"
+                    />
+                    <AreaTag name={area.name} position={area.position} className="!text-[15px]" />
+                    <span className="text-sm text-muted">{inArea.length}</span>
+                  </summary>
+                  <div className="mt-2 flex snap-x snap-mandatory items-start gap-3 overflow-x-auto pb-2 md:grid md:items-stretch md:grid-cols-2 md:overflow-visible xl:grid-cols-4">
+                    {STATUSES.map((status) => {
+                      const tone = statusTone[status];
+                      const cards = inArea.filter((t) => t.status === status);
+                      const key = area.id + ':' + status;
+                      return (
+                        <section
+                          key={status}
+                          aria-label={tone.label}
+                          data-column={status}
+                          className={
+                            'w-[85vw] max-w-sm flex-none snap-start rounded-xl p-3 md:w-auto md:max-w-none ' +
+                            tone.column +
+                            (over === key && dragId ? ' outline outline-2 outline-ink/30' : '')
+                          }
+                          onDragOver={(e) => {
+                            if (!dragId) return;
+                            e.preventDefault();
+                            setOver(key);
+                          }}
+                          onDragLeave={() => setOver('')}
+                          onDrop={(e) => drop(e, status)}
+                        >
+                          <h3 className="mb-3 flex items-center gap-2 px-1">
+                            <StatusPill status={status} />
+                            <span className="text-sm font-semibold text-muted">{cards.length}</span>
+                            {status === 'done' && admin && <Hint name="Fertig">{fertigHelp(area.reviewers)}</Hint>}
+                          </h3>
+                          <ul className="grid gap-2.5">
+                            {cards.map((t) => (
+                              <TicketCard
+                                key={t.id}
+                                ticket={t}
+                                position={area.position}
+                                busy={action.busy}
+                                onDragStart={() => setDragId(t.id)}
+                                onDragEnd={() => {
+                                  setDragId('');
+                                  setOver('');
+                                }}
+                                onMove={(s) => move(t, s)}
+                              />
+                            ))}
+                            <li>
+                              <Link
+                                to={'/tickets/neu?bereich=' + area.id + '&status=' + status}
+                                aria-label={'Neu in ' + area.name + ': ' + tone.label}
+                                className={
+                                  'flex min-h-11 items-center gap-2 rounded-[10px] px-3.5 text-[15px] font-semibold hover:bg-white/70 ' +
+                                  tone.text
+                                }
+                              >
+                                <Plus aria-hidden="true" className="size-4" /> Neu
+                              </Link>
+                            </li>
+                          </ul>
+                        </section>
+                      );
+                    })}
+                  </div>
+                </details>
               </section>
             );
           })}
         </div>
+      ) : (
+        <Empty>Keine Tickets</Empty>
+      )}
+    </div>
+  );
+}
+
+/** The card's status pill: opens four large status buttons (bottom sheet on phones, popover from md). */
+function StatusMenu({ ticket: t, busy, onMove }: { ticket: Ticket; busy: boolean; onMove: (status: Status) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
+  return (
+    // Above the card's stretched link; the open menu rises above the neighbouring cards.
+    <div ref={ref} className={'relative flex-none ' + (open ? 'z-50' : 'z-10')}>
+      <button
+        type="button"
+        disabled={busy}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={'Status von #' + t.number + ' ändern'}
+        className="-my-2 inline-flex min-h-11 items-center gap-1 rounded-full"
+        onClick={() => setOpen(!open)}
+      >
+        <StatusPill status={t.status} />
+        <ChevronDown aria-hidden="true" className="size-4 text-muted" />
+      </button>
+      {open && (
+        <>
+          <div
+            aria-hidden="true"
+            className="fixed inset-0 z-40 bg-ink/30 md:bg-transparent"
+            onClick={() => setOpen(false)}
+          />
+          <div
+            role="dialog"
+            aria-label={'Status von #' + t.number + ' wählen'}
+            className="fixed inset-x-0 bottom-0 z-50 grid gap-1 rounded-t-2xl bg-white p-3 pb-8 shadow-lg md:absolute md:inset-x-auto md:bottom-auto md:right-0 md:top-full md:mt-1 md:w-64 md:rounded-lg md:border md:border-[#e9e9e7] md:p-1.5"
+          >
+            <p className="px-3 pb-1 pt-1 text-sm font-bold text-muted md:hidden">Status ändern</p>
+            {STATUSES.map((s) => (
+              <button
+                key={s}
+                type="button"
+                autoFocus={s === t.status}
+                aria-pressed={s === t.status}
+                className="flex min-h-12 items-center justify-between gap-3 rounded-lg px-3 text-left hover:bg-soft"
+                onClick={() => {
+                  setOpen(false);
+                  onMove(s);
+                }}
+              >
+                <StatusPill status={s} className="!text-[15px]" />
+                {s === t.status && <Check aria-hidden="true" className="size-5" />}
+              </button>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
@@ -349,24 +644,25 @@ export function Board() {
 
 function TicketCard({
   ticket: t,
+  position,
   busy,
   onDragStart,
   onDragEnd,
   onMove,
 }: {
   ticket: Ticket;
+  position: number;
   busy: boolean;
   onDragStart: () => void;
   onDragEnd: () => void;
   onMove: (status: Status) => void;
 }) {
-  const Icon = typeIcon[t.type];
   return (
     <li>
       <article
         draggable
         aria-label={'#' + t.number + ' ' + t.title}
-        className="grid cursor-grab gap-2 rounded-ui border border-line bg-white p-3 text-sm active:cursor-grabbing"
+        className="relative grid cursor-grab gap-2 rounded-[10px] border border-[#e9e9e7] bg-white p-3.5 shadow-[0_1px_2px_rgba(15,15,15,0.06)] transition-colors hover:bg-[#fbfbfa] active:cursor-grabbing"
         onDragStart={(e) => {
           e.dataTransfer.setData('text/plain', t.id);
           e.dataTransfer.effectAllowed = 'move';
@@ -375,43 +671,38 @@ function TicketCard({
         onDragEnd={onDragEnd}
       >
         <div className="flex items-start gap-2">
-          <span title={typeLabel[t.type]} className="mt-0.5 text-muted">
-            <KindIcon icon={Icon} />
-            <span className="sr-only">{typeLabel[t.type]}</span>
-          </span>
-          <Link to={'/tickets/' + t.id} className="min-w-0 font-bold hover:underline">
-            <span className="text-muted">#{t.number}</span> {t.title}
+          <FileText aria-hidden="true" className="mt-0.5 size-5 flex-none text-muted" />
+          {/* The link stretches over the whole card; the status button sits above it. */}
+          <Link
+            to={'/tickets/' + t.id}
+            className="min-w-0 flex-1 text-[17px] font-bold leading-snug after:absolute after:inset-0"
+          >
+            {t.title}
           </Link>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
-          <span className="rounded-full bg-pill px-2 py-0.5">{t.area_name}</span>
-          <span className="rounded-full bg-pill px-2 py-0.5">Größe {t.size}</span>
-          {t.est_pages != null && (
-            <span className="rounded-full bg-pill px-2 py-0.5">
-              {t.est_pages === 1 ? '1 Seite' : t.est_pages + ' Seiten'}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          <AreaTag name={t.area_name} position={position} />
+          {t.assignee && (
+            <span className="inline-flex min-w-0 items-center gap-1.5 text-sm">
+              <Avatar user={t.assignee} />
+              <span className="truncate">{t.assignee.name}</span>
             </span>
           )}
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-1.5 text-muted">
-            <KindIcon icon={UserRound} />
-            {t.assignee?.name ?? 'Unbesetzt'}
+        {t.goal && <p className="line-clamp-3 text-[15px] leading-snug">{t.goal}</p>}
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
+            {t.comment_count > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <MessageSquare aria-hidden="true" className="size-4" />
+                {t.comment_count}
+                <span className="sr-only">{t.comment_count === 1 ? 'Kommentar' : 'Kommentare'}</span>
+              </span>
+            )}
+            {awaitingApproval(t) && <span className="text-xs font-bold text-wait">Wartet auf Abnahme</span>}
           </span>
-          <ApprovalBadge ticket={t} />
+          <StatusMenu ticket={t} busy={busy} onMove={onMove} />
         </div>
-        <select
-          aria-label={'Status von #' + t.number}
-          className="min-h-10 w-full rounded-ui border-2 border-line bg-white px-2 text-sm"
-          value={t.status}
-          disabled={busy}
-          onChange={(e) => onMove(e.target.value as Status)}
-        >
-          {COLUMNS.map((c) => (
-            <option key={c.status} value={c.status}>
-              {c.title}
-            </option>
-          ))}
-        </select>
       </article>
     </li>
   );
@@ -581,16 +872,7 @@ function TicketForm({
       </label>
       <div className="grid gap-5 sm:grid-cols-2">
         <Field name="Bereich" help={HELP.bereich}>
-          {(id) => (
-            <select id={id} className={field} value={areaId} onChange={(e) => setAreaId(e.target.value)}>
-              <option value="">Bitte wählen</option>
-              {areas.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-          )}
+          {(id) => <AreaPicker areas={areas} value={areaId} onChange={setAreaId} id={id} />}
         </Field>
         <Field name="Wer" help={HELP.wer} hintName="Status/Wer">
           {(id) => (
@@ -674,6 +956,10 @@ export function NewTicket() {
   const areas = useData<Area[]>('/areas');
   const navigate = useNavigate();
   const action = useTicketAction();
+  const [params] = useSearchParams();
+  const startParam = params.get('status');
+  const start: Status = isStatus(startParam) ? startParam : 'todo';
+  const presetArea = areas.data?.find((a) => a.id === params.get('bereich'))?.id ?? '';
   return (
     <div className="max-w-3xl">
       <PageHead title="Neues Ticket">
@@ -685,6 +971,11 @@ export function NewTicket() {
         <Failure error={areas.error} retry={() => void areas.refetch()} />
       ) : (
         <div className={panel}>
+          {start !== 'todo' && (
+            <p className="mb-5 flex items-center gap-2 text-sm font-bold">
+              Startet in <StatusPill status={start} />
+            </p>
+          )}
           <TicketForm
             mode="new"
             areas={areas.data}
@@ -692,7 +983,7 @@ export function NewTicket() {
               type: 'aufgabe',
               title: '',
               body: TEMPLATE,
-              area_id: '',
+              area_id: presetArea,
               assignee: null,
               size: '',
               goal: '',
@@ -706,7 +997,19 @@ export function NewTicket() {
                 const ok = await action.run(async () => {
                   created = await api<Ticket>('/tickets', json('POST', payload));
                 }, 'Ticket angelegt.');
-                if (ok && created) navigate('/tickets/' + created.id);
+                if (!ok || !created) return;
+                // TicketInput has no status: tickets start in todo, other columns need one status change.
+                if (start !== 'todo') {
+                  try {
+                    await api(
+                      '/tickets/' + created.id + '/status',
+                      json('POST', { version: created.version, status: start }),
+                    );
+                  } catch {
+                    toast.error('Das Ticket wurde angelegt, der Status konnte aber nicht gesetzt werden.');
+                  }
+                }
+                navigate('/tickets/' + created.id);
               })();
             }}
           />
@@ -728,19 +1031,84 @@ export function TicketPage() {
   return <TicketView detail={detail.data} areas={areas.data} />;
 }
 
-const eventText: Record<TicketEvent['kind'], { icon: LucideIcon; text: string }> = {
-  comment: { icon: MessageSquare, text: 'hat kommentiert' },
-  status: { icon: ArrowRightLeft, text: 'hat den Status geändert' },
-  assign: { icon: UserRound, text: 'hat die Zuständigkeit geändert' },
-  review: { icon: ClipboardCheck, text: 'hat ein Review abgegeben' },
-  edit: { icon: Pencil, text: 'hat das Ticket bearbeitet' },
+const eventText: Record<TicketEvent['kind'], { text: string }> = {
+  comment: { text: 'hat kommentiert' },
+  status: { text: 'hat den Status geändert' },
+  assign: { text: 'hat die Zuständigkeit geändert' },
+  review: { text: 'hat ein Review abgegeben' },
+  edit: { text: 'hat das Ticket bearbeitet' },
 };
 const EVENT_LIMIT = 50;
+const editedField: Record<string, string> = {
+  title: 'Titel',
+  body: 'Beschreibung',
+  area_id: 'Bereich',
+  size: 'Größe',
+  goal: 'Zieldefinition',
+  est_pages: 'Seiten',
+};
+const Arrow = () => <ArrowRight aria-hidden="true" className="size-4 flex-none" />;
+const nameTag = (name: string) => (
+  <span className="rounded-full bg-pill px-2.5 py-0.5 text-[13px] font-semibold text-ink">{name}</span>
+);
+
+/**
+ * Compact rendering of the server-defined event detail ("todo->review", "old -> new", "approve:binding",
+ * "title,goal"). Anything unparsable returns null and is shown as raw text by the caller.
+ */
+function eventSummary(event: TicketEvent): ReactNode {
+  const detail = event.detail;
+  if (event.kind === 'status') {
+    const [from, to, ...rest] = detail.split('->');
+    if (isStatus(from) && isStatus(to) && !rest.length)
+      return (
+        <>
+          <StatusPill status={from} />
+          <Arrow />
+          <StatusPill status={to} />
+        </>
+      );
+  }
+  if (event.kind === 'assign') {
+    const [from, to, ...rest] = detail.split(' -> ');
+    if (from && to && !rest.length)
+      return (
+        <>
+          <UserRound aria-hidden="true" className="size-4 flex-none" />
+          {nameTag(from)}
+          <Arrow />
+          {nameTag(to)}
+        </>
+      );
+  }
+  if (event.kind === 'review') {
+    const verdict = detail.split(':')[0];
+    if (verdict === 'approve')
+      return (
+        <span className="inline-flex items-center gap-1 font-semibold text-ok">
+          <Check aria-hidden="true" className="size-4" /> Freigabe
+        </span>
+      );
+    if (verdict === 'changes')
+      return (
+        <span className="inline-flex items-center gap-1 font-semibold text-wait">
+          <RefreshCw aria-hidden="true" className="size-4" /> Änderungen nötig
+        </span>
+      );
+  }
+  if (event.kind === 'edit') {
+    const fields = detail.split(',');
+    if (fields.every((f) => editedField[f]))
+      return <span>hat {fields.map((f) => editedField[f]).join(', ')} bearbeitet</span>;
+  }
+  return null;
+}
 
 function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) {
   const { user } = useSession();
   const { ticket, events } = detail;
   const area = areas.find((a) => a.id === ticket.area_id);
+  const admin = user.role === 'admin';
   const isAssignee = ticket.assignee?.id === user.id;
   const reviewerHere = isReviewer(user, area);
   const mayEdit = reviewerHere || isAssignee;
@@ -752,6 +1120,10 @@ function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) 
   const shown = allEvents ? events : events.slice(-EVENT_LIMIT);
 
   const post = (path: string, body?: unknown, message = '') => action.run(() => api(path, json('POST', body)), message);
+  const move = (status: Status) =>
+    status !== ticket.status && void post('/tickets/' + ticket.id + '/status', { version: ticket.version, status });
+  const canClaim = !ticket.assignee && (ticket.status === 'todo' || ticket.status === 'in_progress');
+  const canHandOver = isAssignee && ticket.status === 'in_progress';
 
   return (
     <div>
@@ -760,15 +1132,13 @@ function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) 
           ← Zurück zum Board
         </Link>
       </div>
-      <header className="mb-8 flex flex-wrap items-start justify-between gap-3">
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
             {ticket.title} <span className="font-semibold text-muted">#{ticket.number}</span>
           </h1>
           <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
-            <span className="rounded-full bg-pill px-2.5 py-1 text-xs font-bold text-ink">
-              {statusTitle[ticket.status]}
-            </span>
+            {!mayEdit && <StatusPill status={ticket.status} />}
             <ApprovalBadge ticket={ticket} />
             {typeLabel[ticket.type]} von {ticket.created_by.name}, angelegt am {date(ticket.created_at)}
           </p>
@@ -779,6 +1149,36 @@ function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) 
           </button>
         )}
       </header>
+      {(mayEdit || canClaim) && (
+        <div className="mb-8 grid gap-3">
+          {mayEdit && <StatusStepper status={ticket.status} busy={action.busy} onMove={move} />}
+          {(canClaim || canHandOver) && (
+            <div className="flex flex-wrap gap-3">
+              {canClaim && (
+                <button
+                  type="button"
+                  className={btn.primary + ' min-h-11'}
+                  title={HELP.uebernehmen}
+                  disabled={action.busy}
+                  onClick={() => void post('/tickets/' + ticket.id + '/claim', undefined, 'Ticket übernommen.')}
+                >
+                  <Hand aria-hidden="true" className="size-4" /> Übernehmen
+                </button>
+              )}
+              {canHandOver && (
+                <button
+                  type="button"
+                  className={btn.primary + ' min-h-11'}
+                  disabled={action.busy}
+                  onClick={() => move('review')}
+                >
+                  <ClipboardCheck aria-hidden="true" className="size-4" /> Zur Review geben
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_21rem]">
         <div className="grid min-w-0 gap-8">
           {editing ? (
@@ -827,6 +1227,21 @@ function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) 
               )}
             </section>
           )}
+          <ReviewPanel
+            ticket={ticket}
+            area={area}
+            busy={action.busy}
+            onVote={(verdict, self) =>
+              void action.run(
+                () =>
+                  api(
+                    '/tickets/' + ticket.id + '/review',
+                    json('PUT', { verdict, round: ticket.round, ...(self && { self_confirmed: true }) }),
+                  ),
+                verdict === 'approve' ? 'Freigabe gespeichert.' : 'Änderungswunsch gespeichert.',
+              )
+            }
+          />
           <section aria-labelledby="ticket-timeline">
             <h2 id="ticket-timeline" className={heading + ' mb-4'}>
               Aktivität
@@ -882,114 +1297,104 @@ function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) 
         <aside className="grid gap-4" aria-label="Details">
           <ErrorNotice error={action.error} />
           <dl className="grid gap-4 rounded-ui bg-soft p-5 text-sm">
-            <Side title="Bereich" hint={HELP.bereich}>
-              {ticket.area_name}
+            <Side title="Bereich">
+              {area ? <AreaTag name={area.name} position={area.position} /> : ticket.area_name}
             </Side>
-            <Side title="Wer" hintName="Status/Wer" hint={HELP.wer}>
-              <span className="flex flex-wrap items-center gap-2">
-                {ticket.assignee?.name ?? 'Unbesetzt'}
-                {!ticket.assignee && (ticket.status === 'todo' || ticket.status === 'in_progress') && (
-                  <button
-                    type="button"
-                    className={btn.secondary + ' !px-3 !py-1.5 !text-sm'}
-                    title={HELP.uebernehmen}
-                    disabled={action.busy}
-                    onClick={() => void post('/tickets/' + ticket.id + '/claim', undefined, 'Ticket übernommen.')}
-                  >
-                    <Hand aria-hidden="true" className="size-4" /> Übernehmen
-                  </button>
-                )}
-              </span>
-            </Side>
-            <Side title="Größe" hint={HELP.groesse}>
-              {ticket.size}
-            </Side>
-            {ticket.est_pages != null && (
-              <Side title="Seiten" hint={HELP.seiten}>
-                {ticket.est_pages}
-              </Side>
-            )}
-            <Side title="Zieldefinition" hint={HELP.ziel}>
-              <span className="whitespace-pre-wrap">{ticket.goal}</span>
-            </Side>
-            <Side title="Status" hintName="Fertig" hint={fertigHelp(area?.reviewers ?? [])}>
-              {reviewerHere || isAssignee ? (
-                <select
-                  aria-label="Status"
-                  className="min-h-10 w-full rounded-ui border-2 border-line bg-white px-2 text-sm"
-                  value={ticket.status}
-                  disabled={action.busy}
-                  onChange={(e) =>
-                    void post('/tickets/' + ticket.id + '/status', { version: ticket.version, status: e.target.value })
-                  }
-                >
-                  {COLUMNS.map((c) => (
-                    <option key={c.status} value={c.status}>
-                      {c.title}
-                    </option>
-                  ))}
-                </select>
+            <Side title="Wer">
+              {ticket.assignee ? (
+                <span className="flex items-center gap-2">
+                  <Avatar user={ticket.assignee} />
+                  {ticket.assignee.name}
+                </span>
               ) : (
-                statusTitle[ticket.status]
+                'Unbesetzt'
               )}
             </Side>
-            <Side title="Bereichsverantwortliche">
-              {area?.reviewers.length ? area.reviewers.map((r) => r.name).join(', ') : 'Niemand eingetragen'}
+            <Side title="Größe">{ticket.size}</Side>
+            {ticket.est_pages != null && <Side title="Seiten">{ticket.est_pages}</Side>}
+            <Side title="Zieldefinition">
+              <span className="whitespace-pre-wrap">{ticket.goal}</span>
             </Side>
-            <Side title="Runde">{ticket.round}</Side>
+            <Side title="Bereichsverantwortliche">
+              {area?.reviewers.length ? (
+                <span className="flex -space-x-1.5">
+                  {area.reviewers.map((r) => (
+                    <span key={r.id} title={r.name} className="inline-flex rounded-full ring-2 ring-soft">
+                      <Avatar user={r} className="size-7 text-xs" />
+                      <span className="sr-only">{r.name}</span>
+                    </span>
+                  ))}
+                </span>
+              ) : (
+                'Niemand eingetragen'
+              )}
+            </Side>
+            {admin && <Side title="Runde">{ticket.round}</Side>}
           </dl>
-          <ReviewPanel
-            ticket={ticket}
-            area={area}
-            busy={action.busy}
-            onVote={(verdict, self) =>
-              void action.run(
-                () =>
-                  api(
-                    '/tickets/' + ticket.id + '/review',
-                    json('PUT', { verdict, round: ticket.round, ...(self && { self_confirmed: true }) }),
-                  ),
-                verdict === 'approve' ? 'Freigabe gespeichert.' : 'Änderungswunsch gespeichert.',
-              )
-            }
-          />
         </aside>
       </div>
     </div>
   );
 }
 
-function Side({
-  title,
-  hint,
-  hintName,
-  children,
-}: {
-  title: string;
-  hint?: string;
-  hintName?: string;
-  children: ReactNode;
-}) {
+/** Four steps, earlier ones checked, the current one filled in its status tone. */
+function StatusStepper({ status, busy, onMove }: { status: Status; busy: boolean; onMove: (status: Status) => void }) {
+  const at = STATUSES.indexOf(status);
+  return (
+    <div role="group" aria-label="Status" className="grid grid-cols-2 gap-1.5 rounded-2xl bg-soft p-1.5 sm:grid-cols-4">
+      {STATUSES.map((s, i) => {
+        const tone = statusTone[s];
+        return (
+          <button
+            key={s}
+            type="button"
+            disabled={busy}
+            aria-current={i === at ? 'step' : undefined}
+            className={
+              'flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold transition-colors ' +
+              (i === at ? tone.pill + ' shadow-sm' : 'bg-white text-muted hover:text-ink')
+            }
+            onClick={() => onMove(s)}
+          >
+            {i < at ? (
+              <Check aria-hidden="true" className="size-4 flex-none text-ok" />
+            ) : (
+              <span
+                aria-hidden="true"
+                className={'size-2.5 flex-none rounded-full ' + (i === at ? tone.dot : 'bg-line')}
+              />
+            )}
+            {tone.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Side({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div>
-      <dt className="flex items-center gap-1 text-xs font-extrabold uppercase tracking-wide text-muted">
-        {title}
-        {hint && <Hint name={hintName ?? title}>{hint}</Hint>}
-      </dt>
+      <dt className="text-xs font-extrabold uppercase tracking-wide text-muted">{title}</dt>
       <dd className="mt-1">{children}</dd>
     </div>
   );
 }
 
 function TimelineEvent({ event }: { event: TicketEvent }) {
-  const meta = eventText[event.kind];
+  const when = (
+    <time dateTime={event.created_at} title={date(event.created_at)}>
+      {ago(event.created_at)}
+    </time>
+  );
   if (event.kind === 'comment') {
     return (
       <li>
         <article className="rounded-ui border-2 border-line bg-white" aria-label={'Kommentar von ' + event.actor.name}>
           <header className="flex flex-wrap items-center gap-2 border-b border-line bg-soft px-4 py-2 text-sm">
+            <Avatar user={event.actor} />
             <strong>{event.actor.name}</strong>
-            <span className="text-muted">hat kommentiert · {date(event.created_at)}</span>
+            <span className="text-muted">· {when}</span>
           </header>
           <div className="px-4 py-3">
             <Markdown value={event.body} name={'Kommentar von ' + event.actor.name} />
@@ -998,15 +1403,20 @@ function TimelineEvent({ event }: { event: TicketEvent }) {
       </li>
     );
   }
-  // detail/body of non-comment events are server-defined text; shown verbatim.
+  // detail/body of non-comment events are server-defined text; unparsable ones are shown verbatim.
+  const summary = eventSummary(event);
   const text = event.detail || event.body;
   return (
-    <li className="flex items-start gap-2 px-1 text-sm text-muted">
-      <KindIcon icon={meta.icon} className="mt-0.5 size-4" />
-      <span>
-        <strong className="text-ink">{event.actor.name}</strong> {meta.text}
-        {text && <>: {text}</>} · {date(event.created_at)}
-      </span>
+    <li className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-sm text-muted">
+      <Avatar user={event.actor} />
+      <strong className="text-ink">{event.actor.name}</strong>
+      {summary ?? (
+        <span>
+          {eventText[event.kind].text}
+          {text && <>: {text}</>}
+        </span>
+      )}
+      <span>· {when}</span>
     </li>
   );
 }
@@ -1038,22 +1448,24 @@ function ReviewPanel({
       )}
       {ticket.reviews.length ? (
         <ul className="grid gap-2">
-          {ticket.reviews.map((r) => (
-            <li key={r.user.id} className="rounded-ui bg-white px-3 py-2">
-              <span className="font-bold">{r.user.name}</span>
-              {r.user.id === user.id && ' (du)'}: {r.verdict === 'approve' ? 'Freigegeben' : 'Änderungen nötig'}
-              <span className="mt-1 flex flex-wrap gap-1.5 text-xs font-bold">
-                <span
-                  className={'rounded-full px-2 py-0.5 ' + (r.binding ? 'bg-ok-tint text-ok' : 'bg-pill text-muted')}
-                >
-                  {r.binding ? 'Bindend' : 'Nicht bindend'}
+          {ticket.reviews.map((r) => {
+            const notes = [!r.binding && 'nicht bindend', r.self_confirmed && 'selbstbestätigt'].filter(Boolean);
+            return (
+              <li key={r.user.id} className="flex items-center gap-3 rounded-ui bg-white px-3 py-2">
+                <Avatar user={r.user} className="size-8 text-xs" />
+                <span className="min-w-0 flex-1">
+                  <span className="font-bold">{r.user.name}</span>
+                  {r.user.id === user.id && ' (du)'}
+                  {notes.length > 0 && <span className="block text-xs text-muted">{notes.join(' · ')}</span>}
                 </span>
-                {r.self_confirmed && (
-                  <span className="rounded-full bg-pill px-2 py-0.5 text-muted">Selbstbestätigt</span>
+                {r.verdict === 'approve' ? (
+                  <Check role="img" aria-label="Freigegeben" className="size-5 flex-none text-ok" />
+                ) : (
+                  <RefreshCw role="img" aria-label="Änderungen nötig" className="size-5 flex-none text-wait" />
                 )}
-              </span>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <p className="text-muted">Noch keine Stimmen in dieser Runde.</p>
@@ -1075,14 +1487,19 @@ function ReviewPanel({
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              className={btn.primary + ' !px-5 !py-2.5'}
+              className={btn.primary + ' min-h-11 !px-5 !py-2.5'}
               disabled={busy || (selfApproval && !confirmed)}
               onClick={() => onVote('approve', selfApproval)}
             >
               Freigeben
             </button>
             {!isAssignee && (
-              <button type="button" className={btn.secondary} disabled={busy} onClick={() => onVote('changes', false)}>
+              <button
+                type="button"
+                className={btn.secondary + ' min-h-11'}
+                disabled={busy}
+                onClick={() => onVote('changes', false)}
+              >
                 <RefreshCw aria-hidden="true" className="size-4" /> Änderungen nötig
               </button>
             )}
