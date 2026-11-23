@@ -22,3 +22,6 @@ plans/
 .claude-brevo-key
 # Operator-supplied legal texts (impressum.html, datenschutz.html), mounted read-only into the portal.
 legal/
+.env.dev.dist
+mise.toml
+.claude/settings.json
