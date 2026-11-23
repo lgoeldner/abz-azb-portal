@@ -314,3 +314,47 @@ body:has([data-workspace='redaktion']) {
 [data-workspace='redaktion'] aside a[aria-current='page'] [class~='text-white/80'] {
   color: var(--color-muted);
 }
+
+/* Environment marker for non-production deployments (data-env from ENV_LABEL, or "dev" under Vite):
+   a stripe along the top edge plus a text chip, so it never relies on color alone. Decorative and
+   click-through; the chip sits in the empty top-right corner of the mobile header and the desktop gutter. */
+html[data-env] {
+  --env-bg: #6d28d9;
+  --env-fg: #fff;
+}
+html[data-env='preview'] {
+  --env-bg: #c2410c;
+}
+html[data-env='test'] {
+  --env-bg: #f5b301;
+  --env-fg: var(--color-ink);
+}
+html[data-env]::before,
+html[data-env]::after {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  background: var(--env-bg);
+}
+html[data-env]::before {
+  content: '';
+  inset: 0 0 auto;
+  block-size: calc(3px + env(safe-area-inset-top, 0px));
+}
+html[data-env]::after {
+  content: attr(data-env);
+  top: calc(3px + env(safe-area-inset-top, 0px));
+  right: max(0.75rem, env(safe-area-inset-right, 0px));
+  padding: 0 0.5rem 0.125rem;
+  border-radius: 0 0 calc(var(--radius-ui) / 2) calc(var(--radius-ui) / 2);
+  color: var(--env-fg);
+  font: 700 0.625rem/1.5 var(--font-sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+@media print {
+  html[data-env]::before,
+  html[data-env]::after {
+    display: none;
+  }
+}

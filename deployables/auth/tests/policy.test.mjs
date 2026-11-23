@@ -60,5 +60,12 @@ test("service bearer comparison, UUID validation, and cookies are mode-bound", (
   assert.equal(hasServiceAuthorization("Basic " + secret, secret), false);
   assert.equal(isUUID("a9e4471b-f303-42fb-a563-51cb90ac34da"), true);
   assert.equal(isUUID("alex_admin"), false);
-  assert.notEqual(cookiePrefixFor("mock"), cookiePrefixFor("better_auth"));
+  for (const secure of [false, true]) assert.notEqual(cookiePrefixFor("mock", secure), cookiePrefixFor("better_auth", secure));
+});
+
+test("HTTPS cookies carry the __Host- prefix, plain HTTP names do not", () => {
+  for (const mode of ["mock", "better_auth"]) {
+    assert.match(cookiePrefixFor(mode, true), /^__Host-/u);
+    assert.doesNotMatch(cookiePrefixFor(mode, false), /^__(Host|Secure)-/u);
+  }
 });

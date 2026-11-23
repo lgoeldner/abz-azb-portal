@@ -83,8 +83,10 @@ func (a *App) setupAuth(ctx context.Context) error {
 	auth.verifier = provider.VerifierContext(ctx, &oidc.Config{ClientID: c.ClientID})
 	return nil
 }
+
+// cookie sets a host-only cookie; name is the unprefixed base name.
 func (a *App) cookie(w http.ResponseWriter, name, value string, age int) {
-	http.SetCookie(w, &http.Cookie{Name: name, Value: value, Path: "/", HttpOnly: true, Secure: a.Config.Env == "production", SameSite: http.SameSiteLaxMode, MaxAge: age})
+	http.SetCookie(w, &http.Cookie{Name: a.Config.cookieName(name), Value: value, Path: "/", HttpOnly: true, Secure: a.Config.secureCookies(), SameSite: http.SameSiteLaxMode, MaxAge: age})
 }
 func (a *App) signState(st loginState) string {
 	b, _ := json.Marshal(st)
@@ -140,7 +142,7 @@ func (a *App) callback(w http.ResponseWriter, r *http.Request) error {
 	if err := a.assertAuthMode(r.Context(), a.DB); err != nil {
 		return err
 	}
-	c, e := r.Cookie("portal_login")
+	c, e := r.Cookie(a.Config.cookieName("portal_login"))
 	if e != nil {
 		return fail(400, "oauth_state", "Ungültiger Anmeldevorgang.")
 	}
@@ -229,7 +231,7 @@ func (a *App) logout(w http.ResponseWriter, r *http.Request) error {
 		a.authProxy(w, r)
 		return nil
 	}
-	c, e := r.Cookie("portal_session")
+	c, e := r.Cookie(a.Config.cookieName("portal_session"))
 	if e == nil {
 		if _, e = a.DB.Exec(r.Context(), "DELETE FROM sessions WHERE token_hash=$1", digest(c.Value)); e != nil {
 			return e

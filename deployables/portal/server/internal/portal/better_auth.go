@@ -62,7 +62,7 @@ func (a *App) dependencyUser(r *http.Request) (User, error) {
 }
 func (a *App) dependencyProtected(next http.Handler) http.Handler {
 	key := sha256.Sum256(a.auth.secret)
-	guarded := csrf.Protect(key[:], csrf.Secure(a.Config.Env == "production"), csrf.CookieName("portal_csrf"), csrf.Path("/"), csrf.SameSite(csrf.SameSiteLaxMode), csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	guarded := csrf.Protect(key[:], csrf.Secure(a.Config.secureCookies()), csrf.CookieName(a.Config.cookieName("portal_csrf")), csrf.Path("/"), csrf.SameSite(csrf.SameSiteLaxMode), csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		respondError(w, fail(403, "csrf", "Ungültiges CSRF-Token."))
 	})))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ru := r.Context().Value(contextKey{}).(requestUser)

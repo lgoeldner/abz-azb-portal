@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -181,7 +182,7 @@ func (a *App) protected(next http.Handler) http.Handler {
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
-		cookie, e := r.Cookie("portal_session")
+		cookie, e := r.Cookie(a.Config.cookieName("portal_session"))
 		if e != nil {
 			respondError(w, fail(401, "unauthenticated", "Bitte anmelden."))
 			return
@@ -264,9 +265,30 @@ func (a *App) routes() {
 			http.ServeFile(w, r, p)
 			return
 		}
-		http.ServeFile(w, r, filepath.Join(a.Config.StaticDir, "index.html"))
+		a.serveIndex(w, r)
 	})
 	a.handler = m
+}
+
+// serveIndex serves the SPA shell. Non-production deployments (ENV_LABEL dev, preview,
+// test) get data-env on <html>; the stylesheet draws the environment marker from it.
+// The file is read per request so a rebuilt frontend is picked up like ServeFile does.
+func (a *App) serveIndex(w http.ResponseWriter, r *http.Request) {
+	p := filepath.Join(a.Config.StaticDir, "index.html")
+	if a.Config.EnvLabel == "" || a.Config.EnvLabel == "prod" {
+		http.ServeFile(w, r, p)
+		return
+	}
+	st, err := os.Stat(p)
+	page, readErr := os.ReadFile(p)
+	if err != nil || readErr != nil {
+		http.ServeFile(w, r, p) // same error responses as the unlabelled path
+		return
+	}
+	// EnvLabel comes from the Validate allowlist, so it needs no escaping.
+	page = bytes.Replace(page, []byte("<html"), []byte(`<html data-env="`+a.Config.EnvLabel+`"`), 1)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	http.ServeContent(w, r, "index.html", st.ModTime(), bytes.NewReader(page))
 }
 
 func (a *App) me(w http.ResponseWriter, r *http.Request) error {
