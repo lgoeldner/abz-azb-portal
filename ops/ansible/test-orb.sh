@@ -61,6 +61,7 @@ curl_edge() { edge curl -sk --resolve "$host:443:127.0.0.1" "$@"; }
 edge ping -c1 -W3 10.77.0.2 >/dev/null || { echo 'FAIL: tunnel down' >&2; exit 1; }
 [ "$(curl_edge -o /dev/null -w '%{http_code}' "https://$host/readyz")" = 200 ] || { echo 'FAIL: readyz through edge' >&2; exit 1; }
 [ "$(curl_edge -o /dev/null -w '%{http_code}' "https://$host/internal/x")" = 404 ] || { echo 'FAIL: /internal reachable' >&2; exit 1; }
+curl_edge "https://$host/" | grep -q 'data-env="test"' || { echo 'FAIL: test marker missing' >&2; exit 1; }
 
 # A rate-limited auth request from the edge itself: its key must carry the client's address (127.0.0.1), not 10.77.0.1.
 curl_edge -o /dev/null -X POST -H 'content-type: application/json' -H "origin: https://$host" \
@@ -69,4 +70,4 @@ keys=$(orb -m abz-home bash -c "cd /opt/abizeitbetrug && sudo docker compose exe
 echo "rate-limit keys: $keys"
 grep -q '127\.0\.0\.1' <<<"$keys" || { echo 'FAIL: auth does not see the client IP' >&2; exit 1; }
 
-echo 'OK: edge, tunnel, test stack, /internal and client IP'
+echo 'OK: edge, tunnel, test stack, /internal, test marker and client IP'
