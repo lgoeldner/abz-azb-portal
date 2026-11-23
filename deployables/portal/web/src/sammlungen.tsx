@@ -496,7 +496,7 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
                     disabled={action.busy}
                     onChange={(event) => setOptionDraft(event.target.value)}
                     onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
+                      if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
                         event.preventDefault();
                         addOption();
                       }

@@ -83,7 +83,7 @@ export function BallotForm({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit) return;
-    const submittedChoices = poll.repeatable ? [...choices].sort() : choices;
+    const submittedChoices = poll.repeatable ? choices.toSorted() : choices;
     const ballotId = poll.repeatable ? pendingBallotId(user.id, poll.id, JSON.stringify(submittedChoices)) : undefined;
     onBusyChange?.(true);
     let saved = false;
@@ -219,7 +219,7 @@ function WordsBallotForm({
   }
 
   function onWordKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'Enter' || event.key === ',') {
+    if ((event.key === 'Enter' && !event.nativeEvent.isComposing) || event.key === ',') {
       event.preventDefault();
       addWords();
     }
@@ -233,7 +233,7 @@ function WordsBallotForm({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit) return;
-    const submittedWords = poll.repeatable ? [...words].sort() : words;
+    const submittedWords = poll.repeatable ? words.toSorted() : words;
     const ballotId = poll.repeatable ? pendingBallotId(user.id, poll.id, JSON.stringify(submittedWords)) : undefined;
     onBusyChange?.(true);
     let saved = false;

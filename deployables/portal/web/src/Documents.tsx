@@ -75,7 +75,7 @@ function DocTile({ doc }: { doc: Document }) {
 
 /** Unread documents first; the server already sorts newest change first and sort is stable. */
 function Tiles({ docs, limit }: { docs: Document[]; limit?: number }) {
-  const sorted = [...docs].sort((a, b) => Number(b.unread) - Number(a.unread));
+  const sorted = docs.toSorted((a, b) => Number(b.unread) - Number(a.unread));
   const unread = sorted.filter((doc) => doc.unread).length;
   const shown = limit === undefined ? sorted : sorted.slice(0, limit);
   return (

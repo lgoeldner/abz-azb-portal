@@ -1013,15 +1013,13 @@ function EditorialHome() {
   const submissions = useData<Submission[]>('/submissions');
   const waiting = (users.data ?? []).filter((u) => !u.admitted).sort((a, b) => time(b.created_at) - time(a.created_at));
   const latest = isAdmin
-    ? [...(categories.data ?? [])].sort(newestOpened).slice(0, 4)
+    ? (categories.data ?? []).toSorted(newestOpened).slice(0, 4)
     : (categories.data ?? [])
         .filter((c) => isBallot(c.kind) && canEdit(user, c.id))
         .sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || newestOpened(a, b));
   const writableCategoryIds = new Set((categories.data ?? []).filter((c) => canEdit(user, c.id)).map((c) => c.id));
   const writableSubmissions = (submissions.data ?? []).filter((s) => writableCategoryIds.has(s.category_id));
-  const recentSubmissions = [...writableSubmissions]
-    .sort((a, b) => time(b.created_at) - time(a.created_at))
-    .slice(0, 3);
+  const recentSubmissions = writableSubmissions.toSorted((a, b) => time(b.created_at) - time(a.created_at)).slice(0, 3);
   const card = 'flex min-w-0 flex-col rounded-ui bg-white p-5 sm:p-6';
   const figure = 'block text-4xl font-extrabold tabular-nums leading-none tracking-tight';
   const state = (q: { isPending: boolean; error: Error | null; refetch: () => unknown }) =>
