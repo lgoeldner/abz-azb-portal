@@ -13,7 +13,13 @@ test_host: test.abizeitbetrug.de
 test_image_prefix: ghcr.io/lgoeldner/
 test_app_version: main
 test_pull_images: true
-test_auto_update: true # systemd timer pulls :main every 5 minutes
+test_auto_update: true # fallback timer pulls :main hourly; the webhook deploys within seconds
+
+# GitHub workflow_run webhook -> edge /hooks/deploy -> listener on the WireGuard address.
+test_webhook_port: 9000
+test_webhook_repo: lgoeldner/abz-azb-portal
+test_webhook_manage: true # create the repo webhook with the controller's gh CLI
+test_webhook_rotate: false # true: PATCH the existing webhook with the vault secret
 
 test_mail_from: "AbiZeitBetrug Test <CHANGE_ME>"
 test_mail_reply_to: ""
@@ -30,3 +36,4 @@ test_better_auth_secret: "{{ vault_test_better_auth_secret }}"
 test_session_secret: "{{ vault_test_session_secret }}"
 test_brevo_api_key: "{{ vault_test_brevo_api_key }}"
 test_restic_password: "{{ vault_test_restic_password }}"
+test_webhook_secret: "{{ vault_test_webhook_secret }}"

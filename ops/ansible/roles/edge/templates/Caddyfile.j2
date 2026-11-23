@@ -10,6 +10,15 @@
 {% if edge_tls_internal %}
 	tls internal
 {% endif %}
+{% if site.hooks_upstream | default('') %}
+	handle /hooks/* {
+		reverse_proxy {{ site.hooks_upstream }}
+	}
+	handle {
+		reverse_proxy {{ site.upstream }}
+	}
+{% else %}
 	reverse_proxy {{ site.upstream }}
+{% endif %}
 }
 {% endfor %}

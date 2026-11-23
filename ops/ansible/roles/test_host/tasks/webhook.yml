@@ -1,0 +1,149 @@
+# GitHub "Images" workflow finished -> signed POST -> edge /hooks/* -> this listener -> start the update service.
+# The timer stays as an hourly fallback: deliveries made while the server is offline are lost.
+- name: Webhook packages
+  ansible.builtin.apt:
+    name: [webhook, sudo]
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Webhook system user
+  ansible.builtin.user:
+    name: webhook
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+
+- name: Webhook config directory
+  ansible.builtin.file:
+    path: /etc/webhook
+    state: directory
+    mode: "0755"
+
+# Contains the secret: readable by root and the service user only.
+- name: Webhook hooks file
+  ansible.builtin.template:
+    src: webhook-hooks.json.j2
+    dest: /etc/webhook/hooks.json
+    owner: root
+    group: webhook
+    mode: "0640"
+  no_log: true
+  notify: Restart webhook
+
+- name: Webhook may start the update service, nothing else
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/abizeitbetrug-webhook
+    content: |
+      # Managed by Ansible.
+      webhook ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block abizeitbetrug-test-update.service
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+
+- name: Webhook unit drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/webhook.service.d
+    state: directory
+    mode: "0755"
+
+# The packaged unit runs as root with the default config path and listens on all addresses.
+# No NoNewPrivileges: the hook needs sudo.
+- name: Webhook unit drop-in
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/webhook.service.d/abizeitbetrug.conf
+    content: |
+      [Unit]
+      ConditionPathExists=
+      ConditionPathExists=/etc/webhook/hooks.json
+      After=wg-quick@wg0.service network-online.target
+      Wants=wg-quick@wg0.service
+
+      [Service]
+      User=webhook
+      Group=webhook
+      ExecStart=
+      ExecStart=/usr/bin/webhook -nopanic -hooks /etc/webhook/hooks.json -ip {{ wg_test_address }} -port {{ test_webhook_port }} -urlprefix hooks
+      Restart=on-failure
+      RestartSec=5
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart webhook
+
+- name: Flush handlers before starting the webhook
+  ansible.builtin.meta: flush_handlers
+
+- name: Webhook running
+  ansible.builtin.service:
+    name: webhook
+    state: started
+    enabled: true
+
+# Docker bypasses ufw, this listener does not: only the edge may reach it, over the tunnel.
+- name: Firewall rule for the webhook
+  community.general.ufw:
+    rule: allow
+    direction: in
+    interface: wg0
+    from_ip: "{{ wg_edge_address }}"
+    to_ip: "{{ wg_test_address }}"
+    port: "{{ test_webhook_port }}"
+    proto: tcp
+  when: manage_ufw
+
+# The repo webhook is created from the controller with its authenticated gh CLI.
+# GitHub never returns the secret, so an existing hook is left alone unless test_webhook_rotate is set.
+- name: GitHub webhook lookup
+  ansible.builtin.command:
+    argv:
+      - gh
+      - api
+      - --paginate
+      - "repos/{{ test_webhook_repo }}/hooks"
+      - --jq
+      - '.[] | select(.config.url == "https://{{ test_host }}/hooks/deploy") | .id'
+  delegate_to: localhost
+  become: false
+  run_once: true
+  changed_when: false
+  check_mode: false
+  register: github_hooks
+  when: test_webhook_manage | bool
+
+- name: GitHub webhook create
+  ansible.builtin.command:
+    argv: [gh, api, -X, POST, "repos/{{ test_webhook_repo }}/hooks", --input, "-"]
+    stdin: "{{ github_hook_body | to_json }}"
+  vars:
+    github_hook_body:
+      name: web
+      active: true
+      events: [workflow_run]
+      config:
+        url: "https://{{ test_host }}/hooks/deploy"
+        content_type: json
+        secret: "{{ test_webhook_secret }}"
+        insecure_ssl: "0"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+  when: test_webhook_manage | bool and github_hooks.stdout_lines | length == 0
+
+- name: GitHub webhook secret rotation
+  ansible.builtin.command:
+    argv: [gh, api, -X, PATCH, "repos/{{ test_webhook_repo }}/hooks/{{ item }}/config", --input, "-"]
+    stdin: "{{ github_hook_config | to_json }}"
+  vars:
+    github_hook_config:
+      url: "https://{{ test_host }}/hooks/deploy"
+      content_type: json
+      secret: "{{ test_webhook_secret }}"
+      insecure_ssl: "0"
+  loop: "{{ github_hooks.stdout_lines | default([]) }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+  when: test_webhook_manage | bool and test_webhook_rotate | bool

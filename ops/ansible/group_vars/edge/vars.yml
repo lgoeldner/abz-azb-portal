@@ -19,3 +19,4 @@ edge_tls_internal: false # true only for local tests without public DNS
 edge_sites:
   - host: test.abizeitbetrug.de
     upstream: "{{ wg_test_address }}:80"
+    hooks_upstream: "{{ wg_test_address }}:9000" # optional: /hooks/* goes here (deploy webhook)

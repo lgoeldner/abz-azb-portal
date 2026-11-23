@@ -2,7 +2,8 @@
 # End-to-end check of the Ansible roles on two disposable OrbStack machines:
 # edge (Caddy + WireGuard server) and test host (WireGuard client + stack).
 # Asserts: the tunnel works, the edge serves the test stack, /internal stays closed,
-# and the auth service sees the real client IP instead of the edge's tunnel address.
+# the auth service sees the real client IP instead of the edge's tunnel address, and the deploy
+# webhook (signed GitHub workflow_run through the edge) starts the update service only for valid deliveries.
 # Every run recreates both machines. Remove them afterwards with: orb delete -f abz-edge abz-home
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -22,6 +23,7 @@ edge_ip=$(orb -m abz-edge hostname -I | tr ' ' '\n' | grep -m1 -E '^[0-9]+\.')
 edge_key=$(wg genkey)
 home_key=$(wg genkey)
 secret() { openssl rand -hex 32; }
+webhook_secret=$(secret)
 cat >"$tmp/vars.yml" <<EOF
 vault_wg_private_key: "{{ '$edge_key' if inventory_hostname == 'abz-edge' else '$home_key' }}"
 wg_test_public_key: $(wg pubkey <<<"$home_key")
@@ -32,6 +34,8 @@ test_image_prefix: ""
 test_app_version: local
 test_pull_images: false
 test_auto_update: false
+test_webhook_manage: false
+vault_test_webhook_secret: $webhook_secret
 test_mail_from: "AbiZeitBetrug Test <test@example.org>"
 vault_test_postgres_password: $(secret)
 vault_test_auth_service_secret: $(secret)
@@ -70,4 +74,48 @@ keys=$(orb -m abz-home bash -c "cd /opt/abizeitbetrug && sudo docker compose exe
 echo "rate-limit keys: $keys"
 grep -q '127\.0\.0\.1' <<<"$keys" || { echo 'FAIL: auth does not see the client IP' >&2; exit 1; }
 
-echo 'OK: edge, tunnel, test stack, /internal, test marker and client IP'
+# Deploy webhook. The update unit may fail here (images are local); only "was it started" is asserted.
+home() { orb -m abz-home "$@"; }
+unit=abizeitbetrug-test-update.service
+invocation() { home systemctl show -p InvocationID --value "$unit"; }
+settle() { for _ in $(seq 30); do case $(home systemctl is-active "$unit" || true) in activating | active | deactivating) sleep 1 ;; *) return 0 ;; esac; done; }
+sign() { printf '%s' "$1" | openssl dgst -sha256 -hmac "$2" | sed 's/^.* //'; }
+payload() { # branch conclusion
+  printf '{"action":"completed","workflow_run":{"name":"Images","head_branch":"%s","conclusion":"%s"},"repository":{"full_name":"lgoeldner/abz-azb-portal"}}' "$1" "$2"
+}
+deliver() { # body signature event -> http code
+  curl_edge -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "X-GitHub-Event: $3" \
+    -H "X-Hub-Signature-256: sha256=$2" -d "$1" "https://$host/hooks/deploy"
+}
+# Asserts the delivery did (want=started) or did not (want=idle) start the unit.
+expect_deploy() { # label want body signature [event]
+  local before after code
+  settle
+  before=$(invocation)
+  code=$(deliver "$3" "$4" "${5:-workflow_run}")
+  sleep 4
+  after=$(invocation)
+  if [ "$2" = started ]; then
+    case $code in 2??) ;; *) echo "FAIL: webhook '$1' answered $code" >&2; exit 1 ;; esac
+    [ "$before" != "$after" ] || { echo "FAIL: webhook '$1' did not start $unit" >&2; exit 1; }
+  else
+    [ "$before" = "$after" ] || { echo "FAIL: webhook '$1' started $unit" >&2; exit 1; }
+  fi
+}
+good=$(payload main success)
+expect_deploy 'valid delivery' started "$good" "$(sign "$good" "$webhook_secret")"
+expect_deploy 'wrong signature' idle "$good" "$(sign "$good" wrong-secret)"
+bad=$(payload feature success)
+expect_deploy 'other branch' idle "$bad" "$(sign "$bad" "$webhook_secret")"
+bad=$(payload main failure)
+expect_deploy 'failed run' idle "$bad" "$(sign "$bad" "$webhook_secret")"
+expect_deploy 'other event' idle "$good" "$(sign "$good" "$webhook_secret")" ping
+
+# The listener is bound to the WireGuard address only.
+listeners=$(home ss -Hltn 'sport = :9000' | awk '{print $4}')
+[ "$listeners" = 10.77.0.2:9000 ] || { echo "FAIL: webhook listens on: $listeners" >&2; exit 1; }
+home_lan=$(home hostname -I | tr ' ' '\n' | grep -m1 -E '^[0-9]+\.')
+if edge curl -s -o /dev/null --max-time 5 "http://$home_lan:9000/hooks/deploy"; then echo 'FAIL: webhook reachable on the LAN address' >&2; exit 1; fi
+if home curl -s -o /dev/null --max-time 5 http://127.0.0.1:9000/hooks/deploy; then echo 'FAIL: webhook reachable on loopback' >&2; exit 1; fi
+
+echo 'OK: edge, tunnel, test stack, /internal, test marker, client IP and deploy webhook'

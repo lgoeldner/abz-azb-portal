@@ -85,3 +85,6 @@
     name: abizeitbetrug-test-update.timer
     state: "{{ 'started' if test_auto_update else 'stopped' }}"
     enabled: "{{ test_auto_update }}"
+
+- name: Deploy webhook
+  ansible.builtin.import_tasks: webhook.yml
