@@ -660,7 +660,7 @@ func mailHTML(title, intro, buttonLabel, buttonURL, footer string) string {
 	return `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>` + html.EscapeString(title) + `</title></head>` +
 		`<body style="margin:0;padding:0;background:#e4e8cc;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#e4e8cc;"><tr><td align="center" style="padding:24px 12px;">` +
 		`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#f5f6ec;border:2px solid #d6dac0;border-radius:24px;"><tr><td style="padding:28px;` + font + `color:#15181f;font-size:16px;line-height:1.5;">` +
-		`<table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:20px;"><tr><td width="40" height="40" align="center" style="width:40px;height:40px;border-radius:12px;background:#c8f23c;color:#15181f;font-size:18px;font-weight:800;` + font + `">27</td><td style="padding-left:10px;font-size:18px;font-weight:800;color:#15181f;` + font + `">AbiZeitBetrug</td></tr></table>` +
+		`<table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:20px;"><tr><td width="40" height="40" style="width:40px;height:40px;"><img src="` + mailLogoSrc + `" width="40" height="40" alt="27" style="display:block;border:0;"></td><td style="padding-left:10px;font-size:18px;font-weight:800;color:#15181f;` + font + `">AbiZeitBetrug</td></tr></table>` +
 		`<h1 style="margin:0 0 12px;font-size:28px;line-height:1.15;font-weight:800;letter-spacing:-0.5px;color:#15181f;">` + html.EscapeString(title) + `</h1>` +
 		`<p style="margin:0 0 24px;color:#5d6270;">` + intro + `</p>` +
 		`<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:999px;background:#15181f;"><a href="` + html.EscapeString(buttonURL) + `" style="display:inline-block;padding:13px 28px;border-radius:999px;border:2px solid #15181f;background:#15181f;color:#f5f6ec;font-weight:700;text-decoration:none;` + font + `">` + html.EscapeString(buttonLabel) + `</a></td></tr></table>` +
@@ -668,25 +668,25 @@ func mailHTML(title, intro, buttonLabel, buttonURL, footer string) string {
 		`</td></tr></table><p style="margin:16px 0 0;color:#5d6270;font-size:12px;` + font + `">Privater Bereich für den Jahrgang LMGU 2027</p></td></tr></table></body></html>`
 }
 
-var envBanner = map[string][2]string{"dev": {"#6d28d9", "#ffffff"}, "preview": {"#c2410c", "#ffffff"}, "test": {"#f5b301", "#15181f"}} // same colors as html[data-env] in styles.css
+// mailLogoSrc is replaced in send() by the portal logo URL, tinted per deployment (yellow test, purple dev, orange preview, lime production).
+const mailLogoSrc = "{{logo}}"
 
-// markEnv labels mail from non-production deployments (subject, plain text, top banner) like the web UI marker.
-func (m *MailService) markEnv(req mailSendRequest) mailSendRequest {
-	colors, ok := envBanner[m.config.EnvLabel]
-	if !ok {
-		return req
+// logoURL points at web/public/mail-logo-<env>.png: Gmail shows neither SVG nor data: images, so the PNG is served by the portal itself.
+func (m *MailService) logoURL() string {
+	env := m.config.EnvLabel
+	if env != "dev" && env != "preview" && env != "test" {
+		env = "prod"
 	}
-	label := strings.ToUpper(m.config.EnvLabel)
-	req.Subject = "[" + label + "] " + req.Subject
-	req.Text = label + "-Umgebung: Testsystem, nicht das echte Portal.\n\n" + req.Text
-	if i := strings.Index(req.HTML, "<body"); i >= 0 {
-		if j := strings.Index(req.HTML[i:], ">"); j >= 0 {
-			j += i + 1
-			banner := `<div style="padding:8px 12px;background:` + colors[0] + `;color:` + colors[1] + `;text-align:center;font:700 13px/1.4 Helvetica,Arial,sans-serif;letter-spacing:1px;">` + label + ` · Testsystem, nicht das echte Portal</div>`
-			req.HTML = req.HTML[:j] + banner + req.HTML[j:]
-		}
+	return strings.TrimRight(m.config.PublicURL, "/") + "/mail-logo-" + env + ".png"
+}
+
+// berlinClock is HH:MM:SS in Europe/Berlin, falling back to the server clock without tzdata.
+func berlinClock() string {
+	now := time.Now()
+	if loc, err := time.LoadLocation("Europe/Berlin"); err == nil {
+		now = now.In(loc)
 	}
-	return req
+	return now.Format("15:04:05")
 }
 
 // sendInvite tells a newly admitted or promoted user that the portal is theirs now.
@@ -710,7 +710,7 @@ func (m *MailService) sendInvite(ctx context.Context, userID string) error {
 func (m *MailService) sendLogin(ctx context.Context, userID, name, email, loginURL string) error {
 	_, err := m.send(ctx, mailSendRequest{
 		UserID: userID, Kind: "login", Recipient: email, Name: name,
-		Subject: "Dein Anmeldelink für AbiZeitBetrug",
+		Subject: "Dein Anmeldelink für AbiZeitBetrug (" + berlinClock() + ")", // unique subject: same-subject mails thread in Gmail and the repeated card is folded into "Zitierten Text anzeigen"
 		Text:    "Hier ist dein persönlicher Anmeldelink. Er ist nur kurze Zeit gültig:\n\n" + loginURL + "\n\nFalls du diese Anmeldung nicht angefordert hast, kannst du diese Nachricht ignorieren.",
 		HTML:    mailHTML("Dein Anmeldelink", "Hier ist dein persönlicher Anmeldelink. Er ist nur kurze Zeit gültig.", "Jetzt anmelden", loginURL, "Falls du diese Anmeldung nicht angefordert hast, kannst du diese Nachricht ignorieren."),
 	})
@@ -724,7 +724,7 @@ func (m *MailService) send(ctx context.Context, req mailSendRequest) (string, er
 	if req.Kind != "login" && req.Kind != "reminder" || !validID(req.UserID) || !validMailAddress(req.Recipient) {
 		return "", &mailSendFailure{code: "invalid_request"}
 	}
-	req = m.markEnv(req)
+	req.HTML = strings.Replace(req.HTML, mailLogoSrc, html.EscapeString(m.logoURL()), 1)
 	if err := m.ensurePolicy(ctx); err != nil {
 		return "", err
 	}

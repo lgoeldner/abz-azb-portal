@@ -504,20 +504,15 @@ VALUES($1,'CLI reminder','','idea','open',false,false,now()+interval '1 day')`, 
 	}
 }
 
-func TestMailMarkedOutsideProduction(t *testing.T) {
-	req := mailSendRequest{Subject: "S", Text: "T", HTML: mailHTML("Titel", "intro", "Los", "https://x/", "fuß")}
-	for _, label := range []string{"dev", "preview", "test"} {
-		got := NewMailService(nil, MailConfig{EnvLabel: label}).markEnv(req)
-		up := strings.ToUpper(label)
-		i := strings.Index(got.HTML, "<body")
-		if !strings.HasPrefix(got.Subject, "["+up+"] ") || !strings.HasPrefix(got.Text, up+"-Umgebung") || !strings.Contains(got.HTML[i:i+260], up+" · Testsystem") {
-			t.Fatalf("%s mail not marked at the top: %q %q", label, got.Subject, got.Text)
+func TestMailLogoTintedPerEnvironment(t *testing.T) {
+	for label, want := range map[string]string{"": "prod", "prod": "prod", "bogus": "prod", "dev": "dev", "preview": "preview", "test": "test"} {
+		got := NewMailService(nil, MailConfig{EnvLabel: label, PublicURL: "https://p.example/"}).logoURL()
+		if got != "https://p.example/mail-logo-"+want+".png" {
+			t.Fatalf("label %q: logo %q", label, got)
 		}
 	}
-	for _, label := range []string{"", "prod", "bogus"} {
-		if got := NewMailService(nil, MailConfig{EnvLabel: label}).markEnv(req); got != req {
-			t.Fatalf("label %q changed the mail", label)
-		}
+	if !strings.Contains(mailHTML("T", "i", "B", "https://x/", "f"), mailLogoSrc) {
+		t.Fatal("mail template has no logo placeholder")
 	}
 }
 
