@@ -1,5 +1,7 @@
 name: abizeitung-portal
 
+# IMAGE_PREFIX (e.g. ghcr.io/lgoeldner/) pulls the CI-built images; empty builds local ones.
+
 # Docker's default json-file driver never rotates; cap each container's logs.
 x-logging: &logging
   driver: json-file
@@ -27,7 +29,7 @@ services:
     logging: *logging
     build:
       context: ./deployables/portal
-    image: abizeitung-portal:${APP_VERSION:-local}
+    image: ${IMAGE_PREFIX:-}abizeitung-portal:${APP_VERSION:-local}
     restart: unless-stopped
     command: ["serve"]
     environment:
@@ -75,7 +77,8 @@ services:
     logging: *logging
     build:
       context: ./deployables/auth
-    image: abizeitung-auth:${APP_VERSION:-local}
+      target: production
+    image: ${IMAGE_PREFIX:-}abizeitung-auth:${APP_VERSION:-local}
     restart: unless-stopped
     environment:
       APP_ENV: production
@@ -99,7 +102,7 @@ services:
 
   reminders:
     logging: *logging
-    image: abizeitung-portal:${APP_VERSION:-local}
+    image: ${IMAGE_PREFIX:-}abizeitung-portal:${APP_VERSION:-local}
     build:
       context: ./deployables/portal
     restart: unless-stopped
@@ -157,7 +160,7 @@ services:
     logging: *logging
     build:
       context: ./deployables/backup
-    image: abizeitung-portal-backup:${APP_VERSION:-local}
+    image: ${IMAGE_PREFIX:-}abizeitung-portal-backup:${APP_VERSION:-local}
     restart: unless-stopped
     profiles: [production]
     environment:
