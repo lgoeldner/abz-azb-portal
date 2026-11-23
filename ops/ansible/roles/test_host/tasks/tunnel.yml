@@ -1,0 +1,70 @@
+# This host dials deploy@edge and puts its sshd, test Caddy and the webhook listener on the edge's loopback.
+# Nothing listens on this host's outside addresses; the edge pins every forward (authorized_keys options).
+- name: Tunnel key
+  ansible.builtin.command: ssh-keygen -q -t ed25519 -N "" -C "azb-tunnel@{{ inventory_hostname }}" -f /home/deploy/.ssh/tunnel_ed25519
+  args:
+    creates: /home/deploy/.ssh/tunnel_ed25519
+  become_user: deploy
+
+- name: Read tunnel public key
+  ansible.builtin.slurp:
+    src: /home/deploy/.ssh/tunnel_ed25519.pub
+  register: tunnel_pub
+
+- name: Tunnel key may only open its listeners on the edge
+  ansible.posix.authorized_key:
+    user: deploy
+    key: "{{ tunnel_pub.content | b64decode | trim }}"
+    key_options: 'restrict,port-forwarding,command="/bin/false",permitopen="127.0.0.1:{{ tunnel_ssh_port }}",permitlisten="127.0.0.1:{{ tunnel_ssh_port }}",permitlisten="127.0.0.1:{{ tunnel_http_port }}",permitlisten="127.0.0.1:{{ tunnel_hooks_port }}"'
+  delegate_to: "{{ groups.edge[0] }}"
+
+- name: Read edge host key
+  ansible.builtin.slurp:
+    src: /etc/ssh/ssh_host_ed25519_key.pub
+  delegate_to: "{{ groups.edge[0] }}"
+  register: edge_host_key
+
+- name: Pin edge host key
+  ansible.builtin.copy:
+    dest: /home/deploy/.ssh/tunnel_known_hosts
+    content: "{{ tunnel_edge_host }} {{ (edge_host_key.content | b64decode).split()[:2] | join(' ') }}\n"
+    owner: deploy
+    group: deploy
+    mode: "0644"
+  notify: Restart tunnel
+
+- name: Tunnel unit
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/abizeitbetrug-tunnel.service
+    content: |
+      [Unit]
+      Description=Reverse SSH tunnel to the edge
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      User=deploy
+      # Through env (bin_t): Fedora's SELinux policy denies systemd (init_t) executing ssh_exec_t directly.
+      ExecStart=/usr/bin/env ssh -NT -i /home/deploy/.ssh/tunnel_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes \
+        -o UserKnownHostsFile=/home/deploy/.ssh/tunnel_known_hosts -o StrictHostKeyChecking=yes \
+        -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
+        -R 127.0.0.1:{{ tunnel_ssh_port }}:127.0.0.1:22 \
+        -R 127.0.0.1:{{ tunnel_http_port }}:127.0.0.1:80 \
+        -R 127.0.0.1:{{ tunnel_hooks_port }}:127.0.0.1:{{ test_webhook_port }} \
+        deploy@{{ tunnel_edge_host }}
+      Restart=always
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart tunnel
+
+- name: Tunnel running
+  ansible.builtin.systemd_service:
+    name: abizeitbetrug-tunnel.service
+    state: started
+    enabled: true
+    daemon_reload: true

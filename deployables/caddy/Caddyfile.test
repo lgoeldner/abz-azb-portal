@@ -1,7 +1,7 @@
 {
 	auto_https off
 	servers {
-		# The edge sets X-Forwarded-For; trust it only from the edge's WireGuard address.
+		# The edge sets X-Forwarded-For; trust it only from the egress gateway, where the tunnel's requests come from.
 		trusted_proxies static {$EDGE_PROXY_IP}/32
 	}
 }

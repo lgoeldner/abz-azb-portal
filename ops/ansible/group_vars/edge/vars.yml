@@ -1,22 +1,16 @@
-wg_address: "{{ wg_edge_address }}"
-wg_private_key: "{{ vault_wg_private_key }}"
-wg_listen_port: "{{ wg_port }}"
-wg_peers:
-  - public_key: "{{ wg_test_public_key }}"
-    allowed_ips: "{{ wg_test_address }}/32"
-
-wg_test_public_key: CHANGE_ME # wg pubkey of the test server's vault_wg_private_key
+# deploy is a jump host only: no shell, forwards only to the tunnel's ssh port. sshd has no "listen nowhere"
+# option, so permitlisten pins remote forwards to that port too (squatting it fails the host key check).
+deploy_key_options: 'restrict,port-forwarding,command="/bin/false",permitopen="127.0.0.1:{{ tunnel_ssh_port }}",permitlisten="127.0.0.1:{{ tunnel_ssh_port }}"'
 
 # Also open these in the OCI VCN security list.
 ufw_allow:
   - { port: "80", proto: tcp }
   - { port: "443", proto: tcp }
   - { port: "443", proto: udp }
-  - { port: "{{ wg_port }}", proto: udp }
 
-edge_acme_email: ""
+edge_acme_email: "test@abizeitbetrug.de"
 edge_tls_internal: false # true only for local tests without public DNS
 edge_sites:
   - host: test.abizeitbetrug.de
-    upstream: "{{ wg_test_address }}:80"
-    hooks_upstream: "{{ wg_test_address }}:9000" # optional: /hooks/* goes here (deploy webhook)
+    upstream: "127.0.0.1:{{ tunnel_http_port }}"
+    hooks_upstream: "127.0.0.1:{{ tunnel_hooks_port }}" # optional: /hooks/* goes here (deploy webhook)

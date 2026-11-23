@@ -4,10 +4,14 @@ all:
     edge:
       hosts:
         oci-edge:
-          ansible_host: test.abizeitbetrug.de
+          ansible_host: 92.5.178.193
           ansible_user: ubuntu
     test:
       hosts:
         home-test:
-          ansible_host: t14s # ~/.ssh/config alias; t14s-jump goes through the edge once wg0 is up
-          ansible_user: lgoeldner # needs sudo; deploy is only in the docker group
+          # Through the edge: the tunnel puts the home server's sshd on the edge's 127.0.0.1:2222.
+          # First run (no tunnel yet): -e home_lan=true connects directly on the home LAN.
+          ansible_host: "{{ 't14s-server' if home_lan | default(false) | bool else '127.0.0.1' }}"
+          ansible_port: "{{ 22 if home_lan | default(false) | bool else 2222 }}"
+          ansible_user: deploy
+          ansible_ssh_common_args: "{{ '' if home_lan | default(false) | bool else '-o ProxyJump=deploy@92.5.178.193 -o HostKeyAlias=t14s-server' }}"

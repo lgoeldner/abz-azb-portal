@@ -1,19 +1,14 @@
-- name: Docker drop-in directory
-  ansible.builtin.file:
-    path: /etc/systemd/system/docker.service.d
-    state: directory
-    mode: "0755"
-
-# Caddy binds the WireGuard address, so Docker must start after wg0 exists.
-- name: Docker starts after WireGuard
+# Ansible logs in as deploy. Bootstrap this file once by hand on a new host (README).
+- name: Deploy user may use sudo
   ansible.builtin.copy:
-    dest: /etc/systemd/system/docker.service.d/wireguard.conf
+    dest: /etc/sudoers.d/deploy
     content: |
-      [Unit]
-      After=wg-quick@wg0.service
-      Wants=wg-quick@wg0.service
-    mode: "0644"
-  notify: Reload systemd
+      # Managed by Ansible.
+      deploy ALL=(ALL) NOPASSWD: ALL
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
 
 - name: App directories
   ansible.builtin.file:
@@ -88,3 +83,7 @@
 
 - name: Deploy webhook
   ansible.builtin.import_tasks: webhook.yml
+
+# Last: restarting the tunnel cuts an Ansible connection that runs through it.
+- name: Reverse SSH tunnel
+  ansible.builtin.import_tasks: tunnel.yml

@@ -1,13 +1,9 @@
-# Copy the matching keys into group_vars/<group>/vault.yml and encrypt:
-#   ansible-vault create group_vars/edge/vault.yml
+# Copy the keys into group_vars/test/vault.yml and encrypt (password file: ansible.cfg vault_password_file):
 #   ansible-vault create group_vars/test/vault.yml
-# Generate: wg genkey (WireGuard), openssl rand -hex 32 (secrets).
-
-# group_vars/edge/vault.yml
-vault_wg_private_key: ""
+# Generate: openssl rand -hex 32. The edge needs no vault.
 
 # group_vars/test/vault.yml
-vault_wg_private_key: ""
+vault_test_mail_from: "" # AbiZeitBetrug Test <verified-brevo-sender@example.org>
 vault_test_postgres_password: ""
 vault_test_auth_service_secret: ""
 vault_test_better_auth_secret: "" # must differ from the service secret

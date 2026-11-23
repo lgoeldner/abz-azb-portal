@@ -1,12 +1,4 @@
-wg_address: "{{ wg_test_address }}"
-wg_private_key: "{{ vault_wg_private_key }}"
-wg_peers:
-  - public_key: "{{ wg_edge_public_key }}"
-    allowed_ips: "{{ wg_edge_address }}/32"
-    endpoint: "{{ wg_edge_endpoint }}"
-
-wg_edge_public_key: CHANGE_ME # wg pubkey of the edge's vault_wg_private_key
-wg_edge_endpoint: CHANGE_ME:51820 # OCI public IP
+tunnel_edge_host: 92.5.178.193 # the edge's sshd; the tunnel dials deploy@ this address
 
 test_dir: /opt/abizeitbetrug
 test_host: test.abizeitbetrug.de
@@ -15,13 +7,13 @@ test_app_version: main
 test_pull_images: true
 test_auto_update: true # fallback timer pulls :main hourly; the webhook deploys within seconds
 
-# GitHub workflow_run webhook -> edge /hooks/deploy -> listener on the WireGuard address.
+# GitHub workflow_run webhook -> edge /hooks/deploy -> tunnel -> listener on 127.0.0.1.
 test_webhook_port: 9000
 test_webhook_repo: lgoeldner/abz-azb-portal
 test_webhook_manage: true # create the repo webhook with the controller's gh CLI
 test_webhook_rotate: false # true: PATCH the existing webhook with the vault secret
 
-test_mail_from: "AbiZeitBetrug Test <CHANGE_ME>"
+test_mail_from: "{{ vault_test_mail_from }}"
 test_mail_reply_to: ""
 # Brevo account shared with prod (300/day): test takes 50. Reserve + reminders must fit the limit.
 test_mail_daily_limit: 50

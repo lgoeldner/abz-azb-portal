@@ -4,8 +4,15 @@
 
 - name: Restart webhook
   ansible.builtin.service:
-    name: webhook
+    name: abizeitbetrug-webhook
     state: restarted
+
+# Fire and forget: when Ansible itself runs through the tunnel, the restart cuts its connection.
+- name: Restart tunnel
+  ansible.builtin.command: systemctl restart abizeitbetrug-tunnel.service
+  async: 30
+  poll: 0
+  changed_when: true
 
 - name: Restart test caddy
   ansible.builtin.command: docker compose restart caddy

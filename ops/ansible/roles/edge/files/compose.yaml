@@ -1,4 +1,4 @@
-# Edge reverse proxy: TLS for every site, forwarded over WireGuard. Host network reaches wg0 directly.
+# Edge reverse proxy: TLS for every site, forwarded into the reverse SSH tunnel. Host network reaches its loopback listeners.
 name: edge
 services:
   caddy:

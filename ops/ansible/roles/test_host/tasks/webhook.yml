@@ -1,10 +1,26 @@
 # GitHub "Images" workflow finished -> signed POST -> edge /hooks/* -> this listener -> start the update service.
 # The timer stays as an hourly fallback: deliveries made while the server is offline are lost.
-- name: Webhook packages
-  ansible.builtin.apt:
-    name: [webhook, sudo]
-    update_cache: true
-    cache_valid_time: 3600
+# Upstream release, pinned by checksum: Fedora has no webhook package.
+- name: Webhook release
+  ansible.builtin.get_url:
+    url: "https://github.com/adnanh/webhook/releases/download/{{ webhook_version }}/webhook-linux-{{ webhook_arch }}.tar.gz"
+    dest: "{{ webhook_dir }}.tar.gz"
+    checksum: "sha256:{{ webhook_sha256[webhook_arch] }}"
+    mode: "0644"
+
+- name: Webhook directory
+  ansible.builtin.file:
+    path: "{{ webhook_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Webhook binary
+  ansible.builtin.unarchive:
+    src: "{{ webhook_dir }}.tar.gz"
+    dest: "{{ webhook_dir }}"
+    remote_src: true
+    creates: "{{ webhook_bin }}"
+  notify: Restart webhook
 
 - name: Webhook system user
   ansible.builtin.user:
@@ -41,31 +57,26 @@
     mode: "0440"
     validate: /usr/sbin/visudo -cf %s
 
-- name: Webhook unit drop-in directory
-  ansible.builtin.file:
-    path: /etc/systemd/system/webhook.service.d
-    state: directory
-    mode: "0755"
-
-# The packaged unit runs as root with the default config path and listens on all addresses.
 # No NoNewPrivileges: the hook needs sudo.
-- name: Webhook unit drop-in
+- name: Webhook unit
   ansible.builtin.copy:
-    dest: /etc/systemd/system/webhook.service.d/abizeitbetrug.conf
+    dest: /etc/systemd/system/abizeitbetrug-webhook.service
     content: |
       [Unit]
-      ConditionPathExists=
+      Description=GitHub deploy webhook (reached through the reverse SSH tunnel)
+      After=network-online.target
+      Wants=network-online.target
       ConditionPathExists=/etc/webhook/hooks.json
-      After=wg-quick@wg0.service network-online.target
-      Wants=wg-quick@wg0.service
 
       [Service]
       User=webhook
       Group=webhook
-      ExecStart=
-      ExecStart=/usr/bin/webhook -nopanic -hooks /etc/webhook/hooks.json -ip {{ wg_test_address }} -port {{ test_webhook_port }} -urlprefix hooks
+      ExecStart={{ webhook_bin }} -nopanic -hooks /etc/webhook/hooks.json -ip 127.0.0.1 -port {{ test_webhook_port }} -urlprefix hooks
       Restart=on-failure
       RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
     mode: "0644"
   notify:
     - Reload systemd
@@ -76,21 +87,9 @@
 
 - name: Webhook running
   ansible.builtin.service:
-    name: webhook
+    name: abizeitbetrug-webhook
     state: started
     enabled: true
-
-# Docker bypasses ufw, this listener does not: only the edge may reach it, over the tunnel.
-- name: Firewall rule for the webhook
-  community.general.ufw:
-    rule: allow
-    direction: in
-    interface: wg0
-    from_ip: "{{ wg_edge_address }}"
-    to_ip: "{{ wg_test_address }}"
-    port: "{{ test_webhook_port }}"
-    proto: tcp
-  when: manage_ufw
 
 # The repo webhook is created from the controller with its authenticated gh CLI.
 # GitHub never returns the secret, so an existing hook is left alone unless test_webhook_rotate is set.

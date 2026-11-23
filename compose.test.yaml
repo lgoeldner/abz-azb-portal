@@ -1,5 +1,5 @@
 # Test server override (home server behind the OCI edge, see ops/ansible).
-# TLS ends at the edge; Caddy here serves plain HTTP on the WireGuard address only.
+# TLS ends at the edge; Caddy here serves plain HTTP on loopback, reached through the reverse SSH tunnel.
 # Used via COMPOSE_FILE=compose.yaml:compose.test.yaml in the server's .env.
 services:
   portal:
@@ -8,9 +8,9 @@ services:
 
   caddy:
     ports: !override
-      - "${TEST_BIND_IP:?Set TEST_BIND_IP to the WireGuard address}:80:80"
+      - "${TEST_BIND_IP:?Set TEST_BIND_IP to 127.0.0.1}:80:80"
     environment:
-      EDGE_PROXY_IP: ${EDGE_PROXY_IP:?Set EDGE_PROXY_IP to the edge WireGuard address}
+      EDGE_PROXY_IP: ${EDGE_PROXY_IP:?Set EDGE_PROXY_IP to the egress gateway}
     volumes:
       - ./deployables/caddy/Caddyfile.test:/etc/caddy/Caddyfile:ro
 
@@ -22,3 +22,11 @@ services:
 
 volumes:
   restic_test:
+
+# Pinned so the gateway (the source of tunnelled requests) is a known address for EDGE_PROXY_IP and TRUSTED_PROXY_CIDRS.
+networks:
+  egress:
+    ipam:
+      config:
+        - subnet: 172.30.77.0/24
+          gateway: 172.30.77.1

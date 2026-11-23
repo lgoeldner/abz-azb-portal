@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # End-to-end check of the Ansible roles on two disposable OrbStack machines:
-# edge (Caddy + WireGuard server) and test host (WireGuard client + stack).
-# Asserts: the tunnel works, the edge serves the test stack, /internal stays closed,
-# the auth service sees the real client IP instead of the edge's tunnel address, and the deploy
+# edge (Ubuntu, Caddy, jump host) and test host (Fedora like the real one, reverse SSH tunnel + stack).
+# Asserts: the tunnel listeners exist on the edge's loopback (sshd banner on the jump port), the edge serves the test stack, /internal stays closed,
+# the auth service sees the real client IP instead of a proxy address, and the deploy
 # webhook (signed GitHub workflow_run through the edge) starts the update service only for valid deliveries.
 # Every run recreates both machines. Remove them afterwards with: orb delete -f abz-edge abz-home
 set -euo pipefail
@@ -11,24 +11,20 @@ repo=$(git rev-parse --show-toplevel)
 host=test.abizeitbetrug.de
 
 # Fresh machines every run: secrets are regenerated, an old database volume would not match them.
-for machine in abz-edge abz-home; do
-  orb delete -f "$machine" 2>/dev/null || true
-  orb create ubuntu:noble "$machine"
-done
+orb delete -f abz-edge abz-home 2>/dev/null || true
+orb create ubuntu:noble abz-edge
+orb create fedora abz-home
+# The real home server brings Docker and sshd itself; the roles do not install them on Fedora.
+orb -m abz-home sudo dnf -yq install moby-engine docker-compose openssh-server python3
+orb -m abz-home sudo systemctl enable --now docker sshd
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-# IPv4 on purpose: OrbStack's machine-to-machine IPv6 drops the WireGuard packets; the real edge uses IPv4 too.
 edge_ip=$(orb -m abz-edge hostname -I | tr ' ' '\n' | grep -m1 -E '^[0-9]+\.')
-edge_key=$(wg genkey)
-home_key=$(wg genkey)
 secret() { openssl rand -hex 32; }
 webhook_secret=$(secret)
 cat >"$tmp/vars.yml" <<EOF
-vault_wg_private_key: "{{ '$edge_key' if inventory_hostname == 'abz-edge' else '$home_key' }}"
-wg_test_public_key: $(wg pubkey <<<"$home_key")
-wg_edge_public_key: $(wg pubkey <<<"$edge_key")
-wg_edge_endpoint: $edge_ip:51820
+tunnel_edge_host: $edge_ip
 edge_tls_internal: true
 test_image_prefix: ""
 test_app_version: local
@@ -36,7 +32,7 @@ test_pull_images: false
 test_auto_update: false
 test_webhook_manage: false
 vault_test_webhook_secret: $webhook_secret
-test_mail_from: "AbiZeitBetrug Test <test@example.org>"
+vault_test_mail_from: "AbiZeitBetrug Test <test@example.org>"
 vault_test_postgres_password: $(secret)
 vault_test_auth_service_secret: $(secret)
 vault_test_better_auth_secret: $(secret)
@@ -62,12 +58,16 @@ if grep -qE 'changed=[1-9]' "$tmp/second-run.log"; then echo 'FAIL: second run c
 edge() { orb -m abz-edge "$@"; }
 curl_edge() { edge curl -sk --resolve "$host:443:127.0.0.1" "$@"; }
 
-edge ping -c1 -W3 10.77.0.2 >/dev/null || { echo 'FAIL: tunnel down' >&2; exit 1; }
+for _ in $(seq 20); do edge ss -Hltn 'sport = :8081' | grep -q 127.0.0.1 && break; sleep 1; done
+for port in 2222 8081 9000; do
+  [ "$(edge ss -Hltn "sport = :$port" | awk '{print $4}')" = "127.0.0.1:$port" ] || { echo "FAIL: tunnel listener $port" >&2; exit 1; }
+done
+edge bash -c 'exec 3<>/dev/tcp/127.0.0.1/2222 && head -c 7 <&3' | grep -q '^SSH-2.0' || { echo 'FAIL: no sshd behind the jump port' >&2; exit 1; }
 [ "$(curl_edge -o /dev/null -w '%{http_code}' "https://$host/readyz")" = 200 ] || { echo 'FAIL: readyz through edge' >&2; exit 1; }
 [ "$(curl_edge -o /dev/null -w '%{http_code}' "https://$host/internal/x")" = 404 ] || { echo 'FAIL: /internal reachable' >&2; exit 1; }
 curl_edge "https://$host/" | grep -q 'data-env="test"' || { echo 'FAIL: test marker missing' >&2; exit 1; }
 
-# A rate-limited auth request from the edge itself: its key must carry the client's address (127.0.0.1), not 10.77.0.1.
+# A rate-limited auth request from the edge itself: its key must carry the client's address (127.0.0.1), not the egress gateway.
 curl_edge -o /dev/null -X POST -H 'content-type: application/json' -H "origin: https://$host" \
   -d '{"email":"nobody@example.org"}' "https://$host/api/auth/sign-in/magic-link" || true
 keys=$(orb -m abz-home bash -c "cd /opt/abizeitbetrug && sudo docker compose exec -T db psql -U portal -d portal -Atc 'SELECT key FROM auth_rate_limits'")
@@ -111,11 +111,11 @@ bad=$(payload main failure)
 expect_deploy 'failed run' idle "$bad" "$(sign "$bad" "$webhook_secret")"
 expect_deploy 'other event' idle "$good" "$(sign "$good" "$webhook_secret")" ping
 
-# The listener is bound to the WireGuard address only.
+# The listener is bound to loopback only; the tunnel is its only way in.
 listeners=$(home ss -Hltn 'sport = :9000' | awk '{print $4}')
-[ "$listeners" = 10.77.0.2:9000 ] || { echo "FAIL: webhook listens on: $listeners" >&2; exit 1; }
+[ "$listeners" = 127.0.0.1:9000 ] || { echo "FAIL: webhook listens on: $listeners" >&2; exit 1; }
 home_lan=$(home hostname -I | tr ' ' '\n' | grep -m1 -E '^[0-9]+\.')
 if edge curl -s -o /dev/null --max-time 5 "http://$home_lan:9000/hooks/deploy"; then echo 'FAIL: webhook reachable on the LAN address' >&2; exit 1; fi
-if home curl -s -o /dev/null --max-time 5 http://127.0.0.1:9000/hooks/deploy; then echo 'FAIL: webhook reachable on loopback' >&2; exit 1; fi
+if edge curl -s -o /dev/null --max-time 5 "http://$home_lan:80/"; then echo 'FAIL: test Caddy reachable on the LAN address' >&2; exit 1; fi
 
 echo 'OK: edge, tunnel, test stack, /internal, test marker, client IP and deploy webhook'

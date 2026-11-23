@@ -1,8 +1,10 @@
 - name: Packages
   ansible.builtin.apt:
-    name: [docker.io, docker-compose-v2, wireguard, ufw, unattended-upgrades, curl]
+    name: [docker.io, docker-compose-v2, openssh-server, ufw, unattended-upgrades, curl]
     update_cache: true
     cache_valid_time: 3600
+  when: ansible_os_family == 'Debian'
+# ponytail: other distros (the Fedora home server) bring Docker and sshd themselves; "Docker running" fails without them.
 
 - name: Docker running
   ansible.builtin.service:
@@ -21,6 +23,7 @@
   ansible.posix.authorized_key:
     user: deploy
     key: "{{ item }}"
+    key_options: "{{ deploy_key_options or omit }}"
   loop: "{{ deploy_ssh_keys }}"
 
 - name: SSH keys only

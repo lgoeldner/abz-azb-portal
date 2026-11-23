@@ -1,11 +1,15 @@
-# WireGuard tunnel between the edge and the test server.
-wg_edge_address: 10.77.0.1
-wg_test_address: 10.77.0.2
-wg_port: 51820
+# Reverse SSH tunnel: the test host dials deploy@edge and listens on the edge's loopback.
+tunnel_ssh_port: 2222 # test host sshd, the jump target
+tunnel_http_port: 8081 # test Caddy (8082 is already taken on the OCI VM)
+tunnel_hooks_port: 9000 # deploy webhook listener
 
-# Public keys for the deploy user (docker group). Password SSH is switched off only when this is non-empty.
+# Public keys for the deploy user. Test host: deploy has sudo, Ansible logs in as deploy.
+# Edge: deploy_key_options limits every key to jumping to the tunnel's ssh port.
+# Password SSH is switched off only when this is non-empty.
 deploy_ssh_keys:
   - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEgEJUv1mGn1RCL33FDCqPN8W91hh9/qTngwirBV1gFV azb-ci
+
+deploy_key_options: ""
 
 # Firewall: off until checked per host (OCI images ship their own iptables rules).
 manage_ufw: false
