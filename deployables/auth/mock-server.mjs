@@ -1,7 +1,25 @@
+import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { createAuth } from "./auth-config.mjs";
 import { createAuthHTTPServer } from "./server-core.mjs";
 import { resolveMode } from "./policy.mjs";
+
+// Picker login through the testUtils plugin; exported so tests exercise the same path.
+export function createMockHelpers(value, config) {
+  return {
+    async login(userId) {
+      if (!(await value.hasSessionAccess(userId))) throw new Error("login denied");
+      const result = await value.context.test.login({ userId });
+      if (Array.isArray(result.cookies)) return result.cookies;
+      const cookieHeader = result.headers?.get("cookie");
+      if (!cookieHeader) return [];
+      return cookieHeader.split(/;\s*/u).map((pair) => {
+        const split = pair.indexOf("=");
+        return { name: pair.slice(0, split), value: pair.slice(split + 1), path: "/", httpOnly: true, secure: config.authURL.protocol === "https:", sameSite: "lax" };
+      });
+    },
+  };
+}
 
 async function main() {
   const config = resolveMode(process.env);
@@ -16,20 +34,7 @@ async function main() {
       runtimePromise = (async () => {
         const { testUtils } = await import("better-auth/plugins");
         const value = await createAuth({ mode: "mock", pool, extraPlugins: [testUtils()] });
-        const mockHelpers = {
-          async login(userId) {
-            if (!(await value.hasSessionAccess(userId))) throw new Error("login denied");
-            const result = await value.context.test.login({ userId });
-            if (Array.isArray(result.cookies)) return result.cookies;
-            const cookieHeader = result.headers?.get("cookie");
-            if (!cookieHeader) return [];
-            return cookieHeader.split(/;\s*/u).map((pair) => {
-              const split = pair.indexOf("=");
-              return { name: pair.slice(0, split), value: pair.slice(split + 1), path: "/", httpOnly: true, secure: config.authURL.protocol === "https:", sameSite: "lax" };
-            });
-          },
-        };
-        return { auth: value.auth, hasSessionAccess: value.hasSessionAccess, mockHelpers };
+        return { auth: value.auth, hasSessionAccess: value.hasSessionAccess, mockHelpers: createMockHelpers(value, config) };
       })().catch((error) => {
         runtimePromise = undefined;
         throw error;
@@ -62,7 +67,9 @@ async function main() {
   process.once("SIGINT", () => void shutdown().finally(() => process.exit(0)));
 }
 
-main().catch((error) => {
-  process.stderr.write("development mock auth failed to start (" + String(error?.name || "Error") + "," + String(error?.code || "no_code") + ")\n");
-  process.exit(1);
-});
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    process.stderr.write("development mock auth failed to start (" + String(error?.name || "Error") + "," + String(error?.code || "no_code") + ")\n");
+    process.exit(1);
+  });
+}

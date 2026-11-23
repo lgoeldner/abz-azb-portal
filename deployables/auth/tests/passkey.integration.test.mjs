@@ -121,7 +121,7 @@ function client(serviceURL, origin, serviceSecret) {
 }
 
 // Isolated schema with all portal migrations applied, in the given auth mode.
-async function openSchema(mode) {
+async function openSchema(mode, authURL = "http://localhost:3000") {
   const { Pool } = await import("pg");
   const { resolveMode } = await import("../policy.mjs");
   const adminPool = new Pool({ connectionString: testDatabaseURL, max: 2, application_name: "abizeitbetrug-passkey-test-admin" });
@@ -138,7 +138,7 @@ async function openSchema(mode) {
     AUTH_SERVICE_SECRET: "test-service-secret-" + "x".repeat(32),
     BETTER_AUTH_SECRET: "test-better-auth-secret-" + "y".repeat(32),
     MOCK_AUTH_SECRET: "dev-only-mock-secret-at-least-32-bytes",
-    BETTER_AUTH_URL: "http://localhost:3000",
+    BETTER_AUTH_URL: authURL,
   };
   const config = resolveMode(env);
   const migrationDir = new URL("../../portal/server/migrations/", import.meta.url);
@@ -153,6 +153,21 @@ async function openSchema(mode) {
     await adminPool.end();
   };
   return { pool, identityLockPool, env, config, close };
+}
+
+// Over HTTPS a subdomain could otherwise toss a Domain=parent cookie at us: only the
+// __Host- prefix makes the browser refuse Domain. Every cookie must carry it.
+function assertHostCookies(lines, step) {
+  assert.ok(lines.length > 0, step + " sets cookies");
+  for (const line of lines) {
+    const [pair, ...attributes] = line.split(";").map((part) => part.trim());
+    const name = pair.slice(0, pair.indexOf("="));
+    const keys = attributes.map((attribute) => attribute.split("=", 1)[0].toLowerCase());
+    assert.match(name, /^__Host-/u, step + ": " + name + " lacks the __Host- prefix");
+    assert.ok(keys.includes("secure"), step + ": " + name + " is not Secure");
+    assert.ok(attributes.some((attribute) => attribute.toLowerCase() === "path=/"), step + ": " + name + " is not Path=/");
+    assert.ok(!keys.includes("domain"), step + ": " + name + " has a Domain");
+  }
 }
 
 // Every inline page script must at least parse.
@@ -342,5 +357,100 @@ test("the development mock offers no passkeys", { skip: skipReason }, async () =
   } finally {
     if (server) await new Promise((resolve) => server.close(resolve));
     await close();
+  }
+});
+
+test("over HTTPS every cookie the service sets is __Host- prefixed, Secure, Path=/ and host-only", { skip: skipReason }, async () => {
+  const { createAuth } = await import("../auth-config.mjs");
+  const { createAuthHTTPServer } = await import("../server-core.mjs");
+  const { createMockHelpers } = await import("../mock-server.mjs");
+  const { testUtils } = await import("better-auth/plugins");
+  const listen = async (server) => {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    return "http://127.0.0.1:" + server.address().port;
+  };
+
+  // Real mode: magic-link login, passkey enrollment and sign-in, sign-out.
+  const real = await openSchema("better_auth", "https://localhost");
+  let server;
+  try {
+    const person = { id: randomUUID(), email: "host-" + randomUUID().slice(0, 8) + "@example.org" };
+    await real.pool.query(
+      `INSERT INTO users (id, subject, name, role, admitted, cohort_member, login_email, email_verified, login_enabled)
+       VALUES ($1, NULL, 'Synthetic host-cookie user', 'student', true, true, $2, false, true)`,
+      [person.id, person.email],
+    );
+    const captures = [];
+    const { auth, hasSessionAccess } = await createAuth({ mode: "better_auth", pool: real.pool, env: real.env, testSendMagicLink: async (message) => captures.push(message) });
+    server = createAuthHTTPServer({ auth, pool: real.pool, identityLockPool: real.identityLockPool, mode: "better_auth", authOrigin: real.config.authOrigin, serviceSecret: real.env.AUTH_SERVICE_SECRET, hasSessionAccess });
+    const serviceURL = await listen(server);
+    const { baseHeaders, send, sessionFor } = client(serviceURL, real.config.authOrigin, real.env.AUTH_SERVICE_SECRET);
+
+    assert.equal((await fetch(serviceURL + "/api/auth/sign-in/magic-link", { method: "POST", headers: baseHeaders, body: JSON.stringify({ email: person.email }) })).status, 200);
+    const token = new URL(captures[0].url).hash.slice(1);
+    const confirmed = await fetch(serviceURL + "/api/auth/magic-link/confirm", { method: "POST", headers: baseHeaders, body: JSON.stringify({ token }) });
+    assert.equal(confirmed.status, 204);
+    assertHostCookies(confirmed.headers.getSetCookie(), "magic-link session");
+    const jar = new Map();
+    absorb(jar, confirmed);
+    assert.equal(await sessionFor(jar), person.id, "the __Host- session cookie is read back");
+
+    const key = createAuthenticator(real.config.authOrigin, "localhost");
+    const registerOptions = await send("POST", "generate-register-options", { jar });
+    assert.equal(registerOptions.status, 200);
+    assertHostCookies(registerOptions.headers.getSetCookie(), "passkey registration challenge");
+    absorb(jar, registerOptions);
+    const registered = await send("POST", "verify-registration", { jar, body: { response: key.register(await registerOptions.json()) } });
+    assert.equal(registered.status, 204, "the __Host- challenge cookie is recognized");
+
+    const signInJar = new Map();
+    const authOptions = await send("POST", "generate-authenticate-options");
+    assert.equal(authOptions.status, 200);
+    assertHostCookies(authOptions.headers.getSetCookie(), "passkey sign-in challenge");
+    absorb(signInJar, authOptions);
+    const verified = await send("POST", "verify-authentication", { jar: signInJar, body: { response: key.sign(await authOptions.json()) } });
+    assert.equal(verified.status, 204);
+    assertHostCookies(verified.headers.getSetCookie(), "passkey session");
+    absorb(signInJar, verified);
+    assert.equal(await sessionFor(signInJar), person.id);
+
+    // Deletion cookies must match the prefix and path too, or the browser keeps the session.
+    const signedOut = await fetch(serviceURL + "/api/auth/sign-out", { method: "POST", headers: { ...baseHeaders, cookie: cookieOf(signInJar) } });
+    assert.ok(signedOut.status < 400, "sign-out " + signedOut.status);
+    assertHostCookies(signedOut.headers.getSetCookie(), "sign-out");
+    absorb(signInJar, signedOut);
+    assert.equal(await sessionFor(signInJar), null);
+  } finally {
+    if (server) await new Promise((resolve) => server.close(resolve));
+    server = undefined;
+    await real.close();
+  }
+
+  // Development mock behind the HTTPS dev proxy: the picker login uses the same rules.
+  const mock = await openSchema("mock", "https://localhost");
+  try {
+    const userId = randomUUID();
+    await mock.pool.query(
+      `INSERT INTO users (id, subject, name, role, admitted, cohort_member, login_email, email_verified, login_enabled)
+       VALUES ($1, NULL, 'Synthetic mock user', 'student', true, true, NULL, false, true)`,
+      [userId],
+    );
+    const runtime = await createAuth({ mode: "mock", pool: mock.pool, env: mock.env, extraPlugins: [testUtils()] });
+    const mockHelpers = createMockHelpers(runtime, mock.config);
+    server = createAuthHTTPServer({ getAuthRuntime: async () => ({ auth: runtime.auth, hasSessionAccess: runtime.hasSessionAccess, mockHelpers }), pool: mock.pool, identityLockPool: mock.identityLockPool, mode: "mock", authOrigin: mock.config.authOrigin, serviceSecret: mock.env.AUTH_SERVICE_SECRET });
+    const serviceURL = await listen(server);
+    const login = await fetch(serviceURL + "/auth/mock-login", { method: "POST", headers: { origin: mock.config.authOrigin, "content-type": "application/json" }, body: JSON.stringify({ user_id: userId }), redirect: "manual" });
+    assert.equal(login.status, 303);
+    assertHostCookies(login.headers.getSetCookie(), "mock login");
+    const jar = new Map();
+    absorb(jar, login);
+    const { sessionFor } = client(serviceURL, mock.config.authOrigin, mock.env.AUTH_SERVICE_SECRET);
+    assert.equal(await sessionFor(jar), userId);
+  } finally {
+    if (server) await new Promise((resolve) => server.close(resolve));
+    await mock.close();
   }
 });

@@ -181,7 +181,7 @@ func (a *App) protected(next http.Handler) http.Handler {
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
-		cookie, e := r.Cookie("portal_session")
+		cookie, e := r.Cookie(a.Config.cookieName("portal_session"))
 		if e != nil {
 			respondError(w, fail(401, "unauthenticated", "Bitte anmelden."))
 			return

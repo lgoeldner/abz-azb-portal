@@ -66,6 +66,17 @@ func LoadConfigForCommand(command string) (Config, error) {
 	c.Mail.PublicURL = c.PublicURL
 	return c, c.Validate()
 }
+
+// Production is served over HTTPS only. Its cookies are __Host- prefixed (Secure,
+// Path=/, no Domain), so a sibling subdomain such as test or a preview slot cannot
+// toss or shadow them. Plain-HTTP development keeps unprefixed names.
+func (c Config) secureCookies() bool { return c.Env == "production" }
+func (c Config) cookieName(base string) string {
+	if c.secureCookies() {
+		return "__Host-" + base
+	}
+	return base
+}
 func (c Config) dependencyAuth() bool {
 	return c.AuthMode == "better_auth" || c.AuthMode == "mock" && c.AuthInternalURL != ""
 }

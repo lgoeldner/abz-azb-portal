@@ -564,8 +564,9 @@ const passkeyScript = `{
   }
 }`;
 
+// Always Path=/ and never a Domain (the test helper reports one), as __Host- cookies require.
 function formatMockCookie(cookie) {
-  const parts = [cookie.name + "=" + cookie.value, "Path=" + (cookie.path || "/"), "HttpOnly", "SameSite=Lax", "Max-Age=86400"];
+  const parts = [cookie.name + "=" + cookie.value, "Path=/", "HttpOnly", "SameSite=Lax", "Max-Age=86400"];
   if (cookie.secure) parts.push("Secure");
   return parts.join("; ");
 }

@@ -84,6 +84,10 @@ export function hasServiceAuthorization(header, secret) {
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
-export function cookiePrefixFor(mode) {
-  return mode === "mock" ? "abz-mock" : "abz-auth";
+// Over HTTPS every cookie is __Host- prefixed: the browser then refuses a Domain
+// attribute, so a sibling subdomain (test, preview slots) cannot toss or shadow it.
+// Plain-HTTP development keeps unprefixed names; browsers reject __Host- without Secure.
+export function cookiePrefixFor(mode, secure) {
+  const name = mode === "mock" ? "abz-mock" : "abz-auth";
+  return secure ? "__Host-" + name : name;
 }

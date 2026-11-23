@@ -336,3 +336,42 @@ func TestDevelopmentConfigDefaults(t *testing.T) {
 		t.Fatal("missing standalone mock defaults")
 	}
 }
+
+func TestProductionLegacySessionCookieIsHostOnly(t *testing.T) {
+	pool := integrationPool(t)
+	ctx := context.Background()
+	if err := Seed(ctx, pool, "development"); err != nil {
+		t.Fatal(err)
+	}
+	cfg := Config{Env: "production", DatabaseURL: "unused", PublicURL: "https://portal.example.org", AuthMode: "oidc", UploadDir: t.TempDir(), StaticDir: t.TempDir()}
+	app := &App{DB: pool, Config: cfg, Mail: NewMailService(pool, cfg.Mail), Blobs: NewBlobStore(cfg), imageSlots: make(chan struct{}, 2)}
+	if err := app.syncAuthMode(ctx); err != nil {
+		t.Fatal(err)
+	}
+	app.routes()
+	token, csrf := randomToken(), randomToken()
+	if _, err := pool.Exec(ctx, "INSERT INTO sessions(token_hash,user_id,csrf,expires_at) VALUES($1,$2,$3,$4)", digest(token), MiaID, csrf, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	request := func(method, path, name string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, nil)
+		req.AddCookie(&http.Cookie{Name: name, Value: token})
+		req.Header.Set("X-CSRF-Token", csrf)
+		res := httptest.NewRecorder()
+		app.ServeHTTP(res, req)
+		return res
+	}
+	// A cookie without the prefix could have been tossed from a subdomain: refused.
+	if res := request("GET", "/api/v1/me", "portal_session"); res.Code != 401 {
+		t.Fatalf("unprefixed session accepted: %d", res.Code)
+	}
+	if res := request("GET", "/api/v1/me", "__Host-portal_session"); res.Code != 200 {
+		t.Fatalf("__Host- session refused: %d", res.Code)
+	}
+	// The deletion cookie must match the prefix, path and Secure flag, or the browser keeps the session.
+	res := request("POST", "/auth/logout", "__Host-portal_session")
+	if res.Code != 200 {
+		t.Fatalf("logout: %d", res.Code)
+	}
+	assertHostCookies(t, res.Header(), "__Host-portal_session")
+}

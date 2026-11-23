@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -228,5 +231,93 @@ func TestAuthenticatedProxyHeader(t *testing.T) {
 	r.Header.Set("X-Portal-Proxy-Token", app.Config.AuthServiceSecret)
 	if app.clientIP(r) != "198.51.100.4" {
 		t.Fatal("authenticated proxy lost client identity")
+	}
+}
+
+// assertHostCookies checks every Set-Cookie: production cookies must be __Host-
+// prefixed, Secure, Path=/ and carry no Domain, so a subdomain cannot toss them.
+func assertHostCookies(t *testing.T, header http.Header, want string) {
+	t.Helper()
+	lines := header.Values("Set-Cookie")
+	found := false
+	for _, line := range lines {
+		c, err := http.ParseSetCookie(line)
+		if err != nil {
+			t.Fatalf("unparsable Set-Cookie %q: %v", line, err)
+		}
+		if !strings.HasPrefix(c.Name, "__Host-") || !c.Secure || c.Path != "/" || c.Domain != "" || strings.Contains(strings.ToLower(line), "domain=") {
+			t.Fatalf("cookie is not host-only: %q", line)
+		}
+		found = found || c.Name == want
+	}
+	if !found {
+		t.Fatalf("%s not set; got %q", want, lines)
+	}
+}
+
+func TestProductionCSRFCookieIsHostOnly(t *testing.T) {
+	pool := integrationPool(t)
+	ctx := context.Background()
+	if err := Seed(ctx, pool, "development"); err != nil {
+		t.Fatal(err)
+	}
+	secret := strings.Repeat("s", 40)
+	identity := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+secret {
+			w.WriteHeader(403)
+			return
+		}
+		jsonOut(w, 200, map[string]any{"user_id": MiaID, "session_id": "90000000-0000-4000-8000-000000000002", "expires_at": time.Now().Add(time.Hour), "mode": "better_auth"})
+	}))
+	defer identity.Close()
+	legal := t.TempDir()
+	for _, name := range legalPages {
+		if err := os.WriteFile(filepath.Join(legal, name+".html"), []byte("<p>legal</p>"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	server := httptest.NewUnstartedServer(nil)
+	public := "https://" + server.Listener.Addr().String()
+	cfg := Config{Env: "production", DatabaseURL: "unused", PublicURL: public, AuthMode: "better_auth", AuthInternalURL: identity.URL, AuthServiceSecret: secret, SessionSecret: secret, UploadDir: t.TempDir(), StaticDir: t.TempDir(), LegalDir: legal, Mail: MailConfig{Provider: "brevo", APIKey: "synthetic", From: "test@example.test", DailyLimit: 300, ReminderLimit: 150, LoginReserve: 150}}
+	cfg.Mail.PublicURL = public
+	app, err := New(ctx, cfg, pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.Config.Handler = app
+	server.StartTLS()
+	defer server.Close()
+	jar, _ := cookiejar.New(nil)
+	client := server.Client()
+	client.Jar = jar
+	u, _ := url.Parse(server.URL)
+	jar.SetCookies(u, []*http.Cookie{{Name: "ba_session", Value: "mia", Path: "/"}})
+	res, err := client.Get(server.URL + "/api/v1/me")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("me: %d", res.StatusCode)
+	}
+	assertHostCookies(t, res.Header, "__Host-portal_csrf")
+	var me struct {
+		CSRF string `json:"csrf_token"`
+	}
+	if err = json.NewDecoder(res.Body).Decode(&me); err != nil {
+		t.Fatal(err)
+	}
+	// The browser returns the cookie under its __Host- name and the write passes CSRF.
+	req, _ := http.NewRequest("POST", server.URL+"/api/v1/me/consent", strings.NewReader(`{"version":"`+ConsentVersion+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", public)
+	req.Header.Set("X-CSRF-Token", me.CSRF)
+	consent, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	consent.Body.Close()
+	if consent.StatusCode != 200 {
+		t.Fatalf("consent with __Host- CSRF cookie: %d", consent.StatusCode)
 	}
 }

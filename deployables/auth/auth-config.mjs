@@ -1,5 +1,5 @@
 import { createEmailHandoff } from "./email-handoff.mjs";
-import { normalizeEmail, resolveMode } from "./policy.mjs";
+import { cookiePrefixFor, normalizeEmail, resolveMode } from "./policy.mjs";
 
 export async function createAuth({
   mode,
@@ -189,8 +189,11 @@ export async function createAuth({
       max: 60,
     },
     advanced: {
-      cookiePrefix: mode === "mock" ? "abz-mock" : "abz-auth",
-      useSecureCookies: secureCookies,
+      // The library would prepend "__Secure-", which still allows a Domain attribute.
+      // The prefix carries "__Host-" itself over HTTPS; Secure comes from the defaults.
+      // Never set a cookie domain or crossSubDomainCookies.
+      cookiePrefix: cookiePrefixFor(mode, secureCookies),
+      useSecureCookies: false,
       defaultCookieAttributes: {
         httpOnly: true,
         secure: secureCookies,
