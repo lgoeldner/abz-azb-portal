@@ -36,6 +36,13 @@
     mode: "0644"
   notify: Reload edge caddy
 
+- name: Construction page
+  ansible.builtin.copy:
+    src: construction/
+    dest: /opt/edge/caddy/site/
+    mode: "0644"
+  when: edge_static_hosts | default([]) | length > 0
+
 - name: Edge compose file
   ansible.builtin.copy:
     src: compose.yaml

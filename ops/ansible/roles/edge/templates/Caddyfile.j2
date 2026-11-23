@@ -22,3 +22,15 @@
 {% endif %}
 }
 {% endfor %}
+{% if edge_static_hosts | default([]) %}
+
+# Placeholder page until production goes live; files come from roles/edge/files/construction.
+{{ edge_static_hosts | join(', ') }} {
+{% if edge_tls_internal %}
+	tls internal
+{% endif %}
+	root * /etc/caddy/site
+	encode zstd gzip
+	file_server
+}
+{% endif %}

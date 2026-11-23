@@ -10,6 +10,7 @@ ufw_allow:
 
 edge_acme_email: "test@abizeitbetrug.de"
 edge_tls_internal: false # true only for local tests without public DNS
+edge_static_hosts: [abizeitbetrug.de, www.abizeitbetrug.de] # "under construction" page; drop once production is served here
 edge_sites:
   - host: test.abizeitbetrug.de
     upstream: "127.0.0.1:{{ tunnel_http_port }}"
