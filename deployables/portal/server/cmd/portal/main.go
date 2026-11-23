@@ -77,7 +77,15 @@ func run() error {
 	case "seed":
 		return portal.SeedWithIssuer(ctx, pool, c.Env, c.Issuer)
 	case "users":
-		return portal.RunUserCommand(ctx, pool, portal.NewMailService(pool, c.Mail), os.Args[2:], os.Stdout)
+		// Invites are best effort: a roster import must keep working without mail credentials.
+		var mailer *portal.MailService
+		if mc, err := portal.LoadMailConfig(c.Env); err != nil {
+			slog.Warn("invite emails disabled: mail is not configured")
+		} else {
+			mc.PublicURL = c.PublicURL
+			mailer = portal.NewMailService(pool, mc)
+		}
+		return portal.RunUserCommand(ctx, pool, mailer, os.Args[2:], os.Stdout)
 	case "erase":
 		return portal.RunEraseCommand(ctx, pool, c, os.Args[2:], os.Stdout)
 	case "reminders":
