@@ -285,3 +285,8 @@ test `deployables/portal/web/src/Passkeys.test.tsx` :: passkey list/add/remove U
 page /einstellungen :: account settings for every role: reminder preference and passkeys (Settings.tsx, Passkeys.tsx) [account, passkey]
 route POST /api/auth/passkey/{generate-register-options,verify-registration,generate-authenticate-options,verify-authentication,delete-passkey}, GET /api/auth/passkey/list-user-passkeys :: auth-service routes, not Go and not in openapi.json; contract in implementation-contract.md (server-core.mjs) [passkey, auth, webauthn]
 rule Passkeys are deleted on login email change, erasure and restore, not on auth-mode cutover (the dev mock has none); enrollment needs a session at most 1 hour old; the RP ID is the BETTER_AUTH_URL hostname; magic links stay as recovery [passkey, revocation, auth]
+file `deployables/portal/web/.env.preview` :: Vite `--mode preview` env setting VITE_PREVIEW_MOCK=true for static UI preview builds only [preview, pages, mock]
+file `deployables/portal/web/src/preview-mock.ts` :: synthetic in-browser mock API for static UI previews (tree-shaken out of production builds) [preview, pages, mock]
+test `deployables/portal/web/src/preview-mock.test.ts` :: preview mock role switching, consent gate, ballot casts, submissions and ticket moves [preview, mock, test]
+file `deployables/portal/web/src/PreviewBar.tsx` :: floating role/consent/reset switcher shown only in VITE_PREVIEW_MOCK preview builds [preview, pages, ui]
+file `.github/workflows/pages-preview.yml` :: builds and deploys static frontend preview (`build:preview`) from `ui-redesign` to GitHub Pages with no backend secrets [preview, pages, ci]

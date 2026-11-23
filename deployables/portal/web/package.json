@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "dev:preview": "vite --mode preview --host 0.0.0.0",
     "build": "tsc -b && vite build",
+    "build:preview": "tsc -b && vite build --mode preview",
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "test": "vitest run",

@@ -14,6 +14,10 @@ export function setCsrf(value: string) {
   csrf = value;
 }
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  if (import.meta.env.VITE_PREVIEW_MOCK === 'true') {
+    const { previewApi } = await import('./preview-mock');
+    return previewApi<T>(path, init);
+  }
   const headers = new Headers(init.headers);
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
   const betterAuth = path.startsWith('/api/auth/'); // same origin is its only CSRF check

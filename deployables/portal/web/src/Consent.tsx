@@ -1,14 +1,29 @@
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
+import { toast } from 'sonner';
 import { api, ApiError, json, type Consent } from './api';
 import { btn, Failure, Loading, useAction, useData } from './ui';
 
 export function LegalLinks({ className = '' }: { className?: string }) {
+  const onPreviewClick = (label: string) => (e: MouseEvent<HTMLAnchorElement>) => {
+    if (import.meta.env.VITE_PREVIEW_MOCK === 'true') {
+      e.preventDefault();
+      toast.info(`Vorschau-Modus: ${label} wird im echten Betrieb vom Server ausgeliefert.`);
+    }
+  };
   return (
     <p className={`flex gap-4 text-sm text-muted ${className}`}>
-      <a className="underline underline-offset-2 hover:text-ink" href="/impressum">
+      <a
+        className="underline underline-offset-2 hover:text-ink"
+        href="/impressum"
+        onClick={onPreviewClick('Impressum')}
+      >
         Impressum
       </a>
-      <a className="underline underline-offset-2 hover:text-ink" href="/datenschutz">
+      <a
+        className="underline underline-offset-2 hover:text-ink"
+        href="/datenschutz"
+        onClick={onPreviewClick('Datenschutz')}
+      >
         Datenschutz
       </a>
     </p>

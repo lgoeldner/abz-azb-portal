@@ -304,7 +304,9 @@ function Logout() {
         onClick={() =>
           action.run(async () => {
             await api('/auth/logout', json('POST'));
-            window.location.assign('/');
+            if (import.meta.env.VITE_PREVIEW_MOCK !== 'true') {
+              window.location.assign('/');
+            }
           })
         }
       >
@@ -345,9 +347,22 @@ function Login() {
           <p className="mt-3 text-[15px] text-muted">
             Melde dich an, um Erinnerungen einzureichen und bei unseren Sammlungen mitzumachen.
           </p>
-          <a className={`${btn.primary} mt-6 w-full`} href="/auth/login">
-            Anmelden <Arrow />
-          </a>
+          {import.meta.env.VITE_PREVIEW_MOCK === 'true' ? (
+            <button
+              type="button"
+              className={`${btn.primary} mt-6 w-full`}
+              onClick={async () => {
+                const { PREVIEW_ACCOUNTS, setPreviewAccount } = await import('./preview-mock');
+                setPreviewAccount(PREVIEW_ACCOUNTS[0].id);
+              }}
+            >
+              Als Vorschau-Konto anmelden <Arrow />
+            </button>
+          ) : (
+            <a className={`${btn.primary} mt-6 w-full`} href="/auth/login">
+              Anmelden <Arrow />
+            </a>
+          )}
           <p className="mt-5 text-sm text-muted">
             Privater Bereich für unseren Jahrgang. Beiträge und Bilder sind nur für berechtigte Personen zugänglich.
           </p>
