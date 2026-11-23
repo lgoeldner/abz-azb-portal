@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -544,12 +546,48 @@ func TestInviteMailOnGainingAccess(t *testing.T) {
 	}
 	patch(PendingID, "Pat", "student", true)
 	patch(MiaID, "Mia 2", "manager", true)
-	if invites(PendingID) != 1 || invites(MiaID) != 1 {
-		t.Fatalf("want one invite each after admit/promote, got %d and %d", invites(PendingID), invites(MiaID))
+	if invites(PendingID) != 1 || invites(MiaID) != 0 {
+		t.Fatalf("want an invite for the admitted user only, not for a promotion; got %d and %d", invites(PendingID), invites(MiaID))
 	}
 	patch(PendingID, "Pat 2", "student", true)
-	patch(MiaID, "Mia 3", "admin", true)
-	if invites(PendingID) != 1 || invites(MiaID) != 1 {
-		t.Fatal("unrelated edit or manager->admin re-sent the invite")
+	if invites(PendingID) != 1 {
+		t.Fatal("unrelated edit re-sent the invite")
+	}
+}
+
+func TestRosterImportInvitesOnlyNewlyAccessibleUsers(t *testing.T) {
+	pool := integrationPool(t)
+	ctx := context.Background()
+	if err := Seed(ctx, pool, "development"); err != nil {
+		t.Fatal(err)
+	}
+	mailer := NewMailService(pool, MailConfig{Provider: "capture", PublicURL: "https://portal.example.test", DailyLimit: 300, ReminderLimit: 150, LoginReserve: 150})
+	path := filepath.Join(t.TempDir(), "roster.csv")
+	// Mia already has access (re-import), Neu is a new user with access, Stumm is new without access.
+	data := "id,email,name,admitted,cohort_member,login_enabled\n" + MiaID + ",mia@example.test,Mia,true,true,true\n,neu@example.test,Neu,true,true,true\n,stumm@example.test,Stumm,false,true,true\n"
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	sent := func() (n int) {
+		if err := pool.QueryRow(ctx, "SELECT count(*) FROM mail_messages m JOIN mail_destinations d ON d.message_id=m.id").Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	var out bytes.Buffer
+	if err := RunUserCommand(ctx, pool, mailer, []string{"import", "--file", path, "--dry-run"}, &out); err != nil || sent() != 0 {
+		t.Fatalf("dry run mailed: %v %d", err, sent())
+	}
+	for i := 0; i < 2; i++ {
+		if err := RunUserCommand(ctx, pool, mailer, []string{"import", "--file", path, "--apply"}, &out); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var to string
+	if sent() != 1 {
+		t.Fatalf("want exactly one invite across two applies, got %d", sent())
+	}
+	if err := pool.QueryRow(ctx, "SELECT recipient_snapshot FROM mail_destinations").Scan(&to); err != nil || to != "neu@example.test" {
+		t.Fatalf("invite went to %q: %v", to, err)
 	}
 }

@@ -34,7 +34,7 @@ docker compose run --rm --no-deps -v /absolute/private/roster.csv:/run/roster.cs
 docker compose run --rm --no-deps -v /absolute/private/roster.csv:/run/roster.csv:ro portal users import --file /run/roster.csv --apply
 ```
 
-Imports are transactional and idempotent. Missing people are not deleted. Empty optional role/flag cells preserve existing permissions; new records default to student, unadmitted and login disabled. Add `--allow-elevated` for explicitly assigned manager/admin roles. The first admin needs role=admin, admitted=true and login_enabled=true with an address they control. Imports do not send invitations. Output contains only counts and UUIDs.
+Imports are transactional and idempotent. A committed `--apply` also emails an invite to each user who newly has access (admitted and login enabled); dry runs, re-imports and plain role changes send nothing. This needs working mail credentials; invite failures are logged and do not undo the import. Direct psql (`portal_provision_user`) sends no mail. Missing people are not deleted. Empty optional role/flag cells preserve existing permissions; new records default to student, unadmitted and login disabled. Add `--allow-elevated` for explicitly assigned manager/admin roles. The first admin needs role=admin, admitted=true and login_enabled=true with an address they control. Imports do not send invitations. Output contains only counts and UUIDs.
 
 ```sh
 portal users set-email --id USER_UUID --email corrected@example.org --dry-run

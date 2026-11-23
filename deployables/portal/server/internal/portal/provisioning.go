@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"io"
+	"log/slog"
 	"net/mail"
 	"os"
 	"strings"
@@ -134,8 +135,10 @@ func importRoster(ctx context.Context, tx pgx.Tx, rows []provisionRecord) ([]str
 }
 
 // RunUserCommand deliberately defaults to rollback. It uses the same database
-// functions available to a trusted operator through psql, with no provider calls.
-func RunUserCommand(ctx context.Context, pool *pgxpool.Pool, args []string, out io.Writer) error {
+// functions available to a trusted operator through psql. Only a committed
+// import mails anything: an invite to each user who newly gained access.
+// Direct psql has no mail path; use the CLI or the admin page to get invites.
+func RunUserCommand(ctx context.Context, pool *pgxpool.Pool, mailer *MailService, args []string, out io.Writer) error {
 	if len(args) == 0 {
 		return errors.New("usage: portal users import|set-email|disable|revoke-sessions")
 	}
@@ -178,9 +181,26 @@ func RunUserCommand(ctx context.Context, pool *pgxpool.Pool, args []string, out 
 		return errors.New("cannot lock user transaction")
 	}
 	ids := []string{id}
+	hadAccess := map[string]bool{}
 	switch args[0] {
 	case "import":
-		ids, err = importRoster(ctx, tx, rows)
+		var rs pgx.Rows
+		if rs, err = tx.Query(ctx, "SELECT id::text FROM users WHERE admitted AND login_enabled"); err == nil {
+			for rs.Next() {
+				var uid string
+				if err = rs.Scan(&uid); err != nil {
+					break
+				}
+				hadAccess[uid] = true
+			}
+			rs.Close()
+			if err == nil {
+				err = rs.Err()
+			}
+		}
+		if err == nil {
+			ids, err = importRoster(ctx, tx, rows)
+		}
 	case "set-email":
 		var normalized string
 		normalized, err = normalizedEmail(email)
@@ -218,9 +238,24 @@ func RunUserCommand(ctx context.Context, pool *pgxpool.Pool, args []string, out 
 			return errors.New("user changes could not be committed")
 		}
 	}
+	invited := 0
+	if apply && args[0] == "import" && mailer != nil {
+		for _, uid := range ids {
+			if hadAccess[uid] {
+				continue
+			}
+			// sendInvite skips users that are not admitted with login enabled.
+			if err := mailer.sendInvite(ctx, uid); err == nil {
+				invited++
+			} else if !errors.Is(err, pgx.ErrNoRows) {
+				slog.Warn("invite email failed", "user_id", uid, "failure_code", mailFailureCode(err))
+			}
+		}
+	}
 	return json.NewEncoder(out).Encode(struct {
 		Applied bool     `json:"applied"`
 		Count   int      `json:"count"`
 		IDs     []string `json:"user_ids"`
-	}{apply, len(ids), ids})
+		Invited int      `json:"invited"`
+	}{apply, len(ids), ids, invited})
 }

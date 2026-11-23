@@ -188,8 +188,8 @@ func (a *App) editUser(w http.ResponseWriter, r *http.Request) error {
 	if e = tx.Commit(r.Context()); e != nil {
 		return e
 	}
-	// Invite on gaining access: newly admitted, or promoted to manager/admin while admitted.
-	if a.Mail != nil && in.Admitted && (!original.Admitted || original.Role == "student" && in.Role != "student") {
+	// Invite on gaining access (not on role changes).
+	if a.Mail != nil && in.Admitted && !original.Admitted {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 15*time.Second)
 		defer cancel()
 		if err := a.Mail.sendInvite(ctx, id); err != nil {

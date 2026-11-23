@@ -40,7 +40,7 @@ func TestProvisioningStableIDsRollbackAndCredentialInvalidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	var output bytes.Buffer
-	if err := RunUserCommand(ctx, pool, []string{"import", "--file", path, "--dry-run"}, &output); err != nil {
+	if err := RunUserCommand(ctx, pool, nil, []string{"import", "--file", path, "--dry-run"}, &output); err != nil {
 		t.Fatal(err)
 	}
 	var email string
@@ -48,7 +48,7 @@ func TestProvisioningStableIDsRollbackAndCredentialInvalidation(t *testing.T) {
 		t.Fatal("dry run changed data")
 	}
 	for i := 0; i < 2; i++ {
-		if err := RunUserCommand(ctx, pool, []string{"import", "--file", path, "--apply"}, &output); err != nil {
+		if err := RunUserCommand(ctx, pool, nil, []string{"import", "--file", path, "--apply"}, &output); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -75,13 +75,13 @@ func TestProvisioningStableIDsRollbackAndCredentialInvalidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Disabling login keeps the passkey (login is refused at session creation); only an email change removes it.
-	if err = RunUserCommand(ctx, pool, []string{"disable", "--id", MiaID, "--apply"}, &output); err != nil {
+	if err = RunUserCommand(ctx, pool, nil, []string{"disable", "--id", MiaID, "--apply"}, &output); err != nil {
 		t.Fatal(err)
 	}
 	if err = pool.QueryRow(ctx, "SELECT count(*) FROM auth_passkeys WHERE user_id=$1", MiaID).Scan(&count); err != nil || count != 1 {
 		t.Fatal("disabling login removed the passkey")
 	}
-	if err = RunUserCommand(ctx, pool, []string{"set-email", "--id", MiaID, "--email", "another@example.test", "--apply"}, &output); err != nil {
+	if err = RunUserCommand(ctx, pool, nil, []string{"set-email", "--id", MiaID, "--email", "another@example.test", "--apply"}, &output); err != nil {
 		t.Fatal(err)
 	}
 	if err = pool.QueryRow(ctx, "SELECT (SELECT count(*) FROM auth_sessions WHERE user_id=$1)+(SELECT count(*) FROM auth_verifications)+(SELECT count(*) FROM auth_passkeys WHERE user_id=$1)", MiaID).Scan(&count); err != nil || count != 0 {
@@ -90,7 +90,7 @@ func TestProvisioningStableIDsRollbackAndCredentialInvalidation(t *testing.T) {
 	if _, err = pool.Exec(ctx, "SELECT portal_set_user_email($1,'mia-new@example.test')", LeonID); err == nil {
 		t.Fatal("old link address reassigned before expiry")
 	}
-	if err = RunUserCommand(ctx, pool, []string{"disable", "--id", AdminID, "--apply"}, &output); err == nil {
+	if err = RunUserCommand(ctx, pool, nil, []string{"disable", "--id", AdminID, "--apply"}, &output); err == nil {
 		t.Fatal("last administrator disabled")
 	}
 }
