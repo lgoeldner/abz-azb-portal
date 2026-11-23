@@ -1,0 +1,13 @@
+# Real hosts. Secrets live in group_vars/<group>/vault.yml (ansible-vault), see README.md.
+all:
+  children:
+    edge:
+      hosts:
+        oci-edge:
+          ansible_host: CHANGE_ME # OCI VM public IP or DNS name
+          ansible_user: ubuntu
+    test:
+      hosts:
+        home-test:
+          ansible_host: CHANGE_ME # home server LAN address
+          ansible_user: CHANGE_ME

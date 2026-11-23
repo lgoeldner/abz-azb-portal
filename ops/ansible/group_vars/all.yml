@@ -1,0 +1,11 @@
+# WireGuard tunnel between the edge and the test server.
+wg_edge_address: 10.77.0.1
+wg_test_address: 10.77.0.2
+wg_port: 51820
+
+# Public keys for the deploy user (docker group). Password SSH is switched off only when this is non-empty.
+deploy_ssh_keys: []
+
+# Firewall: off until checked per host (OCI images ship their own iptables rules).
+manage_ufw: false
+ufw_allow: []

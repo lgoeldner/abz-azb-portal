@@ -1,5 +1,7 @@
 # Deployment, backup and restore
 
+Edge proxy and test server are provisioned with Ansible: see [ansible/README.md](ansible/README.md).
+
 Production runs PostgreSQL 18, the Go server with embedded React assets, Caddy, and a Restic backup sidecar. Only Caddy publishes ports 80 and 443. PostgreSQL is on a private network; the application and backup worker also have outbound access for OIDC and independent backup storage. Uploads and database data use separate Docker volumes.
 
 1. Point the public DNS name at the VPS, copy `.env.example` to `.env`, and set real secrets, OIDC values, the public host, and independent backup storage credentials. Configure the OIDC provider callback at `https://<PUBLIC_HOST>/auth/callback`.

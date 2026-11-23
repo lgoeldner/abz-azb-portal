@@ -1,0 +1,17 @@
+# Edge reverse proxy: TLS for every site, forwarded over WireGuard. Host network reaches wg0 directly.
+name: edge
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./caddy:/etc/caddy:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+volumes:
+  caddy_data:
+  caddy_config:

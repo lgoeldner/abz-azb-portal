@@ -1,0 +1,27 @@
+- name: Edge directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: [/opt/edge, /opt/edge/caddy]
+
+# The directory, not the file, is mounted: templating replaces the inode, a file mount would keep the old one.
+- name: Edge Caddyfile
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: /opt/edge/caddy/Caddyfile
+    mode: "0644"
+  notify: Reload edge caddy
+
+- name: Edge compose file
+  ansible.builtin.copy:
+    src: compose.yaml
+    dest: /opt/edge/compose.yaml
+    mode: "0644"
+
+- name: Edge caddy running
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: /opt/edge
+  register: edge_up
+  changed_when: "'Started' in edge_up.stderr or 'Recreated' in edge_up.stderr"

@@ -1,0 +1,15 @@
+# Managed by Ansible.
+{% if edge_acme_email %}
+{
+	email {{ edge_acme_email }}
+}
+{% endif %}
+{% for site in edge_sites %}
+
+{{ site.host }} {
+{% if edge_tls_internal %}
+	tls internal
+{% endif %}
+	reverse_proxy {{ site.upstream }}
+}
+{% endfor %}

@@ -1,0 +1,87 @@
+- name: Docker drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/docker.service.d
+    state: directory
+    mode: "0755"
+
+# Caddy binds the WireGuard address, so Docker must start after wg0 exists.
+- name: Docker starts after WireGuard
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/docker.service.d/wireguard.conf
+    content: |
+      [Unit]
+      After=wg-quick@wg0.service
+      Wants=wg-quick@wg0.service
+    mode: "0644"
+  notify: Reload systemd
+
+- name: App directories
+  ansible.builtin.file:
+    path: "{{ test_dir }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: ["", deployables/caddy, legal]
+
+# Deploy files come from the checkout Ansible runs from; images come from the registry.
+- name: Compose files
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../{{ item }}"
+    dest: "{{ test_dir }}/{{ item }}"
+    mode: "0644"
+  loop: [compose.yaml, compose.test.yaml]
+
+- name: Test Caddyfile
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../deployables/caddy/Caddyfile.test"
+    dest: "{{ test_dir }}/deployables/caddy/Caddyfile.test"
+    mode: "0644"
+  notify: Restart test caddy
+
+- name: Environment
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ test_dir }}/.env"
+    mode: "0600"
+  notify: Recreate test stack
+
+# force: false keeps pages the operator replaced by hand.
+- name: Placeholder legal pages
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ test_dir }}/legal/{{ item }}"
+    mode: "0644"
+    force: false
+  loop: [impressum.html, datenschutz.html]
+
+- name: Auto-update units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop: [abizeitbetrug-test-update.service, abizeitbetrug-test-update.timer]
+  notify: Reload systemd
+
+- name: Flush handlers before starting the stack
+  ansible.builtin.meta: flush_handlers
+
+- name: Pull images
+  ansible.builtin.command: docker compose pull --quiet
+  args:
+    chdir: "{{ test_dir }}"
+  when: test_pull_images
+  changed_when: false
+  tags: [stack]
+
+- name: Stack running
+  ansible.builtin.command: docker compose up -d --remove-orphans --wait
+  args:
+    chdir: "{{ test_dir }}"
+  register: test_up
+  changed_when: "'Started' in test_up.stderr or 'Recreated' in test_up.stderr"
+  tags: [stack]
+
+- name: Auto-update timer
+  ansible.builtin.systemd_service:
+    name: abizeitbetrug-test-update.timer
+    state: "{{ 'started' if test_auto_update else 'stopped' }}"
+    enabled: "{{ test_auto_update }}"

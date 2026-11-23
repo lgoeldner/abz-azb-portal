@@ -1,0 +1,24 @@
+# Test server override (home server behind the OCI edge, see ops/ansible).
+# TLS ends at the edge; Caddy here serves plain HTTP on the WireGuard address only.
+# Used via COMPOSE_FILE=compose.yaml:compose.test.yaml in the server's .env.
+services:
+  portal:
+    environment:
+      ENV_LABEL: test
+
+  caddy:
+    ports: !override
+      - "${TEST_BIND_IP:?Set TEST_BIND_IP to the WireGuard address}:80:80"
+    environment:
+      EDGE_PROXY_IP: ${EDGE_PROXY_IP:?Set EDGE_PROXY_IP to the edge WireGuard address}
+    volumes:
+      - ./deployables/caddy/Caddyfile.test:/etc/caddy/Caddyfile:ro
+
+  # ponytail: restic repository on the same host, enough for restore drills; real offsite storage is a prod concern.
+  backup:
+    entrypoint: ["/bin/sh", "-c", "restic cat config >/dev/null 2>&1 || restic init; exec /usr/local/bin/backup.sh"]
+    volumes:
+      - restic_test:/restic
+
+volumes:
+  restic_test:

@@ -1,0 +1,12 @@
+- name: WireGuard config
+  ansible.builtin.template:
+    src: wg0.conf.j2
+    dest: /etc/wireguard/wg0.conf
+    mode: "0600"
+  notify: Restart wireguard
+
+- name: WireGuard up
+  ansible.builtin.service:
+    name: wg-quick@wg0
+    state: started
+    enabled: true

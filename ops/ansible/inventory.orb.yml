@@ -1,0 +1,13 @@
+# Two disposable OrbStack machines for test-orb.sh. "ssh <machine>@orb" is OrbStack's SSH proxy.
+all:
+  vars:
+    ansible_host: orb
+  children:
+    edge:
+      hosts:
+        abz-edge:
+          ansible_user: abz-edge
+    test:
+      hosts:
+        abz-home:
+          ansible_user: abz-home

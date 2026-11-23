@@ -1,0 +1,14 @@
+- name: Base setup
+  hosts: all
+  become: true
+  roles: [common]
+
+- name: Edge reverse proxy (OCI)
+  hosts: edge
+  become: true
+  roles: [wireguard, edge]
+
+- name: Test server (home)
+  hosts: test
+  become: true
+  roles: [wireguard, test_host]

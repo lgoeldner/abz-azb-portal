@@ -1,0 +1,10 @@
+[Unit]
+Description=Pull and restart the AbiZeitBetrug test stack
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory={{ test_dir }}
+ExecStart=/usr/bin/docker compose pull --quiet
+ExecStart=/usr/bin/docker compose up -d --remove-orphans

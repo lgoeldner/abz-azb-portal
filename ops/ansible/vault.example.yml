@@ -1,0 +1,16 @@
+# Copy the matching keys into group_vars/<group>/vault.yml and encrypt:
+#   ansible-vault create group_vars/edge/vault.yml
+#   ansible-vault create group_vars/test/vault.yml
+# Generate: wg genkey (WireGuard), openssl rand -hex 32 (secrets).
+
+# group_vars/edge/vault.yml
+vault_wg_private_key: ""
+
+# group_vars/test/vault.yml
+vault_wg_private_key: ""
+vault_test_postgres_password: ""
+vault_test_auth_service_secret: ""
+vault_test_better_auth_secret: "" # must differ from the service secret
+vault_test_session_secret: ""
+vault_test_brevo_api_key: ""
+vault_test_restic_password: ""

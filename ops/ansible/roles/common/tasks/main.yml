@@ -1,0 +1,51 @@
+- name: Packages
+  ansible.builtin.apt:
+    name: [docker.io, docker-compose-v2, wireguard, ufw, unattended-upgrades, curl]
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Docker running
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Deploy user
+  ansible.builtin.user:
+    name: deploy
+    groups: docker
+    append: true
+    shell: /bin/bash
+
+- name: Deploy user SSH keys
+  ansible.posix.authorized_key:
+    user: deploy
+    key: "{{ item }}"
+  loop: "{{ deploy_ssh_keys }}"
+
+- name: SSH keys only
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/10-abizeitbetrug.conf
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin prohibit-password
+    mode: "0644"
+  when: deploy_ssh_keys | length > 0
+  notify: Restart ssh
+
+- name: Firewall rules
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+  loop: "{{ [{'port': '22', 'proto': 'tcp'}] + ufw_allow }}"
+  when: manage_ufw
+
+# ponytail: Docker-published ports bypass ufw; services therefore bind to specific addresses.
+- name: Firewall on
+  community.general.ufw:
+    state: enabled
+    policy: deny
+    direction: incoming
+  when: manage_ufw

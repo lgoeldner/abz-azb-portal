@@ -1,0 +1,32 @@
+wg_address: "{{ wg_test_address }}"
+wg_private_key: "{{ vault_wg_private_key }}"
+wg_peers:
+  - public_key: "{{ wg_edge_public_key }}"
+    allowed_ips: "{{ wg_edge_address }}/32"
+    endpoint: "{{ wg_edge_endpoint }}"
+
+wg_edge_public_key: CHANGE_ME # wg pubkey of the edge's vault_wg_private_key
+wg_edge_endpoint: CHANGE_ME:51820 # OCI public IP
+
+test_dir: /opt/abizeitbetrug
+test_host: test.abizeitbetrug.de
+test_image_prefix: ghcr.io/lgoeldner/
+test_app_version: main
+test_pull_images: true
+test_auto_update: true # systemd timer pulls :main every 5 minutes
+
+test_mail_from: "AbiZeitBetrug Test <CHANGE_ME>"
+test_mail_reply_to: ""
+# Brevo account shared with prod (300/day): test takes 50. Reserve + reminders must fit the limit.
+test_mail_daily_limit: 50
+test_mail_login_reserve: 40
+test_reminder_daily_limit: 10
+test_brevo_tracking_disabled: true
+test_project_management: true
+
+test_postgres_password: "{{ vault_test_postgres_password }}"
+test_auth_service_secret: "{{ vault_test_auth_service_secret }}"
+test_better_auth_secret: "{{ vault_test_better_auth_secret }}"
+test_session_secret: "{{ vault_test_session_secret }}"
+test_brevo_api_key: "{{ vault_test_brevo_api_key }}"
+test_restic_password: "{{ vault_test_restic_password }}"

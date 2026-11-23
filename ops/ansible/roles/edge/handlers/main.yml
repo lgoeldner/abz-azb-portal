@@ -1,0 +1,5 @@
+- name: Reload edge caddy
+  ansible.builtin.command: docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+  args:
+    chdir: /opt/edge
+  changed_when: true
