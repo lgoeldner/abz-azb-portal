@@ -290,3 +290,7 @@ file `deployables/portal/web/src/preview-mock.ts` :: synthetic in-browser mock A
 test `deployables/portal/web/src/preview-mock.test.ts` :: preview mock role switching, consent gate, ballot casts, submissions and ticket moves [preview, mock, test]
 file `deployables/portal/web/src/PreviewBar.tsx` :: floating role/consent/reset switcher shown only in VITE_PREVIEW_MOCK preview builds [preview, pages, ui]
 file `.github/workflows/pages-preview.yml` :: builds and deploys static frontend preview (`build:preview`) from `ui-redesign` to GitHub Pages with no backend secrets [preview, pages, ci]
+file `deployables/portal/web/src/StudentShell.tsx` :: minimalist student top bar and account dropdown with Steckbrief red notification badge (no sidebar or admin chrome) [student, nav, steckbrief, ui]
+file `deployables/portal/web/src/StudentDashboard.tsx` :: minimalist student dashboard: progress bar, horizontal swipe-snap poll carousel, Abgegeben bottom sheet (editable + closed), and accumulating collection tiles [student, carousel, bottom-sheet, ui]
+test `deployables/portal/web/src/StudentDashboard.test.tsx` :: minimalist student UI invariants: progress bar, carousel filtering, Abgegeben sheet split, accumulating tiles, Steckbrief account badge, hidden Redaktion [student, ui, invariant]
+file `deployables/portal/web/src/StudentUI.css` :: scoped [data-workspace='schueler'] minimalist theme, scroll-snap carousel and bottom-sheet animations [student, style, css]

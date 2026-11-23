@@ -30,7 +30,6 @@ import {
   setCsrf,
   type Category,
   type Me,
-  type MyBallot,
   type Submission,
   type User,
 } from './api';
@@ -43,7 +42,6 @@ import {
   Loading,
   PageHead,
   Session,
-  SubmissionList,
   btn,
   allKinds,
   isBallot,
@@ -52,7 +50,6 @@ import {
   kindIcon,
   kindLabel,
   newestOpened,
-  notice,
   plural,
   projectsEnabled,
   roleName,
@@ -77,7 +74,8 @@ import { offerKey, PasskeyOffer } from './Passkeys';
 import { Settings as AccountSettings } from './Settings';
 import { ConsentStep, LegalLinks } from './Consent';
 import { DevDebug } from './DevDebug';
-import { PollStack } from './PollStack';
+import { StudentDashboard } from './StudentDashboard';
+import { StudentShell } from './StudentShell';
 
 export function App() {
   const me = useData<Me>('/me');
@@ -392,6 +390,13 @@ function Layout() {
     if (editorialRoute) setView('redaktion');
   }, [editorialRoute, setView]);
   const view: [View, (view: View) => void] = [editorialRoute ? 'redaktion' : preferredView, setView];
+  if (view[0] !== 'redaktion' || !editorial(user)) {
+    return (
+      <WorkspaceView.Provider value={view}>
+        <StudentShell />
+      </WorkspaceView.Provider>
+    );
+  }
   return (
     <WorkspaceView.Provider value={view}>
       <div data-workspace={view[0]}>
@@ -444,7 +449,7 @@ function Layout() {
             <NavItem to="/" icon={House}>
               Überblick
             </NavItem>
-            {view[0] === 'redaktion' && editorial(user) ? <EditorNav /> : <StudentNav />}
+            <EditorNav />
           </nav>
           {user.role === 'admin' && view[0] === 'redaktion' && <AdminNav onNavigate={() => setMenu(false)} />}
           <div className="flex flex-none flex-col gap-3 bg-pill px-3 py-4">
@@ -663,107 +668,11 @@ function NavGroup({ id, label, children }: { id: string; label: string; children
   );
 }
 const quiet = 'px-3.5 text-[13px] text-muted';
-const hasVoted = (c: Category) => Boolean(c.my_words?.length || c.my_option_ids?.length || c.my_option_id);
 const participationColor = (percent: number) => {
   const from = [209, 213, 219];
   const to = [22, 101, 52];
   return `rgb(${from.map((value, index) => Math.round(value + ((to[index] - value) * percent) / 100)).join(', ')})`;
 };
-
-function StudentNav() {
-  const { user } = useSession();
-  const categories = useData<Category[]>('/categories');
-  const submissions = useData<Submission[]>('/submissions');
-  const ballots = (categories.data ?? []).filter((c) => isBallot(c.kind));
-  const todo = ballots.filter((c) => c.status === 'open' && (!hasVoted(c) || c.repeatable)).sort(newestOpened);
-  const done = ballots
-    .filter((c) => c.status === 'closed' || (c.status === 'open' && hasVoted(c) && !c.repeatable))
-    .sort(newestOpened);
-  const own = (submissions.data ?? []).filter((s) => s.author_id === user.id);
-  return (
-    <>
-      <NavGroup id="nav-offen" label="Offen">
-        {categories.isPending ? (
-          <p className={quiet}>Einen Moment …</p>
-        ) : categories.error ? (
-          <p className={quiet}>Sammlungen nicht erreichbar.</p>
-        ) : todo.length === 0 ? (
-          <p className={quiet}>Gerade ist nichts offen.</p>
-        ) : (
-          <ol aria-labelledby="nav-offen" className="ml-3 flex flex-col border-l-2 border-pill">
-            {todo.map((c) => (
-              <li key={c.id} className="relative pl-3">
-                <span
-                  aria-hidden="true"
-                  className="absolute left-0 top-[17px] size-2 -translate-x-1/2 rounded-full bg-accent"
-                />
-                <NavRow to={`/sammlungen/${c.id}`} title={c.name} sub={since(c.opened_at)} />
-              </li>
-            ))}
-          </ol>
-        )}
-      </NavGroup>
-      <NavGroup id="nav-student-beitraege" label="Beiträge">
-        {categories.isPending || submissions.isPending ? (
-          <p className={quiet}>Einen Moment …</p>
-        ) : categories.error ? null : submissions.error ? (
-          <p className={quiet}>Beiträge nicht erreichbar.</p>
-        ) : (
-          categories.data
-            ?.filter((c) => c.status === 'open' && isSubmissionCollection(c.kind))
-            .map((c) => {
-              const ownCount = own.filter((s) => s.category_id === c.id).length;
-              return (
-                <NavRow
-                  key={c.id}
-                  to={`/sammlungen/${c.id}`}
-                  icon={kindIcon[c.kind]}
-                  title={c.name}
-                  sub={
-                    ownCount === 0
-                      ? 'Noch nichts eingereicht'
-                      : `${ownCount} eigene ${ownCount === 1 ? 'Einreichung' : 'Einreichungen'}`
-                  }
-                />
-              );
-            })
-        )}
-      </NavGroup>
-      <div className="flex flex-col gap-1">
-        <details className="group">
-          <summary
-            className={`${navItem} cursor-pointer list-none text-muted hover:bg-pill [&::-webkit-details-marker]:hidden`}
-          >
-            Erledigt ({done.length})
-            <span aria-hidden="true" className="text-xs group-open:rotate-90">
-              ›
-            </span>
-          </summary>
-          <div className="mt-1 flex flex-col gap-1">
-            {done.length === 0 ? (
-              <p className={quiet}>Noch nichts erledigt.</p>
-            ) : (
-              done.map((c) => (
-                <NavRow
-                  key={c.id}
-                  to={`/sammlungen/${c.id}`}
-                  title={c.name}
-                  sub={hasVoted(c) ? 'abgestimmt' : 'beendet'}
-                />
-              ))
-            )}
-          </div>
-        </details>
-        <NavItem to="/sammlungen" icon={Library}>
-          Alle Sammlungen
-        </NavItem>
-        <NavItem to="/beitraege" icon={FileText}>
-          Meine Beiträge
-        </NavItem>
-      </div>
-    </>
-  );
-}
 
 function EditorNav() {
   const session = useSession();
@@ -875,147 +784,7 @@ function RoleGuard({
 function Overview() {
   const { user } = useSession();
   const [view] = useWorkspaceView();
-  return view === 'redaktion' && editorial(user) ? <EditorialHome /> : <StudentHome />;
-}
-
-function StudentHome() {
-  const { user } = useSession();
-  const categories = useData<Category[]>('/categories');
-  const submissions = useData<Submission[]>('/submissions');
-  const myBallots = useData<MyBallot[]>('/me/ballots');
-  const first = user.name.split(' ')[0];
-  const ballots = (categories.data ?? []).filter((c) => isBallot(c.kind));
-  const todoBallots = ballots.filter((c) => c.status === 'open' && (!hasVoted(c) || c.repeatable)).sort(newestOpened);
-  const own = (submissions.data ?? []).filter((s) => s.author_id === user.id);
-  const ownBallots = myBallots.data ?? [];
-  const availableContributions = (categories.data ?? []).filter(
-    (c) => c.status === 'open' && isSubmissionCollection(c.kind),
-  );
-  const repeatableContributions = availableContributions.filter((c) => c.repeatable);
-  const oneOffContributions = (submissions.data && !submissions.error ? availableContributions : [])
-    .filter((c) => !c.repeatable && !own.some((s) => s.category_id === c.id))
-    .sort(newestOpened);
-  const todo = [...todoBallots, ...oneOffContributions];
-  const waiting = [...todo, ...repeatableContributions];
-  const title =
-    categories.data && submissions.data
-      ? waiting.length === 0
-        ? `Hey ${first}. Gerade ist alles erledigt.`
-        : `Hey ${first}. ${waiting.length === 1 ? '1 Sammlung wartet' : `${waiting.length} Sammlungen warten`}.`
-      : `Hey ${first}.`;
-  return (
-    <>
-      <PageHead title={title}>
-        {waiting.length > 0
-          ? 'Deine Stimme und deine Geschichten machen unsere Abizeitung.'
-          : 'Vielleicht fällt dir noch eine Geschichte ein, die in die Abizeitung gehört.'}
-      </PageHead>
-
-      <section aria-labelledby="home-dran">
-        <h2 id="home-dran" className={heading}>
-          Jetzt dran
-        </h2>
-        <div className="mt-4">
-          {categories.isPending ? (
-            <Loading />
-          ) : categories.error ? (
-            <Failure error={categories.error} retry={() => categories.refetch()} />
-          ) : todo.length === 0 ? (
-            <Empty>
-              Gerade gibt es keine neuen Aufgaben. Unter <Link to="/sammlungen">Alle Sammlungen</Link> kannst du deine
-              gespeicherten Stimmen ändern.
-            </Empty>
-          ) : (
-            <PollStack items={todo} />
-          )}
-        </div>
-      </section>
-
-      <section aria-labelledby="home-wiederholbar" className="mt-10">
-        <h2 id="home-wiederholbar" className={heading}>
-          Wiederholbar
-        </h2>
-        <div className="mt-4">
-          {categories.isPending ? (
-            <Loading />
-          ) : categories.error ? (
-            <Failure error={categories.error} retry={() => categories.refetch()} />
-          ) : repeatableContributions.length === 0 ? (
-            <Empty>Gerade gibt es keine offenen wiederholbaren Sammlungen.</Empty>
-          ) : (
-            <ul className="grid gap-4 sm:grid-cols-2">
-              {repeatableContributions.map((collection) => {
-                const ownCount = own.filter((submission) => submission.category_id === collection.id).length;
-                return (
-                  <li key={collection.id} className="min-w-0">
-                    <Link
-                      to={`/sammlungen/${collection.id}`}
-                      className="flex h-full flex-col gap-3 rounded-ui bg-white p-5 transition-colors hover:bg-soft"
-                    >
-                      <span className="flex items-center gap-2 text-sm text-muted">
-                        <KindIcon icon={kindIcon[collection.kind]} />
-                        {kindLabel[collection.kind]}
-                      </span>
-                      <h3 className={heading}>{collection.name}</h3>
-                      {collection.description && <p className="text-[15px] text-muted">{collection.description}</p>}
-                      <span className="mt-auto flex items-center justify-between gap-3 pt-2 text-sm">
-                        <span className="text-muted">
-                          {submissions.isPending || submissions.error
-                            ? 'Beiträge ansehen'
-                            : ownCount === 0
-                              ? 'Noch nichts eingereicht'
-                              : `${ownCount} eigene ${ownCount === 1 ? 'Einreichung' : 'Einreichungen'}`}
-                        </span>
-                        <span className="inline-flex items-center gap-1 font-bold">
-                          Sammlung öffnen <Arrow />
-                        </span>
-                      </span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-      </section>
-
-      <section aria-labelledby="home-beitraege" className="mt-10">
-        <div className="flex items-baseline justify-between gap-4">
-          <h2 id="home-beitraege" className={heading}>
-            Deine Beiträge
-          </h2>
-          {(own.length > 0 || ownBallots.length > 0) && (
-            <Link to="/beitraege" className={btn.text}>
-              Alle ansehen <Arrow />
-            </Link>
-          )}
-        </div>
-        <div className="mt-4">
-          {submissions.isPending || categories.isPending || myBallots.isPending ? (
-            <Loading />
-          ) : submissions.error || categories.error || myBallots.error ? (
-            <Failure
-              error={(submissions.error ?? categories.error ?? myBallots.error)!}
-              retry={() => {
-                submissions.refetch();
-                categories.refetch();
-                myBallots.refetch();
-              }}
-            />
-          ) : own.length || ownBallots.length ? (
-            <SubmissionList items={own} categories={categories.data ?? []} ballots={ownBallots} limit={10} />
-          ) : (
-            <Empty>Die erste Geschichte wartet auf dich. Such dir oben eine Sammlung aus.</Empty>
-          )}
-        </div>
-      </section>
-
-      <p className={`${notice} mt-10 text-muted`}>
-        <strong className="font-semibold text-ink">Unsere Erinnerungen bleiben im Jahrgang.</strong> Nur du und
-        berechtigte Mitglieder der Redaktion können deine Beiträge sehen.
-      </p>
-    </>
-  );
+  return view === 'redaktion' && editorial(user) ? <EditorialHome /> : <StudentDashboard />;
 }
 
 function EditorialHome() {

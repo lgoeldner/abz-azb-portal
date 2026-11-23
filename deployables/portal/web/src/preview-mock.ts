@@ -84,6 +84,8 @@ const POLL_SPRUCH = '30000000-0000-4000-8000-000000000002';
 const POLL_COVER = '30000000-0000-4000-8000-000000000003';
 const POLL_WORDS = '30000000-0000-4000-8000-000000000004';
 const POLL_CLOSED = '30000000-0000-4000-8000-000000000005';
+const POLL_FREISTUNDE = '30000000-0000-4000-8000-000000000006';
+const POLL_MOTTOWOCHE = '30000000-0000-4000-8000-000000000007';
 
 const AREA_REDAKTION = '60000000-0000-4000-8000-000000000001';
 const AREA_IDEEN = '60000000-0000-4000-8000-000000000002';
@@ -395,6 +397,62 @@ function createInitialStore(initialAccountId: string | null, initialConsentRequi
       participation: null,
     },
     {
+      id: POLL_FREISTUNDE,
+      name: 'Bester Ort in der Freistunde',
+      description: 'Wo findet man dich zwischen zwei Kursen am ehesten?',
+      kind: 'proposal',
+      template: '',
+      repeatable: false,
+      ongoing: false,
+      closes_at: daysAhead(6),
+      status: 'open',
+      allow_self_vote: false,
+      all_people: false,
+      max_choices: 1,
+      version: 2,
+      created_at: daysAgo(7),
+      opened_at: daysAgo(4),
+      options: [
+        { id: '40000000-0000-4000-8000-000000000601', label: 'Bäcker an der Ecke' },
+        { id: '40000000-0000-4000-8000-000000000602', label: 'Oberstufenraum' },
+        { id: '40000000-0000-4000-8000-000000000603', label: 'Bibliothek (angeblich lernen)' },
+        { id: '40000000-0000-4000-8000-000000000604', label: 'Pausenhof in der Sonne' },
+      ],
+      my_option_id: null,
+      my_option_ids: [],
+      my_words: [],
+      ballot_count: null,
+      participation: null,
+    },
+    {
+      id: POLL_MOTTOWOCHE,
+      name: 'Lieblingstag der Mottowoche',
+      description: 'Welches Thema darf auf keinen Fall fehlen?',
+      kind: 'proposal',
+      template: '',
+      repeatable: false,
+      ongoing: false,
+      closes_at: daysAhead(8),
+      status: 'open',
+      allow_self_vote: false,
+      all_people: false,
+      max_choices: 1,
+      version: 2,
+      created_at: daysAgo(15),
+      opened_at: daysAgo(14),
+      options: [
+        { id: '40000000-0000-4000-8000-000000000701', label: 'Kindheitshelden' },
+        { id: '40000000-0000-4000-8000-000000000702', label: 'Erster Schultag' },
+        { id: '40000000-0000-4000-8000-000000000703', label: 'Zeitreise 2000er' },
+        { id: '40000000-0000-4000-8000-000000000704', label: 'Alles außer Rucksack' },
+      ],
+      my_option_id: null,
+      my_option_ids: [],
+      my_words: [],
+      ballot_count: null,
+      participation: null,
+    },
+    {
       id: POLL_COVER,
       name: 'Die Farbe unseres Covers',
       description: 'Redaktionsentwurf – noch nicht veröffentlicht',
@@ -539,6 +597,14 @@ function createInitialStore(initialAccountId: string | null, initialConsentRequi
       option_ids: ['40000000-0000-4000-8000-000000000501'],
       words: [],
       created_at: daysAgo(7),
+    },
+    {
+      id: '80000000-0000-4000-8000-000000000007',
+      poll_id: POLL_MOTTOWOCHE,
+      user_id: MIA_ID,
+      option_ids: ['40000000-0000-4000-8000-000000000704'],
+      words: [],
+      created_at: daysAgo(2),
     },
   ];
 
