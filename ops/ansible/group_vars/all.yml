@@ -4,7 +4,8 @@ wg_test_address: 10.77.0.2
 wg_port: 51820
 
 # Public keys for the deploy user (docker group). Password SSH is switched off only when this is non-empty.
-deploy_ssh_keys: []
+deploy_ssh_keys:
+  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEgEJUv1mGn1RCL33FDCqPN8W91hh9/qTngwirBV1gFV azb-ci
 
 # Firewall: off until checked per host (OCI images ship their own iptables rules).
 manage_ufw: false

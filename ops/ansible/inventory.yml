@@ -4,10 +4,10 @@ all:
     edge:
       hosts:
         oci-edge:
-          ansible_host: CHANGE_ME # OCI VM public IP or DNS name
+          ansible_host: test.abizeitbetrug.de
           ansible_user: ubuntu
     test:
       hosts:
         home-test:
-          ansible_host: CHANGE_ME # home server LAN address
-          ansible_user: CHANGE_ME
+          ansible_host: t14s # ~/.ssh/config alias; t14s-jump goes through the edge once wg0 is up
+          ansible_user: lgoeldner # needs sudo; deploy is only in the docker group

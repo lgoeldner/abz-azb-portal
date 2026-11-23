@@ -25,3 +25,4 @@ legal/
 .env.dev.dist
 mise.toml
 .claude/settings.json
+azb_ci_key
