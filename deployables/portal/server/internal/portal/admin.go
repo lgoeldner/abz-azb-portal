@@ -1,7 +1,9 @@
 package portal
 
 import (
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -185,6 +187,14 @@ func (a *App) editUser(w http.ResponseWriter, r *http.Request) error {
 	}
 	if e = tx.Commit(r.Context()); e != nil {
 		return e
+	}
+	// Invite on gaining access: newly admitted, or promoted to manager/admin while admitted.
+	if a.Mail != nil && in.Admitted && (!original.Admitted || original.Role == "student" && in.Role != "student") {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 15*time.Second)
+		defer cancel()
+		if err := a.Mail.sendInvite(ctx, id); err != nil {
+			slog.Warn("invite email failed", "user_id", id, "failure_code", mailFailureCode(err))
+		}
 	}
 	jsonOut(w, 200, u)
 	return nil

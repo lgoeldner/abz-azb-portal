@@ -501,3 +501,55 @@ VALUES($1,'CLI reminder','','idea','open',false,false,now()+interval '1 day')`, 
 		t.Fatalf("apply did not enable category reminders: %v err=%v", enabled, err)
 	}
 }
+
+func TestMailMarkedOutsideProduction(t *testing.T) {
+	req := mailSendRequest{Subject: "S", Text: "T", HTML: mailHTML("Titel", "intro", "Los", "https://x/", "fuß")}
+	for _, label := range []string{"dev", "preview", "test"} {
+		got := NewMailService(nil, MailConfig{EnvLabel: label}).markEnv(req)
+		up := strings.ToUpper(label)
+		i := strings.Index(got.HTML, "<body")
+		if !strings.HasPrefix(got.Subject, "["+up+"] ") || !strings.HasPrefix(got.Text, up+"-Umgebung") || !strings.Contains(got.HTML[i:i+260], up+" · Testsystem") {
+			t.Fatalf("%s mail not marked at the top: %q %q", label, got.Subject, got.Text)
+		}
+	}
+	for _, label := range []string{"", "prod", "bogus"} {
+		if got := NewMailService(nil, MailConfig{EnvLabel: label}).markEnv(req); got != req {
+			t.Fatalf("label %q changed the mail", label)
+		}
+	}
+}
+
+func TestInviteMailOnGainingAccess(t *testing.T) {
+	app, pool := timelineApp(t)
+	app.Mail = NewMailService(pool, MailConfig{Provider: "capture", PublicURL: "https://portal.example.test", DailyLimit: 300, ReminderLimit: 150, LoginReserve: 150})
+	if _, err := pool.Exec(context.Background(), "UPDATE users SET login_email=id::text||'@example.test',login_enabled=true WHERE id IN ($1,$2)", PendingID, MiaID); err != nil {
+		t.Fatal(err)
+	}
+	invites := func(id string) (n int) {
+		if err := pool.QueryRow(context.Background(), "SELECT count(*) FROM mail_messages WHERE user_id=$1", id).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	patch := func(id, name, role string, admitted bool) {
+		body := fmt.Sprintf(`{"name":%q,"role":%q,"admitted":%t,"cohort_member":true,"category_ids":[]}`, name, role, admitted)
+		if res := authenticatedRequest(t, app, pool, AdminID, http.MethodPatch, "/api/v1/admin/users/"+id, body); res.Code != http.StatusOK {
+			t.Fatalf("patch: %d %s", res.Code, res.Body)
+		}
+	}
+	patch(PendingID, "Pat", "student", false)
+	patch(MiaID, "Mia 2", "student", true)
+	if invites(PendingID) != 0 || invites(MiaID) != 0 {
+		t.Fatal("invite sent without gaining access")
+	}
+	patch(PendingID, "Pat", "student", true)
+	patch(MiaID, "Mia 2", "manager", true)
+	if invites(PendingID) != 1 || invites(MiaID) != 1 {
+		t.Fatalf("want one invite each after admit/promote, got %d and %d", invites(PendingID), invites(MiaID))
+	}
+	patch(PendingID, "Pat 2", "student", true)
+	patch(MiaID, "Mia 3", "admin", true)
+	if invites(PendingID) != 1 || invites(MiaID) != 1 {
+		t.Fatal("unrelated edit or manager->admin re-sent the invite")
+	}
+}

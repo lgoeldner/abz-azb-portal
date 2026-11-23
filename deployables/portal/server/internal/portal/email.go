@@ -47,6 +47,7 @@ type MailConfig struct {
 	ReminderLimit    int
 	LoginReserve     int
 	RemindersEnabled bool
+	EnvLabel         string // "dev", "preview", "test" mark mails; anything else leaves them untouched
 }
 
 // LoadMailConfig loads mail-only settings. The development default captures
@@ -60,7 +61,12 @@ func LoadMailConfig(appEnv string) (MailConfig, error) {
 			provider = "brevo"
 		}
 	}
+	label := strings.TrimSpace(os.Getenv("ENV_LABEL"))
+	if label == "" && appEnv == "development" {
+		label = "dev"
+	}
 	c := MailConfig{
+		EnvLabel:         label,
 		Provider:         provider,
 		APIKey:           strings.TrimSpace(os.Getenv("BREVO_API_KEY")),
 		From:             strings.TrimSpace(os.Getenv("MAIL_FROM")),
@@ -662,6 +668,45 @@ func mailHTML(title, intro, buttonLabel, buttonURL, footer string) string {
 		`</td></tr></table><p style="margin:16px 0 0;color:#5d6270;font-size:12px;` + font + `">Privater Bereich für den Jahrgang LMGU 2027</p></td></tr></table></body></html>`
 }
 
+var envBanner = map[string][2]string{"dev": {"#6d28d9", "#ffffff"}, "preview": {"#c2410c", "#ffffff"}, "test": {"#f5b301", "#15181f"}} // same colors as html[data-env] in styles.css
+
+// markEnv labels mail from non-production deployments (subject, plain text, top banner) like the web UI marker.
+func (m *MailService) markEnv(req mailSendRequest) mailSendRequest {
+	colors, ok := envBanner[m.config.EnvLabel]
+	if !ok {
+		return req
+	}
+	label := strings.ToUpper(m.config.EnvLabel)
+	req.Subject = "[" + label + "] " + req.Subject
+	req.Text = label + "-Umgebung: Testsystem, nicht das echte Portal.\n\n" + req.Text
+	if i := strings.Index(req.HTML, "<body"); i >= 0 {
+		if j := strings.Index(req.HTML[i:], ">"); j >= 0 {
+			j += i + 1
+			banner := `<div style="padding:8px 12px;background:` + colors[0] + `;color:` + colors[1] + `;text-align:center;font:700 13px/1.4 Helvetica,Arial,sans-serif;letter-spacing:1px;">` + label + ` · Testsystem, nicht das echte Portal</div>`
+			req.HTML = req.HTML[:j] + banner + req.HTML[j:]
+		}
+	}
+	return req
+}
+
+// sendInvite tells a newly admitted or promoted user that the portal is theirs now.
+// ponytail: sent as kind "login": same eligibility check and login-reserve budget, no new kind/migration; split if invites need their own quota line.
+func (m *MailService) sendInvite(ctx context.Context, userID string) error {
+	var name, email string
+	if err := m.db.QueryRow(ctx, `SELECT name,login_email FROM users WHERE id=$1 AND admitted=true AND login_enabled=true AND login_email IS NOT NULL`, userID).Scan(&name, &email); err != nil {
+		return err
+	}
+	portalURL := strings.TrimRight(m.config.PublicURL, "/") + "/"
+	intro := "Hallo " + html.EscapeString(name) + ", du hast jetzt Zugang zum AbiZeitBetrug-Portal. Öffne das Portal, gib deine E-Mail-Adresse ein und du bekommst einen Anmeldelink."
+	_, err := m.send(ctx, mailSendRequest{
+		UserID: userID, Kind: "login", Recipient: email, Name: name,
+		Subject: "Einladung zum AbiZeitBetrug-Portal",
+		Text:    "Hallo " + name + ", du hast jetzt Zugang zum AbiZeitBetrug-Portal. Öffne das Portal, gib deine E-Mail-Adresse ein und du bekommst einen Anmeldelink:\n\n" + portalURL,
+		HTML:    mailHTML("Du bist eingeladen", intro, "Zum Portal", portalURL, "Du erhältst diese Mail, weil dich die Redaktion im Portal freigeschaltet hat."),
+	})
+	return err
+}
+
 func (m *MailService) sendLogin(ctx context.Context, userID, name, email, loginURL string) error {
 	_, err := m.send(ctx, mailSendRequest{
 		UserID: userID, Kind: "login", Recipient: email, Name: name,
@@ -679,6 +724,7 @@ func (m *MailService) send(ctx context.Context, req mailSendRequest) (string, er
 	if req.Kind != "login" && req.Kind != "reminder" || !validID(req.UserID) || !validMailAddress(req.Recipient) {
 		return "", &mailSendFailure{code: "invalid_request"}
 	}
+	req = m.markEnv(req)
 	if err := m.ensurePolicy(ctx); err != nil {
 		return "", err
 	}
