@@ -3,7 +3,7 @@
 Two hosts today, prod later:
 
 - **edge** (OCI VM): Caddy with Let's Encrypt (HTTP-01, stock image) for every public test name, forwarding into the reverse SSH tunnel. Runs in `/opt/edge`. User `deploy` there is a jump host only (no shell, forwards only to the tunnel's ssh port).
-- **test** (home server, Fedora): `abizeitbetrug-tunnel.service` (user `deploy`) dials `deploy@edge` and opens reverse forwards on the edge's loopback: `2222` → its sshd, `8081` → test Caddy, `9000` → webhook listener. No port forwarding at home, nothing listens on outside addresses. Also: the portal stack from `compose.yaml` + `compose.test.yaml` in `/opt/abizeitbetrug`, images from GHCR (`:main`), a deploy webhook (GitHub tells the server when the `Images` workflow succeeded on `main`), and a systemd timer that pulls new images hourly as fallback.
+- **test** (home server, Fedora): `abizeitbetrug-tunnel.service` (user `deploy`) dials `deploy@edge` and opens reverse forwards on the edge's loopback: `2222` → its sshd, `8081` → test Caddy, `9000` → webhook listener. No port forwarding at home, nothing listens on outside addresses. Also: the portal stack from `compose.yaml` + `compose.test.yaml` in `/opt/abizeitbetrug`, images from GHCR (`:dev`), a deploy webhook (GitHub tells the server when the `Images` workflow succeeded on `dev`), and a systemd timer that pulls new images hourly as fallback.
 
 ```
 GitHub ── POST /hooks/deploy ──> edge Caddy ──> 127.0.0.1:9000 ══ tunnel ══> 127.0.0.1:9000 webhook listener
@@ -28,7 +28,7 @@ Interactive ssh from anywhere: `ssh -J deploy@<edge> -p 2222 deploy@127.0.0.1` (
 
 Flow: `Images` workflow finishes on GitHub, GitHub POSTs a signed `workflow_run` event to `https://test.abizeitbetrug.de/hooks/deploy`, the edge routes `/hooks/*` (`hooks_upstream` in `edge_sites`) to `127.0.0.1:9000`, through the tunnel to the home server's `127.0.0.1:9000`, [adnanh/webhook](https://github.com/adnanh/webhook) (release 2.8.3 pinned by sha256 in `roles/test_host/vars/main.yml`, unit `abizeitbetrug-webhook.service` as the system user `webhook`, hooks file `/etc/webhook/hooks.json`, mode 0640 root:webhook) checks the delivery and starts `abizeitbetrug-test-update.service` (`docker compose pull` + `up -d`). The listener binds only loopback.
 
-The hook `deploy` fires only if all hold: valid HMAC-SHA256 of the body (`X-Hub-Signature-256`), `X-GitHub-Event: workflow_run`, `action: completed`, workflow `Images`, branch `main`, conclusion `success`, repository `lgoeldner/abz-azb-portal`. Nothing from the payload reaches the command. A sudoers drop-in allows user `webhook` exactly `systemctl start --no-block abizeitbetrug-test-update.service`. Other deliveries (including GitHub's `ping`) are answered 200 and ignored.
+The hook `deploy` fires only if all hold: valid HMAC-SHA256 of the body (`X-Hub-Signature-256`), `X-GitHub-Event: workflow_run`, `action: completed`, workflow `Images`, branch `dev`, conclusion `success`, repository `lgoeldner/abz-azb-portal`. Nothing from the payload reaches the command. A sudoers drop-in allows user `webhook` exactly `systemctl start --no-block abizeitbetrug-test-update.service`. Other deliveries (including GitHub's `ping`) are answered 200 and ignored.
 
 Secret: `vault_test_webhook_secret` in `group_vars/test/vault.yml` (`openssl rand -hex 32`), used as `test_webhook_secret`. Never put it on a command line.
 

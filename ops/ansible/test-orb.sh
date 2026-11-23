@@ -102,12 +102,12 @@ expect_deploy() { # label want body signature [event]
     [ "$before" = "$after" ] || { echo "FAIL: webhook '$1' started $unit" >&2; exit 1; }
   fi
 }
-good=$(payload main success)
+good=$(payload dev success)
 expect_deploy 'valid delivery' started "$good" "$(sign "$good" "$webhook_secret")"
 expect_deploy 'wrong signature' idle "$good" "$(sign "$good" wrong-secret)"
-bad=$(payload feature success)
+bad=$(payload main success)
 expect_deploy 'other branch' idle "$bad" "$(sign "$bad" "$webhook_secret")"
-bad=$(payload main failure)
+bad=$(payload dev failure)
 expect_deploy 'failed run' idle "$bad" "$(sign "$bad" "$webhook_secret")"
 expect_deploy 'other event' idle "$good" "$(sign "$good" "$webhook_secret")" ping
 

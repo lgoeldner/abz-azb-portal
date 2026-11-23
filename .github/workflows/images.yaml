@@ -1,17 +1,17 @@
 name: Images
 
 # Builds the production images on GitHub-hosted runners and pushes them to GHCR.
-# Never runs PR code: only pushes to main. The test server pulls :main, prod pins a digest.
+# Never runs PR code: only pushes to dev and main. The test server pulls :dev, prod pins a digest.
 on:
   push:
-    branches: [main]
+    branches: [dev, main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: images
+  group: images-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -43,7 +43,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:main
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ github.ref_name }}
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}

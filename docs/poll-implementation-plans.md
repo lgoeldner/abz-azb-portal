@@ -18,4 +18,4 @@ Items 1–9 are proposed formats. Item 10 is implemented. Reuse Sammlungen, auth
 - Update OpenAPI and regenerate types with `node scripts/check-contract.mjs --write` when contracts change.
 - Add invariant-focused tests; run `make check` with `TEST_DATABASE_URL` set only to a disposable PostgreSQL database.
 - For storage changes, verify migrations, backup, and restore together. Update `docs/repo-map.md` for file or route changes.
-- Commit changes, merge the finished worktree into main, push main, and remove the worktree.
+- Commit changes, merge the finished worktree into dev, push dev, and remove the worktree.

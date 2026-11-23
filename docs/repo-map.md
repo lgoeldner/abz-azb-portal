@@ -26,7 +26,7 @@ file `compose.dev.real-auth.yaml` :: extra dev override for `make dev:auth`: rea
 file `compose.dev.yaml` :: dev overrides: dependency-backed Node mock picker, detached Vite hot reload, local ports, dev bind mounts, S3Mock bucket, Postgres volume chosen by DEV_DB_VOLUME (mock and real auth use separate databases so a switch never wipes passkeys); runtime services recover with unless-stopped [dev, docker, restart, passkey]
 file `Makefile` :: dev, check, lint, audit, backup, restore, migrate targets [make, ci]
 file `.github/workflows/ci.yaml` :: CI: lint, audit, Go/web tests, e2e [ci, github]
-file `.github/workflows/images.yaml` :: on push to main: build portal/auth/backup images, push to GHCR as :<sha> and :main (never PR code) [ci, docker, ghcr, images]
+file `.github/workflows/images.yaml` :: on push to dev or main: build portal/auth/backup images, push to GHCR as :<sha> and :<branch>; test pulls :dev (never PR code) [ci, docker, ghcr, images]
 file `.githooks/pre-commit` :: prettier/gofmt on staged files, tests for touched deployables [hook, format, test]
 file `docs/implementation-contract.md` :: binding API/permission contract, lead-owned [contract, permissions, types]
 file `docs/poll-implementation-plans.md` :: nine proposed poll formats and the implemented configurable word portrait with implementation steps and invariant tests [poll, plan, voting]

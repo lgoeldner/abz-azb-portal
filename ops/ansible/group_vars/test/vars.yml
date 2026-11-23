@@ -3,9 +3,9 @@ tunnel_edge_host: 92.5.178.193 # the edge's sshd; the tunnel dials deploy@ this 
 test_dir: /opt/abizeitbetrug
 test_host: test.abizeitbetrug.de
 test_image_prefix: ghcr.io/lgoeldner/
-test_app_version: main
+test_app_version: dev
 test_pull_images: true
-test_auto_update: true # fallback timer pulls :main hourly; the webhook deploys within seconds
+test_auto_update: true # fallback timer pulls :dev hourly; the webhook deploys within seconds
 
 # GitHub workflow_run webhook -> edge /hooks/deploy -> tunnel -> listener on 127.0.0.1.
 test_webhook_port: 9000

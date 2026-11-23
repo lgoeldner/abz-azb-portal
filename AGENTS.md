@@ -25,6 +25,7 @@ Give each worker file ownership, an API contract, and acceptance tests. Do not l
 - Before every commit, check whether docs/repo-map.md is stale for the change (added, moved, renamed or repurposed files, routes, pages, rules) and update it in the same commit. `make check` fails on map paths that no longer exist.
 - Split larger changes into sensible commits.
 - Commit everything that belongs in the repository and push at the end of the task. Do not ask whether to commit or push.
-- Work done in a worktree is merged into main once it is finished and checks pass; then push main and remove the worktree. Do not leave finished worktree branches unmerged. Do not push the worktree.
+- Branches: `dev` is the working branch and deploys to the test server. `main` only receives merges from `dev` (release); never commit or push work to `main` directly.
+- Work done in a worktree is merged into dev once it is finished and checks pass; then push dev and remove the worktree. Do not leave finished worktree branches unmerged. Do not push the worktree.
 - Proceed autonomously within the authorized task. Avoid unnecessary questions and permission prompts; use required approvals only when needed.
 - Do not be afraid to work on the running development system.

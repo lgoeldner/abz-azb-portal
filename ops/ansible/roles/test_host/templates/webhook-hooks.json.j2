@@ -17,7 +17,7 @@
         { "match": { "type": "value", "value": "workflow_run", "parameter": { "source": "header", "name": "X-GitHub-Event" } } },
         { "match": { "type": "value", "value": "completed", "parameter": { "source": "payload", "name": "action" } } },
         { "match": { "type": "value", "value": "Images", "parameter": { "source": "payload", "name": "workflow_run.name" } } },
-        { "match": { "type": "value", "value": "main", "parameter": { "source": "payload", "name": "workflow_run.head_branch" } } },
+        { "match": { "type": "value", "value": "dev", "parameter": { "source": "payload", "name": "workflow_run.head_branch" } } },
         { "match": { "type": "value", "value": "success", "parameter": { "source": "payload", "name": "workflow_run.conclusion" } } },
         { "match": { "type": "value", "value": {{ test_webhook_repo | to_json }}, "parameter": { "source": "payload", "name": "repository.full_name" } } }
       ]
