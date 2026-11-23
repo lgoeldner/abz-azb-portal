@@ -14,3 +14,4 @@ vault_test_better_auth_secret: "" # must differ from the service secret
 vault_test_session_secret: ""
 vault_test_brevo_api_key: ""
 vault_test_restic_password: ""
+vault_test_webhook_secret: "" # GitHub webhook HMAC secret

@@ -1,9 +1,9 @@
 [Unit]
-Description=Pull new AbiZeitBetrug test images every 5 minutes
+Description=Fallback: pull new AbiZeitBetrug test images hourly (the webhook normally triggers it)
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=5min
+OnUnitActiveSec=1h
 
 [Install]
 WantedBy=timers.target
