@@ -130,7 +130,7 @@ if edge curl -s -o /dev/null --max-time 5 "http://$home_lan:80/"; then echo 'FAI
 # ---- PR previews ----
 repo_full=lgoeldner/abz-azb-portal
 sha() { printf "$1%.0s" $(seq 40); } # one hex digit repeated 40 times
-sync_env=(PREVIEW_DIR=/opt/abizeitbetrug-preview "PREVIEW_REPO=$repo_full" "PREVIEW_DOMAIN=$host" PREVIEW_IMAGE_PREFIX= PREVIEW_PULLS_URL=file:///tmp/preview-pulls.json PREVIEW_HTTP_PORT=18083 PREVIEW_ASK_PORT=18084)
+sync_env=(PREVIEW_DIR=/opt/abizeitbetrug-preview "PREVIEW_REPO=$repo_full" "PREVIEW_DOMAIN=$host" PREVIEW_IMAGE_PREFIX= PREVIEW_PULLS_URL=file:///tmp/preview-pulls.json PREVIEW_RUNS_URL=file:///tmp/preview-runs.json PREVIEW_HTTP_PORT=18083 PREVIEW_ASK_PORT=18084)
 # The sync removes preview images nobody runs, so the stand-ins for GHCR are tagged again before every run.
 sync() { for d in a b c d e; do tag_images "$d"; done; home sudo env "${sync_env[@]}" "$@" bash /opt/abizeitbetrug-preview/preview-sync.sh; }
 pull() { # number branch sha-digit updated_at
@@ -138,6 +138,9 @@ pull() { # number branch sha-digit updated_at
     '{number:$n,state:"open",draft:false,user:{type:"User"},updated_at:$upd,head:{ref:$ref,sha:$sha,repo:{full_name:$repo}},base:{repo:{full_name:$repo}}}'
 }
 set_pulls() { jq -s . | home sudo tee /tmp/preview-pulls.json >/dev/null; }
+set_runs() { jq -s '{workflow_runs: .}' | home sudo tee /tmp/preview-runs.json >/dev/null; } # successful Preview runs
+run_of() { jq -n --arg t "Preview #$1 $(sha "$2")" --arg at "$3" '{conclusion:"success", display_title:$t, updated_at:$at}'; } # pr sha-digit updated_at
+echo | set_runs
 live() { home sudo docker ps -a --filter label=azb.preview.pr --format '{{.Label "azb.preview.pr"}}' | sort -n | tr '\n' ' '; }
 container_id() { home sudo docker ps -aq --filter "label=azb.preview.pr=$1"; }
 expect_live() { [ "$(live)" = "$1" ] || { echo "FAIL: live previews '$(live)', want '$1'" >&2; exit 1; }; }
@@ -156,6 +159,7 @@ expect_live '1 '
 [ "$(via_preview_caddy "$(phost feature-one)")" = 200 ] || { echo 'FAIL: preview not served' >&2; exit 1; }
 [ "$(via_preview_caddy "$(phost feature-one)" /internal/x)" = 404 ] || { echo 'FAIL: preview /internal reachable' >&2; exit 1; }
 [ "$(via_preview_caddy "$(phost nope)")" = 404 ] || { echo 'FAIL: unknown preview host served' >&2; exit 1; }
+home curl -s -H "Host: $(phost nope)" http://127.0.0.1:18083/ | grep -q 'No preview here' || { echo 'FAIL: no "no preview" page for a name that is not live' >&2; exit 1; }
 [ "$(ask "$(phost feature-one)")" = 200 ] || { echo 'FAIL: ask refuses a live host' >&2; exit 1; }
 [ "$(ask "$(phost nope)")" = 404 ] || { echo 'FAIL: ask accepts an unknown host' >&2; exit 1; }
 [ "$(ask "$host")" = 404 ] || { echo 'FAIL: ask accepts the test host' >&2; exit 1; }
@@ -201,6 +205,10 @@ sync
 expect_live '2 3 4 '
 sync
 expect_live '2 3 4 '
+# The evicted PR is still open: its name gets a certificate and the page, not a TLS error.
+[ "$(ask "$(phost feature-one)")" = 200 ] || { echo 'FAIL: ask refuses the host of an open PR without a preview' >&2; exit 1; }
+[ "$(ask "$(phost nope)")" = 404 ] || { echo 'FAIL: ask accepts an unknown host' >&2; exit 1; }
+[ "$(via_preview_caddy "$(phost feature-one)")" = 404 ] || { echo 'FAIL: evicted preview still served' >&2; exit 1; }
 # Draft, bot and fork PRs never get a preview; a closed one is removed.
 { pull 2 two c 2026-11-21T10:00:00Z; pull 3 three c 2026-11-21T11:00:00Z
   pull 5 drafty e 2026-11-23T10:00:00Z | jq '.draft=true'
@@ -214,6 +222,16 @@ sync PREVIEW_NOW=$(( $(date +%s) + 4 * 86400 ))
 expect_live ''
 sync
 expect_live ''
+# Re-running the Preview workflow brings it back, but not a run that finished before it was parked, one for another
+# commit, or one for another PR.
+past=2020-01-01T00:00:00Z future=$(home date -u -d '+5 days' +%Y-%m-%dT%H:%M:%SZ)
+{ run_of 2 c "$past"; run_of 2 d "$future"; run_of 3 a "$future"; } | set_runs
+sync
+expect_live ''
+{ run_of 2 c "$future"; } | set_runs
+sync
+expect_live '2 '
+echo | set_runs
 # A new commit brings it back.
 { pull 2 two d 2026-11-26T10:00:00Z; } | set_pulls
 sync
@@ -222,6 +240,22 @@ echo '[]' | home sudo tee /tmp/preview-pulls.json >/dev/null
 sync
 expect_live ''
 if home sudo docker network inspect preview -f '{{len .Containers}}' | grep -qv '^1$'; then echo 'FAIL: containers left on the preview network (only the preview Caddy may remain)' >&2; exit 1; fi
+
+# A PR that found no slot waits and takes the next free one without a new push; it never evicts a running preview.
+# A merge conflict (mergeable_state dirty) changes nothing: the preview is the branch as pushed.
+{ pull 11 wait-one a 2026-11-24T10:00:00Z; pull 12 wait-two b 2026-11-24T11:00:00Z
+  pull 13 wait-three c 2026-11-24T12:00:00Z | jq '.mergeable_state="dirty"'; pull 14 wait-four d 2026-11-24T13:00:00Z; } | set_pulls
+sync
+expect_live '12 13 14 '
+sync
+expect_live '12 13 14 '
+{ pull 11 wait-one a 2026-11-24T10:00:00Z; pull 12 wait-two b 2026-11-24T11:00:00Z
+  pull 13 wait-three c 2026-11-24T12:00:00Z | jq '.mergeable_state="dirty"'; } | set_pulls
+sync
+expect_live '11 12 13 '
+echo '[]' | home sudo tee /tmp/preview-pulls.json >/dev/null
+sync
+expect_live ''
 
 # Image cleanup also matches registry-prefixed names (the real prefix is ghcr.io/<owner>/).
 home sudo docker tag abizeitung-portal:local "ghcr.io/example/abizeitung-portal-preview:$(sha e)"
