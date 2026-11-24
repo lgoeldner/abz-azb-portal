@@ -7,7 +7,7 @@
       APT::Periodic::Update-Package-Lists "1";
       APT::Periodic::Unattended-Upgrade "1";
     mode: "0644"
-  when: ansible_os_family == 'Debian'
+  when: ansible_facts['os_family'] == 'Debian'
 
 - name: Debian - all updates, not only security
   ansible.builtin.copy:
@@ -16,12 +16,12 @@
       Unattended-Upgrade::Allowed-Origins:: "${distro_id}:${distro_codename}-updates";
       Unattended-Upgrade::Automatic-Reboot "false";
     mode: "0644"
-  when: ansible_os_family == 'Debian'
+  when: ansible_facts['os_family'] == 'Debian'
 
 - name: Fedora - dnf automatic
   ansible.builtin.package:
     name: dnf5-plugin-automatic
-  when: ansible_os_family == 'RedHat'
+  when: ansible_facts['os_family'] == 'RedHat'
 
 - name: Fedora - install updates, never reboot
   ansible.builtin.copy:
@@ -31,7 +31,7 @@
       apply_updates = yes
       reboot = never
     mode: "0644"
-  when: ansible_os_family == 'RedHat'
+  when: ansible_facts['os_family'] == 'RedHat'
 
 # Debian: the list update runs shortly before the upgrade. Fedora: one timer does both.
 - name: Update timer drop-in directories

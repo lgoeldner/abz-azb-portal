@@ -17,5 +17,5 @@ ufw_allow: []
 
 # Weekly OS updates on every host (systemd calendar syntax; the timezone suffix pins Berlin time).
 auto_update_calendar: "Tue *-*-* 04:30:00 Europe/Berlin"
-auto_update_timers: "{{ [{'unit': 'apt-daily.timer', 'calendar': auto_update_calendar_early}, {'unit': 'apt-daily-upgrade.timer', 'calendar': auto_update_calendar}] if ansible_os_family == 'Debian' else [{'unit': 'dnf5-automatic.timer', 'calendar': auto_update_calendar}] }}"
+auto_update_timers: "{{ [{'unit': 'apt-daily.timer', 'calendar': auto_update_calendar_early}, {'unit': 'apt-daily-upgrade.timer', 'calendar': auto_update_calendar}] if ansible_facts['os_family'] == 'Debian' else [{'unit': 'dnf5-automatic.timer', 'calendar': auto_update_calendar}] }}"
 auto_update_calendar_early: "Tue *-*-* 04:25:00 Europe/Berlin"

@@ -3,7 +3,7 @@
     name: [docker.io, docker-compose-v2, openssh-server, ufw, unattended-upgrades, curl]
     update_cache: true
     cache_valid_time: 3600
-  when: ansible_os_family == 'Debian'
+  when: ansible_facts['os_family'] == 'Debian'
 # ponytail: other distros (the Fedora home server) bring Docker and sshd themselves; "Docker running" fails without them.
 
 - name: Docker running
