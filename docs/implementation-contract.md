@@ -193,7 +193,7 @@ Invariants:
 - Sign-in only resolves an existing (provider, Google subject) binding. No signup, no implicit linking by email; unknown and unlinked Google accounts get the same failure redirect.
 - Linking is explicit from an admitted, fresh session. The Google address may differ from the login email. A Google account binds to at most one user.
 - A binding is only created while the user still holds a fresh session; revocation deletes sessions, so a link started before an email change or disablement cannot finish.
-- Provider, callback and error URLs are fixed by the auth service; client values are ignored. Every POST requires same origin. The callback runs under identity lock 74120984.
+- Provider, callback and error URLs are fixed by the auth service; client values are ignored. Every POST requires same origin. The callback runs under identity lock 74120984, bounded to 10 s so a slow Google cannot block other logins.
 - Google access, refresh and ID tokens are not stored; `auth_accounts` keeps only the binding.
 - A disabled or non-admitted user is refused at session creation.
 - Bindings are deleted on login email change, on erasure and on restore, and kept across auth-mode cutovers.

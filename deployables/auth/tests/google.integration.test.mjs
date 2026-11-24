@@ -23,7 +23,20 @@ function absorb(jar, response) {
 }
 const cookieOf = (jar) => [...jar].map(([name, value]) => name + "=" + value).join("; ");
 
-test("Google signs in only through an explicit, fresh, revocable binding", { skip: skipReason }, async () => {
+// Over HTTPS every cookie (state, session) must be __Host-, Secure, Path=/ and host-only, or the browser drops it.
+function assertHostCookies(response, step) {
+  for (const line of response.headers.getSetCookie()) {
+    const [pair, ...attributes] = line.split(";").map((part) => part.trim());
+    const keys = attributes.map((attribute) => attribute.split("=", 1)[0].toLowerCase());
+    assert.match(pair, /^__Host-/u, step);
+    assert.ok(keys.includes("secure"), step);
+    assert.ok(attributes.some((attribute) => attribute.toLowerCase() === "path=/"), step);
+    assert.ok(!keys.includes("domain"), step);
+  }
+}
+
+for (const authURL of ["http://localhost:3000", "https://localhost"]) test("Google signs in only through an explicit, fresh, revocable binding (" + authURL + ")", { skip: skipReason }, async () => {
+  const https = authURL.startsWith("https:");
   const { Pool } = await import("pg");
   const { resolveMode } = await import("../policy.mjs");
   const { createAuth } = await import("../auth-config.mjs");
@@ -41,7 +54,7 @@ test("Google signs in only through an explicit, fresh, revocable binding", { ski
     DATABASE_URL: testDatabaseURL,
     AUTH_SERVICE_SECRET: "test-service-secret-" + "x".repeat(32),
     BETTER_AUTH_SECRET: "test-better-auth-secret-" + "y".repeat(32),
-    BETTER_AUTH_URL: "http://localhost:3000",
+    BETTER_AUTH_URL: authURL,
     GOOGLE_CLIENT_ID: "test-client.apps.googleusercontent.com",
     GOOGLE_CLIENT_SECRET: "test-google-client-secret-value",
   };
@@ -106,6 +119,10 @@ test("Google signs in only through an explicit, fresh, revocable binding", { ski
     // Runs one round trip through "Google" and returns the final redirect target.
     const viaGoogle = async (start, jar, profile) => {
       assert.equal(start.status, 200);
+      if (https) {
+        assert.ok(start.headers.getSetCookie().length > 0, "state cookie");
+        assertHostCookies(start, "start");
+      }
       const { url } = await start.json();
       const authorization = new URL(url);
       assert.equal(authorization.origin, "https://accounts.google.com");
@@ -115,6 +132,7 @@ test("Google signs in only through an explicit, fresh, revocable binding", { ski
       profiles.set(code, profile);
       const back = await get("callback/google?code=" + code + "&state=" + encodeURIComponent(authorization.searchParams.get("state")) + "&error_description=leak", jar);
       assert.equal(back.status, 303);
+      if (https) assertHostCookies(back, "callback");
       absorb(jar, back);
       return back.headers.get("location");
     };
@@ -163,6 +181,7 @@ test("Google signs in only through an explicit, fresh, revocable binding", { ski
     const signedIn = await signInWithGoogle(aliceGoogle);
     assert.equal(signedIn.location, "/");
     assert.equal(await sessionFor(signedIn.jar), people.alice.id);
+    assert.deepEqual(await googleRows(people.alice.id), [{ account_id: "google-alice", access_token: null, refresh_token: null, id_token: null }], "sign-in stores no tokens");
     const bob = await login(people.bob);
     assert.equal(await viaGoogle(await post("link-social", bob), bob, aliceGoogle), "/einstellungen?google=failed");
     assert.equal((await googleRows(people.bob.id)).length, 0);

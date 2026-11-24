@@ -20,6 +20,8 @@ const GOOGLE_ORIGIN = "https://accounts.google.com";
 const SETTINGS_PATH = "/einstellungen";
 const LOGIN_FAILED = "/auth/login?google=failed";
 const FRESH_SESSION_MS = 60 * 60 * 1000; // session.freshAge in auth-config.mjs
+// The callback calls Google while holding the global identity lock; a hanging Google must not block other logins.
+const GOOGLE_CALLBACK_TIMEOUT_MS = 10_000;
 
 export function createAuthHTTPServer({
   auth,
@@ -330,7 +332,10 @@ export function createAuthHTTPServer({
     }
     const headers = new Headers();
     for (const key of ["x-forwarded-for", "user-agent", "cookie"]) if (req.headers[key]) headers.set(key, req.headers[key]);
-    const response = await withIdentityLock(identityLockPool, () => runtime.auth.handler(new Request(callbackURL, { method: "GET", headers })));
+    const response = await withIdentityLock(identityLockPool, () => Promise.race([
+      runtime.auth.handler(new Request(callbackURL, { method: "GET", headers })),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("google callback timeout")), GOOGLE_CALLBACK_TIMEOUT_MS).unref()),
+    ]));
     const location = response.headers.get("location");
     const redirect = location ? new URL(location, origin) : null;
     const linking = redirect?.origin === origin && redirect.pathname === SETTINGS_PATH;
