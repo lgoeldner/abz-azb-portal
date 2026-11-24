@@ -223,6 +223,11 @@ sync
 expect_live ''
 if home sudo docker network inspect preview -f '{{len .Containers}}' | grep -qv '^1$'; then echo 'FAIL: containers left on the preview network (only the preview Caddy may remain)' >&2; exit 1; fi
 
+# Image cleanup also matches registry-prefixed names (the real prefix is ghcr.io/<owner>/).
+home sudo docker tag abizeitung-portal:local "ghcr.io/example/abizeitung-portal-preview:$(sha e)"
+sync
+[ -z "$(home sudo docker images -q ghcr.io/example/abizeitung-portal-preview)" ] || { echo 'FAIL: image cleanup misses registry-prefixed preview images' >&2; exit 1; }
+
 # Preview webhook: signed Preview workflow_run starts the sync unit, an Images run or a wrong signature does not.
 sync_unit=abizeitbetrug-preview-sync.service
 sync_invocation() { home systemctl show -p InvocationID --value "$sync_unit"; }

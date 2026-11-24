@@ -212,8 +212,8 @@ fi
 used=" "
 for n in "${!live_sha[@]}"; do used+="${live_sha[$n]} "; done
 while read -r ref; do
-  [[ $ref =~ -preview:([0-9a-f]{40})$ ]] || continue
-  [[ $used == *" ${BASH_REMATCH[1]} "* ]] || docker image rm "$ref" >/dev/null 2>&1 || :
-done < <(docker image ls --format '{{.Repository}}:{{.Tag}}' --filter 'reference=*abizeitung-*-preview')
+  [[ $ref =~ (^|/)abizeitung-(portal|auth)-preview:([0-9a-f]{40})$ ]] || continue
+  [[ $used == *" ${BASH_REMATCH[3]} "* ]] || docker image rm "$ref" >/dev/null 2>&1 || :
+done < <(docker image ls --format '{{.Repository}}:{{.Tag}}')
 
 exit "$failed"
