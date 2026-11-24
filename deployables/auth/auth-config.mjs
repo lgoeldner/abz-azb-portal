@@ -1,5 +1,5 @@
 import { createEmailHandoff } from "./email-handoff.mjs";
-import { cookiePrefixFor, normalizeEmail, resolveMode } from "./policy.mjs";
+import { cookiePrefixFor, googleCredentials, normalizeEmail, resolveMode } from "./policy.mjs";
 
 export async function createAuth({
   mode,
@@ -7,6 +7,7 @@ export async function createAuth({
   env = process.env,
   extraPlugins = [],
   testSendMagicLink,
+  testGoogleOptions,
   fetchImpl = fetch,
 }) {
   const config = resolveMode(env);
@@ -14,6 +15,11 @@ export async function createAuth({
   if (testSendMagicLink && config.appEnv !== "test") {
     throw new Error("Test magic-link delivery is only available with APP_ENV=test");
   }
+  if (testGoogleOptions && config.appEnv !== "test") {
+    throw new Error("Test Google options are only available with APP_ENV=test");
+  }
+  // Never in mock mode: the development picker must not create real provider bindings.
+  const google = mode === "better_auth" ? googleCredentials(env) : null;
 
   const [{ betterAuth }, { magicLink }, { passkey }] = await Promise.all([
     import("better-auth"),
@@ -117,6 +123,32 @@ export async function createAuth({
     },
   });
 
+  // Sign-in only resolves an existing (provider, Google subject) binding. Unknown accounts never sign up and a
+  // matching email never links implicitly; linking is an explicit, fresh-session action (server-core.mjs).
+  const socialProviders = google
+    ? { google: { ...google, disableSignUp: true, disableImplicitSignUp: true, prompt: "select_account", ...testGoogleOptions } }
+    : {};
+
+  // A binding is only created for a user who holds a current, fresh, admitted session. Revocation deletes sessions,
+  // so a link flow started before an email change or disablement cannot finish afterwards.
+  async function mayLink(userId) {
+    const result = await pool.query(
+      `SELECT 1
+         FROM auth_sessions s
+         JOIN users u ON u.id = s.user_id
+        WHERE s.user_id = $1
+          AND s.expires_at > now()
+          AND s.created_at > now() - interval '1 hour'
+          AND u.login_enabled = true
+          AND u.admitted = true
+        LIMIT 1`,
+      [userId],
+    );
+    return result.rowCount === 1;
+  }
+  // Only the binding is needed; provider tokens are never stored.
+  const withoutTokens = (account) => ({ data: { ...account, accessToken: null, refreshToken: null, idToken: null } });
+
   const auth = betterAuth({
     appName: "AbiZeitBetrug",
     // Message only: plugin error objects can carry credential ids and challenges.
@@ -127,6 +159,7 @@ export async function createAuth({
     database: pool,
     trustedOrigins: [config.authOrigin],
     emailAndPassword: { enabled: false },
+    socialProviders,
     user: {
       modelName: "users",
       fields: {
@@ -168,7 +201,8 @@ export async function createAuth({
         createdAt: "created_at",
         updatedAt: "updated_at",
       },
-      accountLinking: { enabled: false },
+      // enabled only for the explicit link-social route; allowUnlinkingAll because magic links have no account row.
+      accountLinking: { enabled: true, disableImplicitLinking: true, allowDifferentEmails: true, allowUnlinkingAll: true },
     },
     verification: {
       modelName: "auth_verifications",
@@ -216,12 +250,20 @@ export async function createAuth({
           before: async (session) => await hasSessionAccess(session.userId),
         },
       },
+      account: {
+        create: {
+          before: async (account) => account.providerId === "google" && await mayLink(account.userId) ? withoutTokens(account) : false,
+        },
+        update: {
+          before: async (account) => withoutTokens(account),
+        },
+      },
     },
     plugins: [...extraPlugins, plugin, passkeyPlugin],
   });
 
   const context = await auth.$context;
-  return { auth, context, handoff, hasLoginAccess, hasSessionAccess };
+  return { auth, context, handoff, hasLoginAccess, hasSessionAccess, google: Boolean(google) };
 }
 
 function requirePortalURL(value) {

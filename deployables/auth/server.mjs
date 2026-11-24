@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { createAuth } from "./auth-config.mjs";
 import { createAuthHTTPServer } from "./server-core.mjs";
-import { resolveMode } from "./policy.mjs";
+import { googleCredentials, resolveMode } from "./policy.mjs";
 
 async function main() {
   const config = resolveMode(process.env);
@@ -27,6 +27,7 @@ async function main() {
     mode: config.mode,
     authOrigin: config.authOrigin,
     serviceSecret: process.env.AUTH_SERVICE_SECRET,
+    google: Boolean(googleCredentials(process.env)),
   });
 
   const port = Number(process.env.PORT || 3000);

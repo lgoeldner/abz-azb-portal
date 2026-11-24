@@ -90,7 +90,13 @@ Run `make check` with TEST_DATABASE_URL pointing only at a disposable PostgreSQL
 
 Restore with application/worker access stopped. The restore command revokes legacy/dependency sessions and verifications, cancels pending reminder work, marks interrupted sends uncertain and preserves delivery audit plus conservative quota reservations before restarting. A restored backup must not resurrect a consumed link or resend an old job. Keep secrets outside recovery volumes and restore the configuration separately.
 
-Google remains an optional follow-up feature, as in the approved plan. Enable it through Better Auth, preserving the same UUID and Go authorization. Do not enable automatic registration/linking, a second admin-role system or a separate Go WebAuthn implementation.
+## Google
+
+- Enabled by setting `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` for the auth service (test host: `test_google_client_id` in `group_vars/test/vars.yml`, `vault_test_google_client_secret` in the vault). Both or neither; one alone stops the service at startup.
+- In the Google Cloud console (OAuth web client), add the authorized redirect URI `<BETTER_AUTH_URL>/api/auth/callback/google` for every origin, e.g. `https://test.abizeitbetrug.de/api/auth/callback/google`.
+- Users link Google under "Einstellungen", section "Google", within 1 hour after logging in. Then "Mit Google anmelden" works on the login page. There is no signup and no automatic linking by email.
+- A restore, a login email change and an erasure delete Google bindings. Affected users link again after a magic-link login.
+- Do not enable automatic registration/linking or a second admin-role system.
 
 ## Passkeys
 

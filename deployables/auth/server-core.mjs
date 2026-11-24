@@ -16,6 +16,10 @@ const PASSKEY_METHODS = {
   "list-user-passkeys": "GET",
   "delete-passkey": "POST",
 };
+const GOOGLE_ORIGIN = "https://accounts.google.com";
+const SETTINGS_PATH = "/einstellungen";
+const LOGIN_FAILED = "/auth/login?google=failed";
+const FRESH_SESSION_MS = 60 * 60 * 1000; // session.freshAge in auth-config.mjs
 
 export function createAuthHTTPServer({
   auth,
@@ -27,6 +31,7 @@ export function createAuthHTTPServer({
   serviceSecret,
   hasSessionAccess,
   mockHelpers,
+  google = false,
   beforeMagicLinkVerify,
   onTestFailure,
 }) {
@@ -82,7 +87,7 @@ export function createAuthHTTPServer({
     }
 
     if (method === "GET" && url.pathname === "/auth/login") {
-      return sendHTML(res, loginPage(mode));
+      return sendHTML(res, loginPage(mode, google));
     }
     if (method === "GET" && url.pathname === "/auth/magic-link") {
       return sendHTML(res, magicLinkPage());
@@ -223,8 +228,115 @@ export function createAuthHTTPServer({
       }
     }
 
+    // google is false in mock mode (auth-config.mjs never configures the provider there).
+    if (google && url.pathname === "/api/auth/callback/google" && method === "GET") {
+      try {
+        return await googleCallback(req, res, url, await getRuntime());
+      } catch (error) {
+        onTestFailure?.("google_callback", error);
+        return sendJSON(res, 303, null, { location: LOGIN_FAILED });
+      }
+    }
+    const googleRoute = {
+      "/api/auth/sign-in/social": "POST",
+      "/api/auth/link-social": "POST",
+      "/api/auth/list-accounts": "GET",
+      "/api/auth/unlink-account": "POST",
+    }[url.pathname];
+    if (google && googleRoute === method) {
+      if (method === "POST" && !isSameOrigin(req, origin)) return sendJSON(res, 403, { error: "origin_denied" });
+      try {
+        return await googleAccountRoute(url.pathname.slice("/api/auth/".length), req, res, await getRuntime());
+      } catch (error) {
+        if (error?.message === "body too large") throw error;
+        onTestFailure?.("google_" + url.pathname, error);
+        return sendJSON(res, 503, { error: "auth_unavailable" });
+      }
+    }
+
     if (url.pathname.startsWith("/api/auth/")) return sendJSON(res, 404, { error: "not_found" });
     return sendJSON(res, 404, { error: "not_found" });
+  }
+
+  // Google calls are rebuilt like passkey calls: fixed path and body, only the forwarding headers and the cookie.
+  function googleCall(runtime, httpMethod, path, req, body) {
+    const headers = new Headers({ origin });
+    for (const key of ["x-forwarded-for", "user-agent", "cookie"]) if (req.headers[key]) headers.set(key, req.headers[key]);
+    if (body) headers.set("content-type", "application/json");
+    return runtime.auth.handler(new Request(origin + "/api/auth/" + path, {
+      method: httpMethod,
+      headers,
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    }));
+  }
+
+  // Answers with the Google authorization URL; the page navigates there itself (form-action stays 'self').
+  async function sendAuthorizationURL(res, response) {
+    if (response.status === 429) return sendJSON(res, 429, { error: "rate_limited" }, { "retry-after": response.headers.get("x-retry-after") || "60" });
+    const target = response.ok ? (await response.json())?.url : "";
+    if (typeof target !== "string" || !target.startsWith(GOOGLE_ORIGIN + "/")) return sendJSON(res, 503, { error: "auth_unavailable" });
+    return sendJSON(res, 200, { url: target }, { setCookie: response.headers.getSetCookie?.() || [] });
+  }
+
+  async function googleAccountRoute(name, req, res, runtime) {
+    const body = method => method === "POST" ? readJSON(req) : null;
+    if (name === "sign-in/social") {
+      await body("POST");
+      const response = await googleCall(runtime, "POST", name, { headers: { ...req.headers, cookie: undefined } }, {
+        provider: "google",
+        callbackURL: "/",
+        errorCallbackURL: LOGIN_FAILED,
+        disableRedirect: true,
+      });
+      return sendAuthorizationURL(res, response);
+    }
+    if (name === "link-social") {
+      await body("POST");
+      // Better Auth only asks for a session here; linking a new way to sign in requires a recent login.
+      const sessionData = req.headers.cookie
+        ? await runtime.auth.api.getSession({ headers: new Headers({ cookie: req.headers.cookie }) })
+        : null;
+      if (!sessionData?.session || !(await runtime.hasSessionAccess(sessionData.user.id))) return sessionFailure(res, 401);
+      if (Date.now() - new Date(sessionData.session.createdAt).getTime() >= FRESH_SESSION_MS) return sessionFailure(res, 403);
+      const response = await googleCall(runtime, "POST", name, req, {
+        provider: "google",
+        callbackURL: SETTINGS_PATH,
+        errorCallbackURL: SETTINGS_PATH,
+        disableRedirect: true,
+      });
+      if (!response.ok && response.status !== 429) return sessionFailure(res, response.status);
+      return sendAuthorizationURL(res, response);
+    }
+    const listed = await googleCall(runtime, "GET", "list-accounts", req);
+    if (!listed.ok) return sessionFailure(res, listed.status);
+    const accounts = (await listed.json()).filter((row) => row.providerId === "google");
+    if (name === "list-accounts") {
+      return sendJSON(res, 200, accounts.map((row) => ({ id: row.id, created_at: row.createdAt })));
+    }
+    const { id } = (await body("POST")) || {};
+    if (!isUUID(id) || !accounts.some((row) => row.id === id)) return sendJSON(res, 404, { error: "not_found" });
+    const response = await googleCall(runtime, "POST", "unlink-account", req, { accountId: id });
+    if (response.ok) return sendJSON(res, 204, null);
+    return response.status === 401 || response.status === 403 ? sessionFailure(res, response.status) : sendJSON(res, 404, { error: "not_found" });
+  }
+
+  // Top-level navigation back from Google: state cookie and PKCE protect it, so no Origin check. Every failure
+  // lands on one fixed address, so the outcome never tells whether an email belongs to an account.
+  async function googleCallback(req, res, url, runtime) {
+    const callbackURL = new URL("/api/auth/callback/google", origin);
+    for (const key of ["code", "state", "error", "iss"]) {
+      const value = url.searchParams.get(key);
+      if (value !== null) callbackURL.searchParams.set(key, value);
+    }
+    const headers = new Headers();
+    for (const key of ["x-forwarded-for", "user-agent", "cookie"]) if (req.headers[key]) headers.set(key, req.headers[key]);
+    const response = await withIdentityLock(identityLockPool, () => runtime.auth.handler(new Request(callbackURL, { method: "GET", headers })));
+    const location = response.headers.get("location");
+    const redirect = location ? new URL(location, origin) : null;
+    const linking = redirect?.origin === origin && redirect.pathname === SETTINGS_PATH;
+    const ok = redirect?.origin === origin && !redirect.searchParams.has("error") && response.status >= 300 && response.status < 400;
+    const target = linking ? SETTINGS_PATH + (ok ? "?google=linked" : "?google=failed") : ok ? "/" : LOGIN_FAILED;
+    return sendJSON(res, 303, null, { location: target, setCookie: response.headers.getSetCookie?.() || [] });
   }
 
   // Passkey calls are rebuilt from validated fields only: fixed headers, fixed paths, no query, and a body
@@ -463,7 +575,7 @@ input:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-co
 .name{min-width:0;font-weight:700;overflow-wrap:anywhere}
 @media (prefers-reduced-motion:reduce){.card,.btn{transition:none}.card:hover,.btn:hover:not(:disabled){transform:none}}`;
 
-function loginPage(mode) {
+function loginPage(mode, google) {
   if (mode === "mock") {
     return makePage(
       "<!doctype html><html lang=\"de\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Anmelden · AbiZeitBetrug</title><style nonce=\"__NONCE__\">" + pageCSS + "</style><main  class=\"wide\"><div class=\"panel\"><div class=\"brand\"><span class=\"mark\" aria-hidden=\"true\">27</span>AbiZeitBetrug</div><span class=\"badge\">Nur Entwicklung</span><h1>Entwicklungsanmeldung</h1><p class=\"hint\">Testkonto auswählen. Dies ist ein lokaler Mock ohne echte Konten.</p><div class=\"grid\" id=\"accounts\" aria-live=\"polite\">Lade Konten …</div><p id=\"message\" class=\"msg\" role=\"status\"></p><p class=\"small legal\"><a href=\"/impressum\">Impressum</a><a href=\"/datenschutz\">Datenschutz</a></p></div></main><script nonce=\"__NONCE__\">const root=document.querySelector(\"#accounts\");const message=document.querySelector(\"#message\");fetch(\"/auth/mock-users\",{credentials:\"same-origin\"}).then(r=>{if(!r.ok)throw new Error();return r.json()}).then(users=>{root.replaceChildren();for(const user of users){const button=document.createElement(\"button\");button.className=\"card\";button.type=\"button\";button.dataset.userId=user.id;const avatar=document.createElement(\"span\");avatar.className=\"avatar\";avatar.setAttribute(\"aria-hidden\",\"true\");avatar.textContent=(Array.from(user.name)[0]||\"?\").toUpperCase();const name=document.createElement(\"span\");name.className=\"name\";name.textContent=user.name;button.append(avatar,name);button.addEventListener(\"click\",async()=>{message.textContent=\"\";message.className=\"msg\";const response=await fetch(\"/auth/mock-login\",{method:\"POST\",credentials:\"same-origin\",headers:{\"content-type\":\"application/json\"},body:JSON.stringify({user_id:user.id})});if(response.ok){location.assign(\"/\")}else{message.textContent=\"Anmeldung derzeit nicht möglich.\";message.className=\"msg err\"}});root.append(button)}}).catch(()=>{root.textContent=\"Konten konnten nicht geladen werden.\"});</script></html>",
@@ -471,7 +583,7 @@ function loginPage(mode) {
     );
   }
   return makePage(
-    "<!doctype html><html lang=\"de\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Anmelden · AbiZeitBetrug</title><style nonce=\"__NONCE__\">" + pageCSS + "</style><main><div class=\"panel\"><div class=\"brand\"><span class=\"mark\" aria-hidden=\"true\">27</span>AbiZeitBetrug</div><h1>Schön, dass du da bist.</h1><p class=\"hint\">Gib deine E-Mail-Adresse ein. Wir schicken dir einen Anmeldelink.</p><form id=\"login\"><label for=\"email\">E-Mail-Adresse</label><input id=\"email\" name=\"email\" type=\"email\" autocomplete=\"email webauthn\" required maxlength=\"254\" placeholder=\"name@beispiel.de\"><button id=\"submit\" class=\"btn\" type=\"submit\">Anmeldelink anfordern</button></form><button id=\"passkey\" class=\"btn\" type=\"button\" hidden>Mit Passkey anmelden</button><p id=\"message\" class=\"msg\" role=\"status\" aria-live=\"polite\"></p><p class=\"small\">Privater Bereich für den Jahrgang LMGU 2027. Nur zugelassene Konten erhalten einen Link.</p><p class=\"small legal\"><a href=\"/impressum\">Impressum</a><a href=\"/datenschutz\">Datenschutz</a></p></div></main><script nonce=\"__NONCE__\">document.querySelector(\"#login\").addEventListener(\"submit\",async event=>{event.preventDefault();const message=document.querySelector(\"#message\");const submit=document.querySelector(\"#submit\");const email=document.querySelector(\"#email\").value;message.className=\"msg\";message.textContent=\"Bitte warten …\";submit.disabled=true;try{const response=await fetch(\"/api/auth/sign-in/magic-link\",{method:\"POST\",credentials:\"same-origin\",headers:{\"content-type\":\"application/json\"},body:JSON.stringify({email})});if(response.status===503){message.className=\"msg err\";message.textContent=\"Der Anmeldedienst ist gerade nicht verfügbar.\";submit.disabled=false}else{message.className=\"msg ok\";message.textContent=\"Falls das Konto zugelassen ist, erhältst du einen Anmeldelink per E-Mail.\"}}catch{message.className=\"msg err\";message.textContent=\"Der Anmeldedienst ist gerade nicht verfügbar.\";submit.disabled=false}});" + passkeyScript + "</script></html>",
+    "<!doctype html><html lang=\"de\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Anmelden · AbiZeitBetrug</title><style nonce=\"__NONCE__\">" + pageCSS + "</style><main><div class=\"panel\"><div class=\"brand\"><span class=\"mark\" aria-hidden=\"true\">27</span>AbiZeitBetrug</div><h1>Schön, dass du da bist.</h1><p class=\"hint\">Gib deine E-Mail-Adresse ein. Wir schicken dir einen Anmeldelink.</p><form id=\"login\"><label for=\"email\">E-Mail-Adresse</label><input id=\"email\" name=\"email\" type=\"email\" autocomplete=\"email webauthn\" required maxlength=\"254\" placeholder=\"name@beispiel.de\"><button id=\"submit\" class=\"btn\" type=\"submit\">Anmeldelink anfordern</button></form><button id=\"passkey\" class=\"btn\" type=\"button\" hidden>Mit Passkey anmelden</button>" + (google ? "<button id=\"google\" class=\"btn\" type=\"button\">Mit Google anmelden</button>" : "") + "<p id=\"message\" class=\"msg\" role=\"status\" aria-live=\"polite\"></p><p class=\"small\">Privater Bereich für den Jahrgang LMGU 2027. Nur zugelassene Konten erhalten einen Link.</p><p class=\"small legal\"><a href=\"/impressum\">Impressum</a><a href=\"/datenschutz\">Datenschutz</a></p></div></main><script nonce=\"__NONCE__\">document.querySelector(\"#login\").addEventListener(\"submit\",async event=>{event.preventDefault();const message=document.querySelector(\"#message\");const submit=document.querySelector(\"#submit\");const email=document.querySelector(\"#email\").value;message.className=\"msg\";message.textContent=\"Bitte warten …\";submit.disabled=true;try{const response=await fetch(\"/api/auth/sign-in/magic-link\",{method:\"POST\",credentials:\"same-origin\",headers:{\"content-type\":\"application/json\"},body:JSON.stringify({email})});if(response.status===503){message.className=\"msg err\";message.textContent=\"Der Anmeldedienst ist gerade nicht verfügbar.\";submit.disabled=false}else{message.className=\"msg ok\";message.textContent=\"Falls das Konto zugelassen ist, erhältst du einen Anmeldelink per E-Mail.\"}}catch{message.className=\"msg err\";message.textContent=\"Der Anmeldedienst ist gerade nicht verfügbar.\";submit.disabled=false}});" + passkeyScript + (google ? googleScript : "") + "</script></html>",
     pageCSP,
   );
 }
@@ -562,6 +674,35 @@ const passkeyScript = `{
       suggestInEmailField();
     })();
   }
+}`;
+
+// Google sign-in only works for accounts that linked Google in the settings; the failure text says so for everyone.
+const googleScript = `{
+  const button = document.querySelector("#google");
+  const message = document.querySelector("#message");
+  if (new URLSearchParams(location.search).get("google") === "failed") {
+    history.replaceState(null, "", location.pathname);
+    message.className = "msg err";
+    message.textContent = "Anmeldung mit Google nicht möglich. Google muss zuerst in den Einstellungen verknüpft werden; bis dahin hilft der Anmeldelink per E-Mail.";
+  }
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      const response = await fetch("/api/auth/sign-in/social", { method: "POST", credentials: "same-origin" });
+      if (response.status === 429) {
+        message.className = "msg err";
+        message.textContent = "Zu viele Versuche. Bitte warte eine Minute.";
+        button.disabled = false;
+        return;
+      }
+      if (!response.ok) throw new Error("social");
+      location.assign((await response.json()).url);
+    } catch {
+      message.className = "msg err";
+      message.textContent = "Der Anmeldedienst ist gerade nicht verfügbar.";
+      button.disabled = false;
+    }
+  });
 }`;
 
 // Always Path=/ and never a Domain (the test helper reports one), as __Host- cookies require.

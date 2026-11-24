@@ -66,6 +66,9 @@ BEGIN
   IF to_regclass('public.auth_passkeys') IS NOT NULL THEN
     EXECUTE 'DELETE FROM public.auth_passkeys';
   END IF;
+  IF to_regclass('public.auth_accounts') IS NOT NULL THEN
+    EXECUTE $sql$DELETE FROM public.auth_accounts WHERE provider_id='google'$sql$;
+  END IF;
   IF to_regclass('public.mail_attempts') IS NOT NULL THEN
     EXECUTE $sql$
       UPDATE public.mail_attempts

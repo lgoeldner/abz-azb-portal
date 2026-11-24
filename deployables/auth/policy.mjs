@@ -58,8 +58,20 @@ export function resolveMode(env = process.env) {
     }
   }
 
+  googleCredentials(env);
   if (!env.DATABASE_URL) throw new Error("DATABASE_URL is required");
   return { appEnv, mode, authURL: new URL(env.BETTER_AUTH_URL), authOrigin: new URL(env.BETTER_AUTH_URL).origin };
+}
+
+// Google sign-in is on when both values are set. One without the other is a configuration error.
+export function googleCredentials(env = process.env) {
+  const clientId = env.GOOGLE_CLIENT_ID || "";
+  const clientSecret = env.GOOGLE_CLIENT_SECRET || "";
+  if (!clientId && !clientSecret) return null;
+  if (!clientId.endsWith(".apps.googleusercontent.com") || clientSecret.length < 20) {
+    throw new Error("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together");
+  }
+  return { clientId, clientSecret };
 }
 
 export function normalizeEmail(value) {

@@ -175,3 +175,25 @@ Invariants:
 - Both verify calls run under identity lock 74120984.
 - A disabled or non-admitted user is refused at session creation, also when signing in with a passkey.
 - Passkeys are deleted on login email change, on erasure and on restore. The development mock has no passkey routes or button, so an auth-mode cutover keeps them.
+
+## Google login
+
+Google sign-in is served by the auth service (Better Auth social provider), not by Go, so these routes are not in `docs/openapi.json`. It is on only when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are both set and `AUTH_MODE=better_auth`; otherwise every route below returns 404 and the login page shows no Google button. The Google client's redirect URI is `${BETTER_AUTH_URL}/api/auth/callback/google`.
+
+| Route | Result |
+| --- | --- |
+| POST `/api/auth/sign-in/social` | 200 `{url}` (Google authorization URL) plus state cookie; 429 `rate_limited` |
+| GET `/api/auth/callback/google` | 303 to `/` with session cookies, or 303 to `/auth/login?google=failed`; for a link flow 303 to `/einstellungen?google=linked` or `?google=failed` |
+| POST `/api/auth/link-social` | 200 `{url}`; needs a session at most 1 hour old; 401 `unauthorized`, 403 `session_not_fresh` |
+| GET `/api/auth/list-accounts` | 200 `[{id,created_at}]`, the session user's Google bindings |
+| POST `/api/auth/unlink-account` `{id}` | 204; 403 `session_not_fresh`; 404 for an unknown id or another user's binding |
+
+Invariants:
+
+- Sign-in only resolves an existing (provider, Google subject) binding. No signup, no implicit linking by email; unknown and unlinked Google accounts get the same failure redirect.
+- Linking is explicit from an admitted, fresh session. The Google address may differ from the login email. A Google account binds to at most one user.
+- A binding is only created while the user still holds a fresh session; revocation deletes sessions, so a link started before an email change or disablement cannot finish.
+- Provider, callback and error URLs are fixed by the auth service; client values are ignored. Every POST requires same origin. The callback runs under identity lock 74120984.
+- Google access, refresh and ID tokens are not stored; `auth_accounts` keeps only the binding.
+- A disabled or non-admitted user is refused at session creation.
+- Bindings are deleted on login email change, on erasure and on restore, and kept across auth-mode cutovers.

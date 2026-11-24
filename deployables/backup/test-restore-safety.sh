@@ -95,6 +95,7 @@ for statement in \
   'DELETE FROM public.auth_sessions' \
   'DELETE FROM public.auth_verifications' \
   'DELETE FROM public.auth_passkeys' \
+  "DELETE FROM public.auth_accounts WHERE provider_id='google'" \
   'UPDATE public.mail_attempts' \
   "status='unknown'" \
   'UPDATE public.mail_messages' \

@@ -139,7 +139,8 @@ VALUES ('90000000-0000-4000-8000-000000000011','restore@example.invalid','restor
 INSERT INTO auth_passkeys(id,user_id,credential_id,public_key,counter,device_type,backed_up)
 VALUES ('90000000-0000-4000-8000-000000000013','00000000-0000-4000-8000-000000000003','restore-passkey','fixture-public-key',0,'singleDevice',false);
 INSERT INTO auth_accounts(id,account_id,provider_id,user_id,access_token)
-VALUES ('90000000-0000-4000-8000-000000000012','restore-account','test-provider','00000000-0000-4000-8000-000000000003','fixture-token');
+VALUES ('90000000-0000-4000-8000-000000000012','restore-account','test-provider','00000000-0000-4000-8000-000000000003','fixture-token'),
+       ('90000000-0000-4000-8000-000000000014','restore-google-subject','google','00000000-0000-4000-8000-000000000003',NULL);
 INSERT INTO mail_policy(id) VALUES (1);
 INSERT INTO mail_messages(id,user_id,category_id,kind,status)
 VALUES
@@ -172,10 +173,13 @@ INSERT INTO document_views(document_id,user_id) VALUES ('90000000-0000-4000-8000
 SQL
 
 capture_signature() {
-  local database=$1 table
+  local database=$1 table source
   for table in users categories submissions revisions attachments corrections poll_options ballots ballot_audit audit_events schema_migrations auth_accounts auth_rate_limits auth_email_rate_limits mail_policy mail_delivery_events mail_admin_events areas area_reviewers tickets ticket_assignees ticket_former_assignees ticket_events ticket_reviews documents document_views; do
+    source=$table
+    # Restore deletes Google bindings on purpose (checked below); everything else must match.
+    [[ $table == auth_accounts ]] && source="(SELECT * FROM auth_accounts WHERE provider_id<>'google')"
     dc exec -e PGDATABASE="$database" "$pg" psql -X -qAt -U portal -c \
-      "SELECT '$table',count(*),COALESCE(md5(string_agg(row_to_json(t)::text,E'\\n' ORDER BY row_to_json(t)::text)),'') FROM $table t" \
+      "SELECT '$table',count(*),COALESCE(md5(string_agg(row_to_json(t)::text,E'\\n' ORDER BY row_to_json(t)::text)),'') FROM $source t" \
       | tr -d '\r'
   done
 }
@@ -253,6 +257,7 @@ check_count 'consent proof' "SELECT count(*) FROM consents WHERE user_id='000000
 check_count 'Better Auth sessions' 'SELECT count(*) FROM auth_sessions' 0
 check_count 'Better Auth verification tokens' 'SELECT count(*) FROM auth_verifications' 0
 check_count 'passkeys' 'SELECT count(*) FROM auth_passkeys' 0
+check_count 'google bindings' "SELECT count(*) FROM auth_accounts WHERE provider_id='google'" 0
 check_count 'preserved provider account' "SELECT count(*) FROM auth_accounts WHERE id='90000000-0000-4000-8000-000000000012' AND access_token='fixture-token'" 1
 check_count 'queued message cancellation' "SELECT count(*) FROM mail_messages WHERE id='90000000-0000-4000-8000-000000000020' AND status='cancelled'" 1
 check_count 'accepted message preservation' "SELECT count(*) FROM mail_messages WHERE id='90000000-0000-4000-8000-000000000021' AND status='accepted'" 1
