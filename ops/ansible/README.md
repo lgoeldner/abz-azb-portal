@@ -24,6 +24,10 @@ Interactive ssh from anywhere: `ssh -J deploy@<edge> -p 2222 deploy@127.0.0.1` (
 
 `manage_ufw` is off: check the host's existing iptables rules (OCI images ship their own) before turning it on per host.
 
+## OS updates
+
+Both hosts install OS updates weekly, Tuesday 04:30 Europe/Berlin (`auto_update_calendar` in `group_vars/all.yml`; role `common`, `tasks/auto_update.yml`). Ubuntu edge: unattended-upgrades (security and `-updates`; the package list refresh runs at 04:25). Fedora home server: `dnf5-automatic`. Neither reboots: kernel updates apply after the next manual reboot, which briefly takes the tunnel and stack down.
+
 ## Deploy webhook
 
 Flow: `Images` workflow finishes on GitHub, GitHub POSTs a signed `workflow_run` event to `https://test.abizeitbetrug.de/hooks/deploy`, the edge routes `/hooks/*` (`hooks_upstream` in `edge_sites`) to `127.0.0.1:9000`, through the tunnel to the home server's `127.0.0.1:9000`, [adnanh/webhook](https://github.com/adnanh/webhook) (release 2.8.3 pinned by sha256 in `roles/test_host/vars/main.yml`, unit `abizeitbetrug-webhook.service` as the system user `webhook`, hooks file `/etc/webhook/hooks.json`, mode 0640 root:webhook) checks the delivery and starts `abizeitbetrug-test-update.service` (`docker compose pull` + `up -d`). The listener binds only loopback.

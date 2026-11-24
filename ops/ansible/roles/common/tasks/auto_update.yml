@@ -1,0 +1,64 @@
+# Weekly OS updates at auto_update_calendar (default: Tuesday 04:30 Berlin). No automatic reboot:
+# ponytail: kernel updates apply at the next manual reboot; a reboot takes the tunnel and stack down.
+- name: Debian - unattended-upgrades enabled
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    mode: "0644"
+  when: ansible_os_family == 'Debian'
+
+- name: Debian - all updates, not only security
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/52abizeitbetrug-upgrades
+    content: |
+      Unattended-Upgrade::Allowed-Origins:: "${distro_id}:${distro_codename}-updates";
+      Unattended-Upgrade::Automatic-Reboot "false";
+    mode: "0644"
+  when: ansible_os_family == 'Debian'
+
+- name: Fedora - dnf automatic
+  ansible.builtin.package:
+    name: dnf5-plugin-automatic
+  when: ansible_os_family == 'RedHat'
+
+- name: Fedora - install updates, never reboot
+  ansible.builtin.copy:
+    dest: /etc/dnf/dnf5-plugins/automatic.conf
+    content: |
+      [commands]
+      apply_updates = yes
+      reboot = never
+    mode: "0644"
+  when: ansible_os_family == 'RedHat'
+
+# Debian: the list update runs shortly before the upgrade. Fedora: one timer does both.
+- name: Update timer drop-in directories
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item.unit }}.d"
+    state: directory
+    mode: "0755"
+  loop: "{{ auto_update_timers }}"
+
+- name: Update timer schedules
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ item.unit }}.d/schedule.conf"
+    content: |
+      [Timer]
+      OnCalendar=
+      OnCalendar={{ item.calendar }}
+      RandomizedDelaySec=0
+    mode: "0644"
+  loop: "{{ auto_update_timers }}"
+  notify: Reload systemd
+
+- name: Flush handlers so the timers see the new schedule
+  ansible.builtin.meta: flush_handlers
+
+- name: Update timers enabled
+  ansible.builtin.systemd_service:
+    name: "{{ item.unit }}"
+    enabled: true
+    state: started
+  loop: "{{ auto_update_timers }}"

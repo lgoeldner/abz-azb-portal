@@ -52,3 +52,6 @@
     policy: deny
     direction: incoming
   when: manage_ufw
+
+- name: Weekly OS updates
+  ansible.builtin.import_tasks: auto_update.yml

@@ -1,7 +1,3 @@
-- name: Reload systemd
-  ansible.builtin.systemd_service:
-    daemon_reload: true
-
 - name: Restart webhook
   ansible.builtin.service:
     name: abizeitbetrug-webhook
