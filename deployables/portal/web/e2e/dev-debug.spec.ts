@@ -164,7 +164,7 @@ test('editor and admin diagnostics preserve short-screen navigation', async ({ p
       ).toHaveCount(1);
     await page.locator('summary').filter({ hasText: 'Debug: Sitzung' }).click();
     await page.getByRole('button', { name: 'Menü öffnen' }).click();
-    const aside = page.getByRole('complementary', { name: 'Seitenleiste' });
+    const aside = page.getByRole('dialog', { name: 'Seitenleiste' });
     await expect(aside.getByRole('link', { name: 'Überblick', exact: true })).toBeVisible();
     await aside.evaluate((element) => {
       element.scrollTop = element.scrollHeight;

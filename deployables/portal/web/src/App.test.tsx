@@ -1570,7 +1570,7 @@ describe('sammlungen', () => {
     mount('/redaktion', { ...manager, category_ids: ['memory'] }, all, 'schueler');
     await screen.findByRole('heading', { level: 1, name: 'Beiträge' });
     const aside = screen.getByRole('complementary', { name: 'Seitenleiste' });
-    fireEvent.click(within(aside).getByRole('link', { name: /Erinnerungen/ }));
+    fireEvent.click(await within(aside).findByRole('link', { name: /Erinnerungen/ }));
     expect(await screen.findByRole('heading', { name: 'Gesammelte Beiträge' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Beitrag einreichen/ })).toBeNull();
   });

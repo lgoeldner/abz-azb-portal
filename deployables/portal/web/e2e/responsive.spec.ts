@@ -253,7 +253,7 @@ for (const role of ['student', 'manager', 'admin'] as const) {
     await page.setViewportSize({ width: 640, height: 360 });
     await page.goto(path);
     await page.getByRole('button', { name: 'Menü öffnen' }).click();
-    const aside = page.getByRole('complementary', { name: 'Seitenleiste' });
+    const aside = page.getByRole('dialog', { name: 'Seitenleiste' });
     await expect(aside.getByRole('link', { name: 'Überblick' })).toBeVisible();
     await aside.evaluate((element) => {
       element.scrollTop = element.scrollHeight;

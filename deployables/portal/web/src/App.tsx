@@ -1,3 +1,4 @@
+import { Dialog } from '@base-ui/react/dialog';
 import {
   ArrowRight,
   ChevronDown,
@@ -7,13 +8,12 @@ import {
   Hourglass,
   House,
   Library,
-  Menu,
+  LogOut,
   Plus,
   ScrollText,
   Settings,
   SquareKanban,
   UserCheck,
-  UserCog,
   Users,
   Vote,
   type LucideIcon,
@@ -46,6 +46,7 @@ import {
   SubmissionList,
   btn,
   allKinds,
+  Avatar,
   isBallot,
   isSubmissionCollection,
   heading,
@@ -55,7 +56,6 @@ import {
   notice,
   plural,
   projectsEnabled,
-  roleName,
   since,
   useAction,
   useData,
@@ -292,14 +292,19 @@ function Brand({ large = false }: { large?: boolean }) {
     </span>
   );
 }
-function Logout() {
+function Logout({ compact = false }: { compact?: boolean }) {
   const action = useAction();
   return (
     <>
       {action.feedback}
       <button
         type="button"
-        className={btn.text}
+        className={
+          compact
+            ? 'grid size-12 flex-none place-items-center rounded-full bg-red-100 text-red-700 shadow-sm transition duration-150 hover:bg-red-600 hover:text-white hover:shadow-md active:scale-90 active:bg-red-700 disabled:opacity-50'
+            : btn.text
+        }
+        aria-label={compact ? 'Abmelden' : undefined}
         disabled={action.busy}
         onClick={() =>
           action.run(async () => {
@@ -308,7 +313,13 @@ function Logout() {
           })
         }
       >
-        Abmelden <Arrow />
+        {compact ? (
+          <LogOut aria-hidden="true" className="size-6" />
+        ) : (
+          <>
+            Abmelden <Arrow />
+          </>
+        )}
       </button>
     </>
   );
@@ -367,6 +378,7 @@ function Layout() {
   const { user } = useSession();
   const preference = useView();
   const [menu, setMenu] = useState(false);
+  const [root, setRoot] = useState<HTMLElement | null>(null); // portal target keeps the workspace theme variables
   const location = useLocation();
   const [preferredView, setView] = preference;
   const editorialRoute =
@@ -379,87 +391,50 @@ function Layout() {
   const view: [View, (view: View) => void] = [editorialRoute ? 'redaktion' : preferredView, setView];
   return (
     <WorkspaceView.Provider value={view}>
-      <div data-workspace={view[0]}>
+      <div data-workspace={view[0]} ref={setRoot}>
         <a
           className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-full focus:bg-white focus:px-3 focus:py-2 focus:text-sm"
           href="#inhalt"
         >
           Zum Inhalt
         </a>
-        <header className="fixed inset-x-0 top-0 z-30 flex h-12 items-center gap-3 bg-chrome px-2 min-[651px]:hidden">
-          <button
-            type="button"
-            className="grid size-10 place-items-center rounded-full text-xl hover:bg-pill"
-            aria-label={menu ? 'Menü schließen' : 'Menü öffnen'}
-            aria-expanded={menu}
-            onClick={() => setMenu(!menu)}
+        {/* ponytail: below 651px the sidebar is a full-screen Base UI dialog (focus trap, Esc, scroll lock) opened by the floating avatar;
+            no resize listener, so a phone rotated past 651px while open keeps the dialog until closed. */}
+        <Dialog.Root open={menu} onOpenChange={setMenu}>
+          <Dialog.Trigger
+            aria-label="Menü öffnen"
+            className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-40 rounded-full shadow-lg ring-2 ring-chrome transition-transform active:scale-95 min-[651px]:hidden"
           >
-            <Menu aria-hidden="true" className="size-5" />
-          </button>
-          <Brand />
-        </header>
-        {menu && (
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-hidden="true"
-            className="fixed inset-0 z-30 bg-ink/30 min-[651px]:hidden"
-            onClick={() => setMenu(false)}
-          />
-        )}
+            <Avatar user={user} className="size-12 text-base" />
+          </Dialog.Trigger>
+          <Dialog.Portal container={root}>
+            {/* Shell stays put and click-through; only the inner panel slides, so the avatar stays on top of it.
+                Base UI waits only for animations on the popup itself, so the shell runs a near-invisible opacity
+                transition of the same 300ms to stay mounted while the panel slides out. */}
+            <Dialog.Popup
+              aria-label="Seitenleiste"
+              render={<aside />}
+              className="group pointer-events-none fixed inset-0 z-50 transition-opacity duration-300 data-[ending-style]:opacity-[.99] min-[651px]:hidden"
+            >
+              <div className="pointer-events-auto flex h-full flex-col bg-chrome transition-transform duration-300 ease-out group-data-[ending-style]:-translate-x-full group-data-[starting-style]:-translate-x-full">
+                <SidebarBody close={() => setMenu(false)} mobile />
+              </div>
+              <Dialog.Close
+                aria-label="Menü schließen"
+                className="pointer-events-auto absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 rounded-full shadow-lg transition-transform active:scale-95"
+              >
+                <Avatar user={user} className="size-12 text-base" />
+              </Dialog.Close>
+            </Dialog.Popup>
+          </Dialog.Portal>
+        </Dialog.Root>
         <aside
           aria-label="Seitenleiste"
-          className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col overflow-y-auto bg-chrome max-[651px]:top-12 max-[651px]:w-[min(86vw,320px)] max-[651px]:transition-transform ${menu ? '' : 'max-[651px]:invisible max-[651px]:-translate-x-full'}`}
+          className="fixed inset-y-0 left-0 z-40 flex w-[300px] flex-col overflow-y-auto bg-chrome max-[651px]:hidden"
         >
-          <Link
-            to="/"
-            className="flex-none rounded-full px-5 pb-4 pt-5 max-[651px]:hidden"
-            aria-label="AbiZeitBetrug Startseite"
-            onClick={() => setMenu(false)}
-          >
-            <Brand />
-          </Link>
-          <nav
-            aria-label="Hauptnavigation"
-            className="flex min-h-24 flex-1 flex-col gap-6 overflow-y-auto px-3 py-2 max-[651px]:pt-4"
-            onClick={(e) => {
-              if ((e.target as Element).closest('a')) setMenu(false);
-            }}
-          >
-            <NavItem to="/" icon={House}>
-              Überblick
-            </NavItem>
-            {view[0] === 'redaktion' && editorial(user) ? <EditorNav /> : <StudentNav />}
-          </nav>
-          {user.role === 'admin' && view[0] === 'redaktion' && <AdminNav onNavigate={() => setMenu(false)} />}
-          <div className="flex flex-none flex-col gap-3 bg-pill px-3 py-4">
-            <NavItem to="/einstellungen" icon={UserCog}>
-              Einstellungen
-            </NavItem>
-            {editorial(user) && <ViewSwitch onSwitch={() => setMenu(false)} />}
-            <div className="flex items-center gap-3 px-1">
-              <span
-                className="grid size-9 flex-none place-items-center rounded-full bg-pop text-[13px] font-bold"
-                aria-hidden="true"
-              >
-                {user.name
-                  .split(' ')
-                  .map((n) => n[0])
-                  .slice(0, 2)
-                  .join('')}
-              </span>
-              <div className="min-w-0 leading-tight">
-                <strong className="block truncate text-[15px] font-semibold">{user.name}</strong>
-                <small className="text-[13px] text-muted">{roleName(user.role)}</small>
-              </div>
-            </div>
-            <div className="px-3.5">
-              <Logout />
-            </div>
-            <LegalLinks className="px-4 text-xs" />
-          </div>
+          <SidebarBody close={() => setMenu(false)} />
         </aside>
-        <div className="flex min-h-screen flex-col bg-paper max-[651px]:pt-12 min-[651px]:pl-[260px]">
+        <div className="flex min-h-screen flex-col bg-paper max-[651px]:pb-20 min-[651px]:pl-[300px]">
           <main
             id="inhalt"
             className={`mx-auto w-full flex-1 px-4 py-8 sm:px-8 sm:py-10 ${location.pathname === '/tickets' ? 'max-w-[96rem]' : 'max-w-5xl'}`}
@@ -484,10 +459,64 @@ function Layout() {
           </main>
           <footer className="px-4 pb-6 text-[13px] text-muted sm:px-8">
             AbiZeitBetrug. Privater Jahrgangsbereich LMGU 2027
+            <LegalLinks className="mt-2 text-xs" />
           </footer>
         </div>
       </div>
     </WorkspaceView.Provider>
+  );
+}
+
+// Shared by the desktop aside and the full-screen mobile dialog. The footer stays one row so it takes little scroll space.
+function SidebarBody({ close, mobile = false }: { close: () => void; mobile?: boolean }) {
+  const { user } = useSession();
+  const [view] = useWorkspaceView();
+  const location = useLocation();
+  const icon =
+    'grid size-12 flex-none place-items-center rounded-full bg-white shadow-sm transition duration-150 hover:bg-ink hover:text-pop hover:shadow-md active:scale-90 active:bg-ink/90';
+  return (
+    <>
+      <Link
+        to="/"
+        className="flex-none rounded-full px-5 pb-4 pt-5"
+        aria-label="AbiZeitBetrug Startseite"
+        onClick={close}
+      >
+        <Brand />
+      </Link>
+      <nav
+        aria-label="Hauptnavigation"
+        className="flex min-h-24 flex-1 flex-col gap-6 overflow-y-auto px-3 py-2"
+        onClick={(e) => {
+          if ((e.target as Element).closest('a')) close();
+        }}
+      >
+        <NavItem to="/" icon={House}>
+          Überblick
+        </NavItem>
+        {view === 'redaktion' && editorial(user) ? <EditorNav /> : <StudentNav />}
+      </nav>
+      {user.role === 'admin' && view === 'redaktion' && <AdminNav onNavigate={close} />}
+      <div className="flex flex-none flex-col gap-2 bg-pill px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+        {editorial(user) && <ViewSwitch onSwitch={close} />}
+        <div className="flex items-center gap-3">
+          {mobile ? <span className="size-12 flex-none" /> : <Avatar user={user} className="size-10 text-sm" />}
+          <strong className="min-w-0 flex-1 line-clamp-2 break-words text-[15px] font-semibold leading-tight">
+            {user.name}
+          </strong>
+          <Link
+            to="/einstellungen"
+            aria-label="Einstellungen"
+            aria-current={location.pathname === '/einstellungen' ? 'page' : undefined}
+            className={icon}
+            onClick={close}
+          >
+            <Settings aria-hidden="true" className="size-6" />
+          </Link>
+          <Logout compact />
+        </div>
+      </div>
+    </>
   );
 }
 

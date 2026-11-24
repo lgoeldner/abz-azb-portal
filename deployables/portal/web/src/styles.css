@@ -74,7 +74,7 @@
 
 /* Redaktion is a reading desk: neutral chrome, white originals, cobalt accents for actions and orientation.
    Keep the labelled collection navigation: the yeargroup has more than five destinations.
-   Desktop frame: 260px sidebar + 2 × 32px gutters + fluid reading canvas. */
+   Desktop frame: 300px sidebar + 2 × 32px gutters + fluid reading canvas. */
 [data-workspace='redaktion'] {
   --color-paper: #f4f5f6;
   --color-ink: #17191c;
@@ -317,7 +317,7 @@ body:has([data-workspace='redaktion']) {
 
 /* Environment marker for non-production deployments (data-env from ENV_LABEL, or "dev" under Vite):
    a stripe along the top edge plus a text chip, so it never relies on color alone. Decorative and
-   click-through; the chip sits in the empty top-right corner of the mobile header and the desktop gutter. */
+   click-through; the chip sits in the empty top-right corner of the page and the desktop gutter. */
 html[data-env] {
   --env-bg: #6d28d9;
   --env-fg: #fff;
