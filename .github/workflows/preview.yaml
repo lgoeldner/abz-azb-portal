@@ -1,12 +1,15 @@
 name: Preview
+run-name: Preview #${{ github.event.pull_request.number }} ${{ github.event.pull_request.head.sha }}
 
 # Builds the preview images of a same-repo pull request. The home server's sync (ops/ansible, test_host) deploys them
 # to <branch-slug>.test.abizeitbetrug.de and deletes them again; the "Preview" workflow_run webhook wakes it.
-# Plain pull_request on purpose: forks get no token and no preview, and a user with write access could run
-# any workflow anyway. The image names are separate from the production ones so their cache and packages are too.
+# pull_request_target on purpose: plain pull_request does not run while the PR has a merge conflict, and a conflicted
+# branch needs its preview too. It runs this file from the base branch and gets a write token, so it only ever builds
+# same-repo branches (their authors can run any workflow anyway); forks get nothing. The run name carries PR and sha:
+# the sync reads it to see a re-run. The image names are separate from the production ones so their cache and packages are too.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, closed]
 
 permissions:
   contents: read
@@ -19,22 +22,22 @@ env:
   PREVIEW_DOMAIN: test.abizeitbetrug.de
 
 jobs:
-  build:
+  slug:
     # Same repo only (needs push access), no drafts, no bots.
     if: >-
+      github.event.action != 'closed' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       !github.event.pull_request.draft &&
       github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      packages: write
-      pull-requests: write
+    timeout-minutes: 5
+    outputs:
+      slug: ${{ steps.slug.outputs.slug }}
+      reason: ${{ steps.slug.outputs.reason }}
     steps:
+      # The base branch's script, never the PR's.
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       - name: Preview name
         id: slug
@@ -48,17 +51,34 @@ jobs:
           else
             echo "reason=$(cat err.txt)" >>"$GITHUB_OUTPUT"
           fi
+
+  build:
+    needs: slug
+    if: needs.slug.outputs.slug != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The "View deployment" button on the PR. The home server deploys a few minutes later and may remove the preview
+    # earlier than GitHub knows (expiry, eviction); the deployment is marked inactive on close and by Preview cleanup.
+    environment:
+      name: preview/pr-${{ github.event.pull_request.number }}
+      url: https://${{ needs.slug.outputs.slug }}.test.abizeitbetrug.de
+    permissions:
+      contents: read
+      packages: write
+      deployments: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
       - uses: docker/setup-buildx-action@v3
-        if: steps.slug.outputs.slug
       - uses: docker/login-action@v3
-        if: steps.slug.outputs.slug
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       # Two images the home server pulls anonymously: set both packages public once (README, "Preview deployments").
       - uses: docker/build-push-action@v6
-        if: steps.slug.outputs.slug
         with:
           context: deployables/portal
           target: runtime
@@ -68,7 +88,6 @@ jobs:
           cache-from: type=gha,scope=preview-abizeitung-portal
           cache-to: type=gha,mode=max,scope=preview-abizeitung-portal
       - uses: docker/build-push-action@v6
-        if: steps.slug.outputs.slug
         with:
           context: deployables/auth
           target: development-mock
@@ -77,20 +96,30 @@ jobs:
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=gha,scope=preview-abizeitung-auth
           cache-to: type=gha,mode=max,scope=preview-abizeitung-auth
+
+  comment:
+    needs: [slug, build]
+    # The URL once the images are built, or the reason there is no preview. Not after a failed build.
+    if: always() && needs.slug.result == 'success' && (needs.slug.outputs.slug == '' || needs.build.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
       - name: Comment the preview URL
         env:
           GH_TOKEN: ${{ github.token }}
           NUMBER: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha }}
-          SLUG: ${{ steps.slug.outputs.slug }}
-          REASON: ${{ steps.slug.outputs.reason }}
+          SLUG: ${{ needs.slug.outputs.slug }}
+          REASON: ${{ needs.slug.outputs.reason }}
         run: |
           marker='<!-- azb-preview -->'
           if [ -n "$SLUG" ]; then
             body="$marker
           **Preview:** https://$SLUG.$PREVIEW_DOMAIN (commit \`${SHA::7}\`)
 
-          Fresh database with fixture data and mock login on every push. It appears within a few minutes and is removed 3 days after the last push or when the PR closes. Behind the shared preview password; ask a maintainer."
+          Fresh database with fixture data and mock login on every push. It appears within a few minutes and is removed 3 days after the last push or when the PR closes. Behind the shared preview password; ask a maintainer. Gone after expiry? Re-run the Preview workflow."
           else
             body="$marker
           **No preview:** $REASON. Rename the branch to get one."
@@ -101,3 +130,22 @@ jobs:
           else
             gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -f body="$body" >/dev/null
           fi
+
+  close:
+    # The preview itself is removed by the home server (this run also wakes its sync); here only the button goes.
+    if: >-
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: bash scripts/preview-cleanup.sh close "$NUMBER"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.pull_request.number }}

@@ -34,6 +34,7 @@ down:
 check:
 	bash -n scripts/*.sh deployables/backup/*.sh deployables/portal/entrypoint.sh ops/ansible/roles/test_host/files/preview-sync.sh
 	bash scripts/test-preview-slug.sh
+	bash scripts/test-preview-cleanup.sh
 	bash deployables/backup/test-backup-lock.sh
 	bash deployables/backup/test-restore-safety.sh
 	cd deployables/portal/server && go test -race ./... && go vet ./...

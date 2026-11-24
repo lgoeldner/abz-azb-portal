@@ -1,0 +1,27 @@
+name: Preview cleanup
+
+# Daily: deployments of previews past their 3 day TTL become inactive (no stale "View deployment" button) and preview
+# image versions older than 4 days are deleted from GHCR. Scheduled workflows only run from the default branch (main).
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: bash scripts/preview-cleanup.sh sweep
+        env:
+          GH_TOKEN: ${{ github.token }}
