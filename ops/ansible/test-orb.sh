@@ -6,7 +6,7 @@
 # webhook (signed GitHub workflow_run through the edge) starts the update service only for valid deliveries.
 # PR previews: sync script against a fake GitHub pull list (deploy, fresh database per sha, eviction, expiry, closed PRs,
 # API failure), preview Caddy routing and ask, no egress from a preview, edge basic_auth with password rotation, the preview webhook.
-# Every run recreates both machines. Remove them afterwards with: orb delete -f abz-edge abz-home
+# Every run recreates both machines and deletes them on exit. KEEP_MACHINES=1 keeps them for debugging (orb delete -f abz-edge abz-home).
 set -euo pipefail
 cd "$(dirname "$0")"
 repo=$(git rev-parse --show-toplevel)
@@ -21,7 +21,7 @@ orb -m abz-home sudo dnf -yq install moby-engine docker-compose openssh-server p
 orb -m abz-home sudo systemctl enable --now docker sshd
 
 tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
+trap 'rm -rf "$tmp"; [ "${KEEP_MACHINES:-}" = 1 ] || orb delete -f abz-edge abz-home >/dev/null 2>&1 || true' EXIT
 edge_ip=$(orb -m abz-edge hostname -I | tr ' ' '\n' | grep -m1 -E '^[0-9]+\.')
 preview_password=$(openssl rand -hex 8)
 preview_hash=$(docker run --rm caddy:2.10-alpine caddy hash-password --plaintext "$preview_password")
