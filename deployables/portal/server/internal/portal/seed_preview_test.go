@@ -70,7 +70,7 @@ func TestPreviewSeedCoversEveryDataKind(t *testing.T) {
 			if data, _ := io.ReadAll(f); len(data) == 0 {
 				t.Fatalf("blob %s is empty", key)
 			}
-			f.Close()
+			_ = f.Close()
 		}
 	}
 	before := countRows(t, pool, "SELECT (SELECT count(*) FROM submissions)+(SELECT count(*) FROM ballots)+(SELECT count(*) FROM attachments)")
