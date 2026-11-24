@@ -87,6 +87,9 @@ services:
       AUTH_SERVICE_SECRET: ${AUTH_SERVICE_SECRET:-}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-${PUBLIC_URL:?Set PUBLIC_URL to the HTTPS site URL}}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      # Optional: both set enables "Mit Google anmelden" (redirect URI ${BETTER_AUTH_URL}/api/auth/callback/google).
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       PORTAL_INTERNAL_URL: http://portal:8080
       PORT: "3000"
     depends_on:

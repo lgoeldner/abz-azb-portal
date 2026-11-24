@@ -26,6 +26,9 @@ test_postgres_password: "{{ vault_test_postgres_password }}"
 test_auth_service_secret: "{{ vault_test_auth_service_secret }}"
 test_better_auth_secret: "{{ vault_test_better_auth_secret }}"
 test_session_secret: "{{ vault_test_session_secret }}"
+# Google OAuth web client (project abizeitbetrug-2027); redirect URI https://test.abizeitbetrug.de/api/auth/callback/google
+test_google_client_id: 795599594629-88a2d85rd6hsthrsfikvln6tjup0h7gt.apps.googleusercontent.com
+test_google_client_secret: "{{ vault_test_google_client_secret }}"
 test_brevo_api_key: "{{ vault_test_brevo_api_key }}"
 test_restic_password: "{{ vault_test_restic_password }}"
 test_webhook_secret: "{{ vault_test_webhook_secret }}"

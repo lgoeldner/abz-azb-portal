@@ -11,6 +11,8 @@ services:
       AUTH_SERVICE_SECRET: dev-only-service-secret-at-least-32-bytes
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-development-better-auth-secret-change-for-production}
       BETTER_AUTH_URL: ${PUBLIC_URL:-https://localhost}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       PORTAL_INTERNAL_URL: http://portal:8080
       PORT: "3000"
 

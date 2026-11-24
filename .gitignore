@@ -27,3 +27,5 @@ mise.toml
 .claude/settings.json
 azb_ci_key
 .vault-pass
+# Google OAuth client downloads; the secret belongs in the Ansible vault.
+client_secret_*.json

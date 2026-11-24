@@ -8,6 +8,7 @@ vault_test_postgres_password: ""
 vault_test_auth_service_secret: ""
 vault_test_better_auth_secret: "" # must differ from the service secret
 vault_test_session_secret: ""
+vault_test_google_client_secret: "" # Google OAuth web client secret; required while test_google_client_id is set
 vault_test_brevo_api_key: ""
 vault_test_restic_password: ""
 vault_test_webhook_secret: "" # GitHub webhook HMAC secret
