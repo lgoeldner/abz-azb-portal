@@ -11,6 +11,11 @@ ufw_allow:
 edge_acme_email: "test@abizeitbetrug.de"
 edge_tls_internal: false # true only for local tests without public DNS
 edge_static_hosts: [abizeitbetrug.de, www.abizeitbetrug.de] # "under construction" page; drop once production is served here
+# PR previews: <branch-slug>.test.abizeitbetrug.de, one wildcard site behind a shared password, certificates on demand.
+# The playbook refuses to run without a bcrypt hash, so previews are never exposed ungated (README, "Preview deployments").
+edge_preview_enabled: true
+edge_preview_domain: test.abizeitbetrug.de
+edge_preview_basic_auth_hash: "{{ vault_edge_preview_basic_auth_hash | default('') }}"
 edge_sites:
   - host: test.abizeitbetrug.de
     upstream: "127.0.0.1:{{ tunnel_http_port }}"

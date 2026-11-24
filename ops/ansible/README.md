@@ -3,7 +3,7 @@
 Two hosts today, prod later:
 
 - **edge** (OCI VM): Caddy with Let's Encrypt (HTTP-01, stock image) for every public test name, forwarding into the reverse SSH tunnel. Runs in `/opt/edge`. User `deploy` there is a jump host only (no shell, forwards only to the tunnel's ssh port).
-- **test** (home server, Fedora): `abizeitbetrug-tunnel.service` (user `deploy`) dials `deploy@edge` and opens reverse forwards on the edge's loopback: `2222` → its sshd, `8081` → test Caddy, `9000` → webhook listener. No port forwarding at home, nothing listens on outside addresses. Also: the portal stack from `compose.yaml` + `compose.test.yaml` in `/opt/abizeitbetrug`, images from GHCR (`:dev`), a deploy webhook (GitHub tells the server when the `Images` workflow succeeded on `dev`), and a systemd timer that pulls new images hourly as fallback.
+- **test** (home server, Fedora): `abizeitbetrug-tunnel.service` (user `deploy`) dials `deploy@edge` and opens reverse forwards on the edge's loopback: `2222` → its sshd, `8081` → test Caddy, `9000` → webhook listener. No port forwarding at home, nothing listens on outside addresses. Also: the portal stack from `compose.yaml` + `compose.test.yaml` in `/opt/abizeitbetrug`, images from GHCR (`:dev`), a deploy webhook (GitHub tells the server when the `Images` workflow succeeded on `dev`), a systemd timer that pulls new images hourly as fallback, and PR previews (below).
 
 ```
 GitHub ── POST /hooks/deploy ──> edge Caddy ──> 127.0.0.1:9000 ══ tunnel ══> 127.0.0.1:9000 webhook listener
@@ -16,13 +16,42 @@ ssh ── ProxyJump deploy@edge ──> 127.0.0.1:2222 ══ tunnel ══> ss
 1. DNS at IONOS: `test.abizeitbetrug.de` A → OCI public IP. OCI VCN security list: 80/tcp, 443/tcp+udp. The OCI image firewall rejects everything but 22: add `-A INPUT -p tcp -m state --state NEW -m multiport --dports 80,443 -j ACCEPT` live once on a fresh VM (the playbook only persists it in `/etc/iptables/rules.v4`).
 2. Home server: user `deploy` with your key in `authorized_keys` and `/etc/sudoers.d/deploy` (`deploy ALL=(ALL) NOPASSWD: ALL`), Docker and sshd installed. The playbook keeps the sudoers file afterwards.
 3. Secrets: `ansible-vault create group_vars/test/vault.yml` with the keys from `vault.example.yml`. The vault password is read from `.vault-pass` in the repo root (gitignored, `ansible.cfg`); keep a copy in a password manager.
-4. GHCR: after the first `Images` workflow run, set the three `abizeitung-*` packages to public (they contain no secrets), or the test server cannot pull.
+4. GHCR: after the first `Images` workflow run, set the three `abizeitung-*` packages to public (they contain no secrets), or the test server cannot pull. The same for `abizeitung-portal-preview` and `abizeitung-auth-preview` after the first `Preview` run (the sync logs a warning while a manifest is missing).
 5. `gh auth login` on the controller (needs admin rights on `lgoeldner/abz-azb-portal`): the playbook creates the repo webhook (see below).
 6. First run, from the home LAN (the tunnel does not exist yet): `ansible-playbook playbook.yml -e home_lan=true`. Later runs go through the edge: `ansible-playbook playbook.yml`.
 
 Interactive ssh from anywhere: `ssh -J deploy@<edge> -p 2222 deploy@127.0.0.1` (add `-o HostKeyAlias=<home host>` to reuse its known_hosts entry).
 
 `manage_ufw` is off: check the host's existing iptables rules (OCI images ship their own) before turning it on per host.
+
+## Preview deployments
+
+Every same-repo, non-draft, non-bot pull request gets a throwaway copy at `<branch-slug>.test.abizeitbetrug.de`: fresh database on every push, all fixture kinds (`SEED_PREVIEW`), mock login (users from `deployables/auth-mock/users.yaml`), no mail, no egress. At most 3 are live; the oldest deploy is evicted by a newer one, and a preview disappears 3 days after its last push or when the PR closes. Forks never get one. `<branch>-test.domain` is impossible (the DNS wildcard is a whole label), hence `<slug>.test`. Branch names land in certificate-transparency logs (public repo, accepted).
+
+```
+PR push ──> Preview workflow builds abizeitung-{portal,auth}-preview:<sha> ──> workflow_run webhook /hooks/preview ──> preview-sync.service (also every 10 min)
+browser ── https, basic_auth ──> edge Caddy *.test.abizeitbetrug.de (certificate on demand, asks 127.0.0.1:8084/ask) ──> 127.0.0.1:8083 ══ preview tunnel ══> 127.0.0.1:18083 preview Caddy ──> pv-<n>:8080
+```
+
+- **Sync** (`roles/test_host/files/preview-sync.sh`, `/opt/abizeitbetrug-preview`): reads GitHub's open pull list (ETag, optional `test_preview_gh_token`), deploys the head sha when it differs from the running one (`docker compose -p pv-<n>`, container labels hold PR, sha and host), tears down closed, ineligible, expired and evicted previews, keeps `parked/<n>` so an expired or evicted sha does not come back until a new push, rewrites the preview Caddyfile and reloads it. Any API or parse failure changes nothing and exits non-zero (`journalctl -u abizeitbetrug-preview-sync`). Run it by hand: `sudo systemctl start abizeitbetrug-preview-sync`. A trigger while it runs is dropped; the timer catches up.
+- **Isolation**: each preview has an `internal: true` project network and joins the shared `preview` network created with `--internal` (no gateway). Database and uploads are size-capped tmpfs; memory, CPU and pids are limited; `cap_drop: ALL`. Previews can reach each other through the shared network (fake data, accepted). The preview Caddy holds no test secrets and sends no `X-Portal-Proxy-Token`; `/internal` is 404. `/ask` is on a second, separate listener (`18084`) that answers 200 only for live hosts.
+- **Second tunnel** (`abizeitbetrug-preview-tunnel.service`, own key `preview_tunnel_ed25519`, `permitlisten` only `8083` and `8084`): a preview forward that fails cannot drop the test site, hooks or ssh. Check that `tunnel_preview_http_port`/`tunnel_preview_ask_port` are free on the OCI VM.
+- **Two GitHub webhooks**: besides `/hooks/deploy` the playbook creates `/hooks/preview` (same secret), which fires on a successful `Preview` `workflow_run` and starts `abizeitbetrug-preview-sync.service` (own sudoers line).
+- **DNS**: `*.test.abizeitbetrug.de` A → OCI IP. Let's Encrypt allows 50 certificates per week for the registrable domain; only live `pr` names get one.
+- **Cookies**: test and prod use `__Host-` cookies (`APP_ENV=production`) and Go checks Origin and the CSRF token, so previews (unprefixed cookies) cannot shadow or forge them.
+
+Risk to keep in mind: a preview is an admin-everything fake instance. Reachable by anyone it is a phishing and abuse surface under the production domain, so the edge `basic_auth` is mandatory: the playbook fails before touching Caddy unless `edge_preview_basic_auth_hash` is a bcrypt hash (`$2a$`/`$2y$`). The `Authorization` header is dropped before the request reaches a preview.
+
+### Rotate the preview password
+
+On demand, no schedule. The plaintext is never stored.
+
+1. `docker run --rm caddy:2.10-alpine caddy hash-password` (prompts for the new password).
+2. `ansible-vault edit group_vars/edge/vault.yml`, set `vault_edge_preview_basic_auth_hash` to the hash (single-quote it: it contains `$`).
+3. `ansible-playbook playbook.yml --limit edge`: renders the Caddyfile and reloads Caddy gracefully, open connections survive.
+4. Hand the new password to contributors out of band.
+
+First setup is the same steps with a new key. One user line per contributor (per-person revocation) is possible later; not built.
 
 ## OS updates
 
@@ -44,4 +73,4 @@ Deliveries made while the test server is offline are lost (GitHub does not retry
 
 ## Local check
 
-`./test-orb.sh` creates two fresh OrbStack machines (Ubuntu edge, Fedora home), runs the playbook twice (second run must change nothing), and checks the tunnel listeners and the sshd behind the jump port, `/readyz` through the edge, `/internal` returning 404, and that the auth service records the real client IP instead of a proxy address. It also sends signed `workflow_run` deliveries through the edge: a valid one must start the update service; a wrong signature, another branch, a failed run and another event type must not; the listener must only be bound to loopback. It sets `test_webhook_manage: false` and never talks to GitHub. Images are built locally; edge TLS uses Caddy's internal CA.
+`./test-orb.sh` creates two fresh OrbStack machines (Ubuntu edge, Fedora home), runs the playbook twice (second run must change nothing), and checks the tunnel listeners and the sshd behind the jump port, `/readyz` through the edge, `/internal` returning 404, and that the auth service records the real client IP instead of a proxy address. It also sends signed `workflow_run` deliveries through the edge: a valid one must start the update service; a wrong signature, another branch, a failed run and another event type must not; the listener must only be bound to loopback. It also runs the preview sync against a fake pull list (`file://`): deploy, new commit with a fresh database, eviction beyond three, draft/bot/fork PRs ignored, expiry and parking, closed PRs, an unreadable or malformed list changing nothing, preview Caddy routing and `/ask`, no route out of a preview container (bridge gateway, test egress subnet, LAN, internet), edge `401` without and `200` with the password, the preview webhook, and password rotation (old password `401`, new `200`; an empty or malformed hash fails the playbook before any change). It sets `test_webhook_manage: false` and never talks to GitHub. Images are built locally; edge TLS uses Caddy's internal CA.

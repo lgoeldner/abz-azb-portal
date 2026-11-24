@@ -1,0 +1,23 @@
+[Unit]
+Description=Reconcile PR preview deployments with GitHub
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=PREVIEW_DIR={{ test_preview_dir }}
+Environment=PREVIEW_REPO={{ test_preview_repo }}
+Environment=PREVIEW_DOMAIN={{ test_host }}
+Environment=PREVIEW_IMAGE_PREFIX={{ test_image_prefix }}
+Environment=PREVIEW_MAX={{ test_preview_max }}
+Environment=PREVIEW_TTL_SECONDS={{ test_preview_ttl_days * 86400 }}
+Environment=PREVIEW_HTTP_PORT={{ test_preview_http_port }}
+Environment=PREVIEW_ASK_PORT={{ test_preview_ask_port }}
+{% if test_preview_pulls_url %}
+Environment=PREVIEW_PULLS_URL={{ test_preview_pulls_url }}
+{% endif %}
+EnvironmentFile=-/etc/abizeitbetrug-preview.env
+# Through bash: SELinux (Fedora) lets init run bin_t, not necessarily a script under /opt.
+ExecStart=/usr/bin/bash {{ test_preview_dir }}/preview-sync.sh
+TimeoutStartSec=20min

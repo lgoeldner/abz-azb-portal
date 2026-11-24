@@ -81,9 +81,17 @@
     state: "{{ 'started' if test_auto_update else 'stopped' }}"
     enabled: "{{ test_auto_update }}"
 
+- name: PR previews
+  ansible.builtin.import_tasks: preview.yml
+  when: test_preview_enabled
+
 - name: Deploy webhook
   ansible.builtin.import_tasks: webhook.yml
 
 # Last: restarting the tunnel cuts an Ansible connection that runs through it.
 - name: Reverse SSH tunnel
   ansible.builtin.import_tasks: tunnel.yml
+
+- name: Preview tunnel
+  ansible.builtin.import_tasks: tunnel_preview.yml
+  when: test_preview_enabled

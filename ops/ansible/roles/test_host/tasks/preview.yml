@@ -1,0 +1,74 @@
+# PR previews: the sync script (timer + webhook), both compose files and the shared no-egress network.
+# Everything runs in {{ test_preview_dir }}, separate from the test stack and its secrets.
+- name: Preview tools
+  ansible.builtin.package:
+    name: [jq, openssl, util-linux]
+    state: present
+
+- name: Preview directories
+  ansible.builtin.file:
+    path: "{{ test_preview_dir }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: ["", caddy, legal]
+
+- name: Preview compose files
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../{{ item }}"
+    dest: "{{ test_preview_dir }}/{{ item }}"
+    mode: "0644"
+  loop: [compose.preview.yaml, compose.preview-caddy.yaml]
+
+# The slug script is shared with the Preview workflow; the sync script finds it next to itself.
+- name: Preview scripts
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ test_preview_dir }}/{{ item.dest }}"
+    mode: "0755"
+  loop:
+    - { src: preview-sync.sh, dest: preview-sync.sh }
+    - { src: "{{ playbook_dir }}/../../scripts/preview-slug.sh", dest: preview-slug.sh }
+
+# force: false keeps pages the operator replaced by hand.
+- name: Preview placeholder legal pages
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ test_preview_dir }}/legal/{{ item }}"
+    mode: "0644"
+    force: false
+  loop: [impressum.html, datenschutz.html]
+
+- name: Preview settings (token stays out of the unit)
+  ansible.builtin.copy:
+    dest: /etc/abizeitbetrug-preview.env
+    content: |
+      # Managed by Ansible.
+      PREVIEW_GH_TOKEN={{ test_preview_gh_token }}
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Preview sync units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop: [abizeitbetrug-preview-sync.service, abizeitbetrug-preview-sync.timer]
+  notify: Reload systemd
+
+# Internal: no gateway, so a preview container cannot reach the LAN, the host or the internet through it.
+- name: Preview network
+  ansible.builtin.command: docker network create --internal preview
+  register: preview_network
+  failed_when: preview_network.rc != 0 and 'already exists' not in preview_network.stderr
+  changed_when: preview_network.rc == 0
+
+- name: Flush handlers before starting the preview timer
+  ansible.builtin.meta: flush_handlers
+
+- name: Preview sync timer
+  ansible.builtin.systemd_service:
+    name: abizeitbetrug-preview-sync.timer
+    state: started
+    enabled: true

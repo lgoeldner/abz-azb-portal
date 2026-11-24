@@ -1,6 +1,8 @@
 # Copy the keys into group_vars/test/vault.yml and encrypt (password file: ansible.cfg vault_password_file):
 #   ansible-vault create group_vars/test/vault.yml
-# Generate: openssl rand -hex 32. The edge needs no vault.
+# Generate: openssl rand -hex 32.
+# The edge vault (group_vars/edge/vault.yml) holds one key, the shared PR preview password as a bcrypt hash:
+#   vault_edge_preview_basic_auth_hash: "$2a$14$..."  # caddy hash-password (README, "Preview deployments")
 
 # group_vars/test/vault.yml
 vault_test_mail_from: "" # AbiZeitBetrug Test <verified-brevo-sender@example.org>

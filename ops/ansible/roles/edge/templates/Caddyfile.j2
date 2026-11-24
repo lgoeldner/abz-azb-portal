@@ -1,7 +1,15 @@
 # Managed by Ansible.
-{% if edge_acme_email %}
+{% if edge_acme_email or edge_preview_enabled %}
 {
+{% if edge_acme_email %}
 	email {{ edge_acme_email }}
+{% endif %}
+{% if edge_preview_enabled %}
+	# Certificates only for names the home server lists as live previews (its /ask answers 200 or 404).
+	on_demand_tls {
+		ask http://127.0.0.1:{{ tunnel_preview_ask_port }}/ask
+	}
+{% endif %}
 }
 {% endif %}
 {% for site in edge_sites %}
@@ -32,5 +40,20 @@
 	root * /etc/caddy/site
 	encode zstd gzip
 	file_server
+}
+{% endif %}
+{% if edge_preview_enabled %}
+
+# PR previews. basic_auth is the only gate: the Authorization header never reaches the previews.
+*.{{ edge_preview_domain }} {
+	tls {% if edge_tls_internal %}internal {% endif %}{
+		on_demand
+	}
+	basic_auth {
+		preview {{ edge_preview_basic_auth_hash }}
+	}
+	reverse_proxy 127.0.0.1:{{ tunnel_preview_http_port }} {
+		header_up -Authorization
+	}
 }
 {% endif %}

@@ -1,0 +1,9 @@
+[Unit]
+Description=Every 10 minutes: reconcile PR previews (the Preview webhook triggers it sooner)
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=10min
+
+[Install]
+WantedBy=timers.target

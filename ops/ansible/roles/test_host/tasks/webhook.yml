@@ -1,4 +1,5 @@
 # GitHub "Images" workflow finished -> signed POST -> edge /hooks/* -> this listener -> start the update service.
+# The "Preview" workflow has its own hook id and GitHub webhook (/hooks/preview) and starts the preview sync instead.
 # The timer stays as an hourly fallback: deliveries made while the server is offline are lost.
 # Upstream release, pinned by checksum: Fedora has no webhook package.
 - name: Webhook release
@@ -46,12 +47,13 @@
   no_log: true
   notify: Restart webhook
 
-- name: Webhook may start the update service, nothing else
+- name: Webhook may start the update and preview sync services, nothing else
   ansible.builtin.copy:
     dest: /etc/sudoers.d/abizeitbetrug-webhook
     content: |
       # Managed by Ansible.
       webhook ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block abizeitbetrug-test-update.service
+      {{ 'webhook ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block abizeitbetrug-preview-sync.service' if test_preview_enabled else '' }}
     owner: root
     group: root
     mode: "0440"
@@ -91,58 +93,8 @@
     state: started
     enabled: true
 
-# The repo webhook is created from the controller with its authenticated gh CLI.
-# GitHub never returns the secret, so an existing hook is left alone unless test_webhook_rotate is set.
-- name: GitHub webhook lookup
-  ansible.builtin.command:
-    argv:
-      - gh
-      - api
-      - --paginate
-      - "repos/{{ test_webhook_repo }}/hooks"
-      - --jq
-      - '.[] | select(.config.url == "https://{{ test_host }}/hooks/deploy") | .id'
-  delegate_to: localhost
-  become: false
-  run_once: true
-  changed_when: false
-  check_mode: false
-  register: github_hooks
-  when: test_webhook_manage | bool
-
-- name: GitHub webhook create
-  ansible.builtin.command:
-    argv: [gh, api, -X, POST, "repos/{{ test_webhook_repo }}/hooks", --input, "-"]
-    stdin: "{{ github_hook_body | to_json }}"
-  vars:
-    github_hook_body:
-      name: web
-      active: true
-      events: [workflow_run]
-      config:
-        url: "https://{{ test_host }}/hooks/deploy"
-        content_type: json
-        secret: "{{ test_webhook_secret }}"
-        insecure_ssl: "0"
-  delegate_to: localhost
-  become: false
-  run_once: true
-  no_log: true
-  when: test_webhook_manage | bool and github_hooks.stdout_lines | length == 0
-
-- name: GitHub webhook secret rotation
-  ansible.builtin.command:
-    argv: [gh, api, -X, PATCH, "repos/{{ test_webhook_repo }}/hooks/{{ item }}/config", --input, "-"]
-    stdin: "{{ github_hook_config | to_json }}"
-  vars:
-    github_hook_config:
-      url: "https://{{ test_host }}/hooks/deploy"
-      content_type: json
-      secret: "{{ test_webhook_secret }}"
-      insecure_ssl: "0"
-  loop: "{{ github_hooks.stdout_lines | default([]) }}"
-  delegate_to: localhost
-  become: false
-  run_once: true
-  no_log: true
-  when: test_webhook_manage | bool and test_webhook_rotate | bool
+- name: GitHub webhooks
+  ansible.builtin.include_tasks: github_webhook.yml
+  loop: "{{ ['deploy'] + (['preview'] if test_preview_enabled else []) }}"
+  loop_control:
+    loop_var: hook

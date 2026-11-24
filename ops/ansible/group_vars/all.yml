@@ -2,6 +2,9 @@
 tunnel_ssh_port: 2222 # test host sshd, the jump target
 tunnel_http_port: 8081 # test Caddy (8082 is already taken on the OCI VM)
 tunnel_hooks_port: 9000 # deploy webhook listener
+# PR previews use their own tunnel unit and key, so a failed preview forward cannot drop test, hooks or ssh.
+tunnel_preview_http_port: 8083 # preview Caddy (free on the OCI VM; check before changing)
+tunnel_preview_ask_port: 8084 # preview Caddy "ask" for on-demand certificates
 
 # Public keys for the deploy user. Test host: deploy has sudo, Ansible logs in as deploy.
 # Edge: deploy_key_options limits every key to jumping to the tunnel's ssh port.

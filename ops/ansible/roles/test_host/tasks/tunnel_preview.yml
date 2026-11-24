@@ -1,0 +1,53 @@
+# Second tunnel with its own key and unit: a preview forward that cannot bind (ExitOnForwardFailure) must not
+# take the test site, the deploy webhook or Ansible's ssh path down with it.
+- name: Preview tunnel key
+  ansible.builtin.command: ssh-keygen -q -t ed25519 -N "" -C "azb-preview-tunnel@{{ inventory_hostname }}" -f /home/deploy/.ssh/preview_tunnel_ed25519
+  args:
+    creates: /home/deploy/.ssh/preview_tunnel_ed25519
+  become_user: deploy
+
+- name: Read preview tunnel public key
+  ansible.builtin.slurp:
+    src: /home/deploy/.ssh/preview_tunnel_ed25519.pub
+  register: preview_tunnel_pub
+
+- name: Preview tunnel key may only open the two preview listeners on the edge
+  ansible.posix.authorized_key:
+    user: deploy
+    key: "{{ preview_tunnel_pub.content | b64decode | trim }}"
+    key_options: 'restrict,port-forwarding,command="/bin/false",permitlisten="127.0.0.1:{{ tunnel_preview_http_port }}",permitlisten="127.0.0.1:{{ tunnel_preview_ask_port }}"'
+  delegate_to: "{{ groups.edge[0] }}"
+
+- name: Preview tunnel unit
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/abizeitbetrug-preview-tunnel.service
+    content: |
+      [Unit]
+      Description=Reverse SSH tunnel to the edge for PR previews
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      User=deploy
+      ExecStart=/usr/bin/env ssh -NT -i /home/deploy/.ssh/preview_tunnel_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes \
+        -o UserKnownHostsFile=/home/deploy/.ssh/tunnel_known_hosts -o StrictHostKeyChecking=yes \
+        -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
+        -R 127.0.0.1:{{ tunnel_preview_http_port }}:127.0.0.1:{{ test_preview_http_port }} \
+        -R 127.0.0.1:{{ tunnel_preview_ask_port }}:127.0.0.1:{{ test_preview_ask_port }} \
+        deploy@{{ tunnel_edge_host }}
+      Restart=always
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart preview tunnel
+
+- name: Preview tunnel running
+  ansible.builtin.systemd_service:
+    name: abizeitbetrug-preview-tunnel.service
+    state: started
+    enabled: true
+    daemon_reload: true

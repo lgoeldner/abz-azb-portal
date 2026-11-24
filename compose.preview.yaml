@@ -1,0 +1,120 @@
+# One pull-request preview: fresh database seeded with fixtures, mock login, no outbound network.
+# Started only by ops/ansible/roles/test_host/files/preview-sync.sh as project pv-<PR number>, with every PV_* value set there.
+# Previews are throwaway: database and uploads live on size-capped tmpfs, so they are empty after every recreate.
+name: pv
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "5m", max-file: "2" }
+
+x-hardening: &hardening
+  restart: unless-stopped
+  logging: *logging
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 256
+
+services:
+  db:
+    <<: *hardening
+    image: postgres:18-alpine
+    # The image's root entrypoint would need chown/setuid capabilities; start as postgres (uid 70) on a tmpfs it owns.
+    user: "70:70"
+    mem_limit: 384m
+    cpus: 0.5
+    environment:
+      POSTGRES_DB: portal
+      POSTGRES_USER: portal
+      POSTGRES_PASSWORD: ${PV_POSTGRES_PASSWORD:?}
+    tmpfs:
+      - /var/lib/postgresql:size=256m,uid=70,gid=70,mode=0700
+      - /run/postgresql:size=1m,uid=70,gid=70
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U portal -d portal"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    networks: [internal]
+
+  auth:
+    <<: *hardening
+    image: ${PV_AUTH_IMAGE:?}
+    mem_limit: 256m
+    cpus: 0.5
+    read_only: true
+    tmpfs: ["/tmp:size=16m"]
+    environment:
+      APP_ENV: development
+      AUTH_MODE: mock
+      DATABASE_URL: postgres://portal:${PV_POSTGRES_PASSWORD:?}@db:5432/portal?sslmode=disable
+      AUTH_SERVICE_SECRET: ${PV_AUTH_SERVICE_SECRET:?}
+      MOCK_AUTH_SECRET: ${PV_MOCK_AUTH_SECRET:?}
+      BETTER_AUTH_URL: https://${PV_HOST:?}
+      PORTAL_INTERNAL_URL: http://portal:8080
+      PORT: "3000"
+    depends_on:
+      db: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      start_period: 20s
+      retries: 20
+    networks: [internal]
+
+  portal:
+    <<: *hardening
+    image: ${PV_PORTAL_IMAGE:?}
+    command: ["serve"]
+    mem_limit: 384m
+    cpus: 1
+    read_only: true
+    labels:
+      azb.preview.pr: "${PV_NUMBER:?}"
+      azb.preview.sha: "${PV_SHA:?}"
+      azb.preview.host: "${PV_HOST:?}"
+    environment:
+      APP_ENV: development
+      ADDR: :8080
+      DATABASE_URL: postgres://portal:${PV_POSTGRES_PASSWORD:?}@db:5432/portal?sslmode=disable
+      PUBLIC_URL: https://${PV_HOST:?}
+      AUTH_MODE: mock
+      AUTH_INTERNAL_URL: http://auth:3000
+      AUTH_SERVICE_SECRET: ${PV_AUTH_SERVICE_SECRET:?}
+      SESSION_SECRET: ${PV_SESSION_SECRET:?}
+      SEED_DEVELOPMENT: "true"
+      SEED_PREVIEW: "true"
+      MAIL_PROVIDER: capture
+      REMINDERS_ENABLED: "false"
+      PROJECT_MANAGEMENT: "true"
+      ENV_LABEL: preview
+      UPLOAD_DIR: /var/lib/portal/uploads
+      STATIC_DIR: /app/static
+      LEGAL_DIR: /legal
+    volumes:
+      - ./legal:/legal:ro
+    tmpfs:
+      - /var/lib/portal/uploads:size=64m,uid=10001,gid=10001,mode=0750
+      - /tmp:size=16m
+    depends_on:
+      db: { condition: service_healthy }
+      auth: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/readyz"]
+      interval: 3s
+      timeout: 3s
+      start_period: 60s
+      retries: 20
+    networks:
+      internal: {}
+      # Alias unique per preview: the preview Caddy dials pv-<n>:8080 on the shared network.
+      preview: { aliases: ["pv-${PV_NUMBER:?}"] }
+
+networks:
+  # Per project and internal: database and auth are unreachable from other previews and have no way out.
+  internal:
+    internal: true
+  # Shared by all previews and the preview Caddy; created once with --internal (no gateway, no egress).
+  preview:
+    external: true
+    name: preview

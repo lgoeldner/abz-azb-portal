@@ -1,3 +1,8 @@
+# Also in role common: handlers are scoped to their play, and this role runs in a different one.
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
 - name: Restart webhook
   ansible.builtin.service:
     name: abizeitbetrug-webhook
@@ -16,6 +21,12 @@
     chdir: "{{ test_dir }}"
   changed_when: true
   failed_when: false # first run: the stack does not exist yet
+
+- name: Restart preview tunnel
+  ansible.builtin.command: systemctl restart abizeitbetrug-preview-tunnel.service
+  async: 30
+  poll: 0
+  changed_when: true
 
 - name: Recreate test stack
   ansible.builtin.command: docker compose up -d --force-recreate --remove-orphans

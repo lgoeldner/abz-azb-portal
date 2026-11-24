@@ -1,3 +1,12 @@
+# Previews are public-facing mock instances: refuse to render a Caddyfile without the shared password hash.
+- name: Preview password hash is set (bcrypt, from caddy hash-password)
+  ansible.builtin.assert:
+    that: edge_preview_basic_auth_hash is match('^\$2[ay]\$')
+    fail_msg: "Set vault_edge_preview_basic_auth_hash in group_vars/edge/vault.yml (caddy hash-password); see README, Preview deployments."
+    quiet: true
+  when: edge_preview_enabled
+  no_log: true
+
 # A dead tunnel session must free its listeners fast, or the reconnect fails (ExitOnForwardFailure).
 - name: Drop dead SSH sessions
   ansible.builtin.copy:

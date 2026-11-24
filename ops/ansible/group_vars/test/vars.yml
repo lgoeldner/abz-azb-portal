@@ -22,6 +22,17 @@ test_reminder_daily_limit: 10
 test_brevo_tracking_disabled: true
 test_project_management: true
 
+# PR previews: <branch-slug>.test.abizeitbetrug.de on this host, at most test_preview_max live, removed after test_preview_ttl_days.
+test_preview_enabled: true
+test_preview_dir: /opt/abizeitbetrug-preview
+test_preview_repo: "{{ test_webhook_repo }}"
+test_preview_max: 3
+test_preview_ttl_days: 3
+test_preview_http_port: 18083 # loopback ports on this host; the preview tunnel forwards them to the edge
+test_preview_ask_port: 18084
+test_preview_pulls_url: "" # tests only: replaces the GitHub pull list (file:// works)
+test_preview_gh_token: "" # optional read-only token; unauthenticated GitHub allows 60 requests/hour
+
 test_postgres_password: "{{ vault_test_postgres_password }}"
 test_auth_service_secret: "{{ vault_test_auth_service_secret }}"
 test_better_auth_secret: "{{ vault_test_better_auth_secret }}"

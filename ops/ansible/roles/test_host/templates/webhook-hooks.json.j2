@@ -23,4 +23,29 @@
       ]
     }
   }
+{% if test_preview_enabled %}
+  ,{
+    "id": "preview",
+    "execute-command": "/usr/bin/sudo",
+    "command-working-directory": "/",
+    "pass-arguments-to-command": [
+      { "source": "string", "name": "-n" },
+      { "source": "string", "name": "/usr/bin/systemctl" },
+      { "source": "string", "name": "start" },
+      { "source": "string", "name": "--no-block" },
+      { "source": "string", "name": "abizeitbetrug-preview-sync.service" }
+    ],
+    "response-message": "preview sync started\n",
+    "trigger-rule": {
+      "and": [
+        { "match": { "type": "payload-hmac-sha256", "secret": {{ test_webhook_secret | to_json }}, "parameter": { "source": "header", "name": "X-Hub-Signature-256" } } },
+        { "match": { "type": "value", "value": "workflow_run", "parameter": { "source": "header", "name": "X-GitHub-Event" } } },
+        { "match": { "type": "value", "value": "completed", "parameter": { "source": "payload", "name": "action" } } },
+        { "match": { "type": "value", "value": "Preview", "parameter": { "source": "payload", "name": "workflow_run.name" } } },
+        { "match": { "type": "value", "value": "success", "parameter": { "source": "payload", "name": "workflow_run.conclusion" } } },
+        { "match": { "type": "value", "value": {{ test_webhook_repo | to_json }}, "parameter": { "source": "payload", "name": "repository.full_name" } } }
+      ]
+    }
+  }
+{% endif %}
 ]

@@ -1,0 +1,55 @@
+# One repo webhook per hook id (deploy, preview), included once per id. The repo webhook is created from the controller with its authenticated gh CLI.
+# GitHub never returns the secret, so an existing hook is left alone unless test_webhook_rotate is set.
+- name: GitHub webhook lookup
+  ansible.builtin.command:
+    argv:
+      - gh
+      - api
+      - --paginate
+      - "repos/{{ test_webhook_repo }}/hooks"
+      - --jq
+      - '.[] | select(.config.url == "https://{{ test_host }}/hooks/{{ hook }}") | .id'
+  delegate_to: localhost
+  become: false
+  run_once: true
+  changed_when: false
+  check_mode: false
+  register: github_hooks
+  when: test_webhook_manage | bool
+
+- name: GitHub webhook create
+  ansible.builtin.command:
+    argv: [gh, api, -X, POST, "repos/{{ test_webhook_repo }}/hooks", --input, "-"]
+    stdin: "{{ github_hook_body | to_json }}"
+  vars:
+    github_hook_body:
+      name: web
+      active: true
+      events: [workflow_run]
+      config:
+        url: "https://{{ test_host }}/hooks/{{ hook }}"
+        content_type: json
+        secret: "{{ test_webhook_secret }}"
+        insecure_ssl: "0"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+  when: test_webhook_manage | bool and github_hooks.stdout_lines | length == 0
+
+- name: GitHub webhook secret rotation
+  ansible.builtin.command:
+    argv: [gh, api, -X, PATCH, "repos/{{ test_webhook_repo }}/hooks/{{ item }}/config", --input, "-"]
+    stdin: "{{ github_hook_config | to_json }}"
+  vars:
+    github_hook_config:
+      url: "https://{{ test_host }}/hooks/{{ hook }}"
+      content_type: json
+      secret: "{{ test_webhook_secret }}"
+      insecure_ssl: "0"
+  loop: "{{ github_hooks.stdout_lines | default([]) }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+  when: test_webhook_manage | bool and test_webhook_rotate | bool
