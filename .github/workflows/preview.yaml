@@ -7,6 +7,8 @@ run-name: Preview #${{ github.event.pull_request.number }} ${{ github.event.pull
 # branch needs its preview too. It runs this file from the base branch and gets a write token, so it only ever builds
 # same-repo branches (their authors can run any workflow anyway); forks get nothing. The run name carries PR and sha:
 # the sync reads it to see a re-run. The image names are separate from the production ones so their cache and packages are too.
+# The build cache is a registry tag (:buildcache): this event's runtime token may not write the Actions cache ("cache
+# write denied: token has no writable scopes"), and there is no setting for that.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review, closed]
@@ -85,8 +87,8 @@ jobs:
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/abizeitung-portal-preview:${{ github.event.pull_request.head.sha }}
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          cache-from: type=gha,scope=preview-abizeitung-portal
-          cache-to: type=gha,mode=max,scope=preview-abizeitung-portal
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/abizeitung-portal-preview:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/abizeitung-portal-preview:buildcache,mode=max
       - uses: docker/build-push-action@v6
         with:
           context: deployables/auth
@@ -94,8 +96,8 @@ jobs:
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/abizeitung-auth-preview:${{ github.event.pull_request.head.sha }}
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          cache-from: type=gha,scope=preview-abizeitung-auth
-          cache-to: type=gha,mode=max,scope=preview-abizeitung-auth
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/abizeitung-auth-preview:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/abizeitung-auth-preview:buildcache,mode=max
 
   comment:
     needs: [slug, build]
