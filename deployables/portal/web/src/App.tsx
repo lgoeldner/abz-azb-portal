@@ -301,7 +301,7 @@ function Logout({ compact = false }: { compact?: boolean }) {
         type="button"
         className={
           compact
-            ? 'grid size-12 flex-none place-items-center rounded-full bg-red-100 text-red-700 shadow-sm transition duration-150 hover:bg-red-600 hover:text-white hover:shadow-md active:scale-90 active:bg-red-700 disabled:opacity-50'
+            ? 'grid size-12 flex-none place-items-center rounded-full transition-[translate,border-color,box-shadow] duration-100 border-2 border-transparent bg-red-100 text-red-700 shadow-sm hover:border-red-700 hover:-translate-y-1 hover:bg-red-600 hover:text-white hover:shadow-[0_4px_0_var(--color-red-700)] active:translate-y-0.5 active:shadow-none disabled:opacity-50'
             : btn.text
         }
         aria-label={compact ? 'Abmelden' : undefined}
@@ -403,9 +403,9 @@ function Layout() {
         <Dialog.Root open={menu} onOpenChange={setMenu}>
           <Dialog.Trigger
             aria-label="Menü öffnen"
-            className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-40 rounded-full shadow-lg ring-2 ring-chrome transition-transform active:scale-95 min-[651px]:hidden"
+            className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-40 rounded-full shadow-lg transition-transform active:scale-95 min-[651px]:hidden"
           >
-            <Avatar user={user} className="size-12 text-base" />
+            <Avatar user={user} className="size-12 border-[5px] border-white text-base" />
           </Dialog.Trigger>
           <Dialog.Portal container={root}>
             {/* Shell stays put and click-through; only the inner panel slides, so the avatar stays on top of it.
@@ -423,7 +423,7 @@ function Layout() {
                 aria-label="Menü schließen"
                 className="pointer-events-auto absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 rounded-full shadow-lg transition-transform active:scale-95"
               >
-                <Avatar user={user} className="size-12 text-base" />
+                <Avatar user={user} className="size-12 border-[5px] border-white text-base" />
               </Dialog.Close>
             </Dialog.Popup>
           </Dialog.Portal>
@@ -473,7 +473,7 @@ function SidebarBody({ close, mobile = false }: { close: () => void; mobile?: bo
   const [view] = useWorkspaceView();
   const location = useLocation();
   const icon =
-    'grid size-12 flex-none place-items-center rounded-full bg-white shadow-sm transition duration-150 hover:bg-ink hover:text-pop hover:shadow-md active:scale-90 active:bg-ink/90';
+    'grid size-12 flex-none place-items-center rounded-full transition-[translate,border-color,box-shadow] duration-100 border-2 border-transparent bg-white shadow-sm hover:border-ink hover:-translate-y-1 hover:bg-gray-600 hover:text-white hover:shadow-[0_4px_0_var(--color-ink)] active:translate-y-0.5 active:shadow-none';
   return (
     <>
       <Link
@@ -500,7 +500,11 @@ function SidebarBody({ close, mobile = false }: { close: () => void; mobile?: bo
       <div className="flex flex-none flex-col gap-2 bg-pill px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
         {editorial(user) && <ViewSwitch onSwitch={close} />}
         <div className="flex items-center gap-3">
-          {mobile ? <span className="size-12 flex-none" /> : <Avatar user={user} className="size-10 text-sm" />}
+          {mobile ? (
+            <span className="size-12 flex-none" />
+          ) : (
+            <Avatar user={user} className="size-10 border-2 border-white text-sm" />
+          )}
           <strong className="min-w-0 flex-1 line-clamp-2 break-words text-[15px] font-semibold leading-tight">
             {user.name}
           </strong>
