@@ -1,7 +1,8 @@
 name: Preview cleanup
 
 # Daily: deployments of previews past their 3 day TTL become inactive (no stale "View deployment" button) and preview
-# image versions older than 4 days are deleted from GHCR. Scheduled workflows only run from the default branch (main).
+# image versions older than 4 days are deleted from GHCR. Scheduled workflows run from the default branch (dev).
+# A red run with HTTP 403 means the package settings do not give this repository Admin access (README, "Preview deployments").
 on:
   schedule:
     - cron: "17 3 * * *"

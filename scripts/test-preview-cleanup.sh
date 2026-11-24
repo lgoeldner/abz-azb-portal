@@ -29,7 +29,7 @@ case "$*" in
   *deployments/12/statuses*) echo '[{"state":"inactive"},{"state":"success"}]' ;;
   *deployments/*/statuses*) echo '[{"state":"success"}]' ;;
   *deployments*) cat "$FIXTURES/deployments.json" ;;
-  *versions*) cat "$FIXTURES/versions.json" ;;
+  *versions*) if [ -n "${FAKE_VERSIONS_HTTP:-}" ]; then echo "gh: nope (HTTP $FAKE_VERSIONS_HTTP)" >&2; exit 1; fi; cat "$FIXTURES/versions.json" ;;
   *) echo "unexpected gh call: $*" >&2; exit 1 ;;
 esac
 EOF
@@ -47,4 +47,9 @@ if run close 'x; rm' 2>/dev/null; then fail 'bad PR number accepted'; fi
 run sweep
 [ "$(touched POST)" = '10 ' ] || fail "sweep deactivated '$(touched POST)' (want only 10: 11 is recent, 12 already inactive, 13 is not a preview)"
 [ "$(touched DELETE)" = '100 102 100 102 ' ] || fail "sweep deleted '$(touched DELETE)' (want 100 and 102 of both packages, not the 3 day old 101)"
+# A missing package is fine, a refused listing (403) fails the run: that is how a token without package rights shows up.
+export FAKE_VERSIONS_HTTP=404
+run sweep || fail 'a missing package failed the sweep'
+export FAKE_VERSIONS_HTTP=403
+if run sweep 2>/dev/null; then fail 'a refused package listing passed the sweep'; fi
 echo 'OK: preview-cleanup'

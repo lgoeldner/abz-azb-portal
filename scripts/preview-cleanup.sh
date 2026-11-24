@@ -33,7 +33,12 @@ sweep)
   done
   cutoff=$((now - (ttl_days + 1) * 86400))
   for name in abizeitung-portal-preview abizeitung-auth-preview; do
-    versions=$(gh api "users/$owner/packages/container/$name/versions?per_page=100") || { echo "preview-cleanup: no versions of $name"; continue; }
+    # No package yet (404) is fine; anything else (403: the token may not manage the package) must fail the run.
+    versions=$(gh api "users/$owner/packages/container/$name/versions?per_page=100" 2>&1) || {
+      grep -q 'HTTP 404' <<<"$versions" && { echo "preview-cleanup: no package $name yet"; continue; }
+      echo "preview-cleanup: listing $name failed: $versions" >&2
+      exit 1
+    }
     for id in $(jq -r --argjson cutoff "$cutoff" '.[] | select((.created_at | fromdateiso8601) < $cutoff) | .id' <<<"$versions"); do
       gh api -X DELETE "users/$owner/packages/container/$name/versions/$id" >/dev/null
     done
