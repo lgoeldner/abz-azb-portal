@@ -95,6 +95,8 @@ file `deployables/portal/server/internal/portal/auth.go` :: legacy OIDC login/ca
 file `deployables/portal/server/internal/portal/config.go` :: env config and production validation, ENV_LABEL allowlist, secureCookies/cookieName (__Host- in production) [config, env, cookie]
 file `deployables/portal/server/internal/portal/db.go` :: DB interface, Migrate, IDs, audit and revision helpers [db, pgx]
 file `deployables/portal/server/internal/portal/seed.go` :: dev fixtures: users (fixtureSlugs), categories, single-answer Sammlungen [seed, fixtures]
+file `deployables/portal/server/internal/portal/seed_preview.go` :: SEED_PREVIEW=true layer on top of Seed (PR previews only): every submission status, closed proposal and word poll, ballots with audit, corrections, photo and Steckbrief attachments through the blob store; idempotent [seed, preview, fixtures]
+test `deployables/portal/server/internal/portal/seed_preview_test.go` :: after Seed + SeedPreview every collection kind, submission status and poll status has a row, ballots/corrections/photos exist, blobs readable, second run changes nothing [seed, preview]
 
 ## Backend tests (need TEST_DATABASE_URL to a disposable DB)
 

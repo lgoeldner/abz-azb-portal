@@ -75,7 +75,13 @@ func run() error {
 	case "migrate":
 		return portal.Migrate(ctx, pool)
 	case "seed":
-		return portal.SeedWithIssuer(ctx, pool, c.Env, c.Issuer)
+		if e = portal.SeedWithIssuer(ctx, pool, c.Env, c.Issuer); e != nil {
+			return e
+		}
+		if os.Getenv("SEED_PREVIEW") == "true" {
+			return portal.SeedPreview(ctx, pool, portal.NewBlobStore(c), c.Env)
+		}
+		return nil
 	case "users":
 		// Invites are best effort: a roster import must keep working without mail credentials.
 		var mailer *portal.MailService
