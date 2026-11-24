@@ -62,7 +62,7 @@ function renderStudentApp(categories: unknown[], submissions: unknown[] = []) {
 }
 
 describe('minimalist student UI', () => {
-  it('renders progress, active poll carousel, Abgegeben bottom sheet split, accumulating tiles, and Steckbrief account badge', async () => {
+  it('renders header progress bar, active poll carousel, Abgegeben sheet, Sammeln rows, and Steckbrief account badge', async () => {
     const categories = [
       baseCategory('p1', 'Unser Abimotto', 'proposal', {
         options: [
@@ -88,15 +88,18 @@ describe('minimalist student UI', () => {
 
     renderStudentApp(categories);
 
-    // Progress bar reflects 1 answered out of 2 open polls
-    expect(await screen.findByText('1 von 2')).toBeInTheDocument();
-    // Active carousel shows only the unanswered open poll
+    // Header progress bar tracks 1 of 2 open polls
+    const progressbar = await screen.findByRole('progressbar', { name: '1 von 2 Fragen beantwortet' });
+    expect(progressbar).toHaveAttribute('aria-valuenow', '1');
+    expect(progressbar).toHaveAttribute('aria-valuemax', '2');
+
+    // Carousel shows only unanswered open polls
     const carousel = screen.getByRole('region', { name: 'Fragen-Karussell' });
     expect(within(carousel).getByText('Unser Abimotto')).toBeInTheDocument();
     expect(within(carousel).queryByText('Mottowoche')).not.toBeInTheDocument();
 
-    // Accumulating section shows Fotos & Zitate, never Steckbrief
-    const sammeln = screen.getByRole('region', { name: 'Jederzeit ergänzen' });
+    // Sammeln list shows Fotos & Zitate, never Steckbrief
+    const sammeln = screen.getByRole('region', { name: 'Sammeln' });
     expect(within(sammeln).getByText('Fotos')).toBeInTheDocument();
     expect(within(sammeln).getByText('Zitate')).toBeInTheDocument();
     expect(within(sammeln).queryByText('Steckbrief')).not.toBeInTheDocument();
@@ -109,12 +112,12 @@ describe('minimalist student UI', () => {
     expect(within(menu).getByText('Offen')).toBeInTheDocument();
     expect(within(menu).queryByText(/Redaktion/i)).not.toBeInTheDocument();
 
-    // Abgegeben pill opens the bottom sheet split into Noch änderbar and Beendet
+    // Abgegeben hairline row opens bottom sheet split into Noch änderbar and Beendet
     fireEvent.click(screen.getByRole('button', { name: /Abgegeben/i }));
     const sheet = screen.getByRole('dialog', { name: 'Abgegeben' });
-    expect(within(sheet).getByText(/Noch änderbar \(1\)/)).toBeInTheDocument();
+    expect(within(sheet).getByText('Noch änderbar')).toBeInTheDocument();
     expect(within(sheet).getByText('Mottowoche')).toBeInTheDocument();
-    expect(within(sheet).getByText(/Beendet \(1\)/)).toBeInTheDocument();
+    expect(within(sheet).getByText('Beendet')).toBeInTheDocument();
     expect(within(sheet).getByText('Alte Wahl')).toBeInTheDocument();
   });
 });
