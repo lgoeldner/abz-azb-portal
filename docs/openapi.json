@@ -533,6 +533,7 @@
             ]
           },
           "description": {
+            "maxLength": 500,
             "type": "string"
           },
           "kind": {
@@ -555,6 +556,7 @@
             "type": "integer"
           },
           "name": {
+            "maxLength": 100,
             "type": "string"
           },
           "ongoing": {
@@ -608,6 +610,7 @@
             ]
           },
           "description": {
+            "maxLength": 500,
             "type": "string"
           },
           "kind": {
@@ -630,6 +633,7 @@
             "type": "integer"
           },
           "name": {
+            "maxLength": 100,
             "type": "string"
           },
           "ongoing": {

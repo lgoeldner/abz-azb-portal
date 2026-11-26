@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -252,8 +253,8 @@ func (in *categoryInput) UnmarshalJSON(data []byte) error {
 }
 
 func validateCategory(in categoryInput) error {
-	if strings.TrimSpace(in.Name) == "" || len(in.Name) > 300 || len(in.Description) > 10000 {
-		return bad("Name erforderlich (max. 300 Zeichen); Beschreibung zu lang.")
+	if strings.TrimSpace(in.Name) == "" || utf8.RuneCountInString(in.Name) > 100 || utf8.RuneCountInString(in.Description) > 500 {
+		return bad("Name erforderlich (max. 100 Zeichen); Beschreibung höchstens 500 Zeichen.")
 	}
 	if !validKind(in.Kind) {
 		return bad("Ungültiger Sammlungstyp.")

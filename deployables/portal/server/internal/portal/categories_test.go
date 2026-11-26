@@ -499,3 +499,20 @@ func sortedCopy(in []string) []string {
 	slices.Sort(out)
 	return out
 }
+
+func TestCategoryTextCapsCountCharacters(t *testing.T) {
+	app, pool := timelineApp(t)
+	for _, tc := range []struct {
+		name, description string
+		want              int
+	}{
+		{strings.Repeat("ä", 100), strings.Repeat("ü", 500), http.StatusCreated},
+		{strings.Repeat("a", 101), "", http.StatusBadRequest},
+		{"Name", strings.Repeat("a", 501), http.StatusBadRequest},
+	} {
+		body := fmt.Sprintf(`{"name":%q,"description":%q,"kind":"idea"}`, tc.name, tc.description)
+		if res := authenticatedRequest(t, app, pool, AdminID, http.MethodPost, "/api/v1/categories", body); res.Code != tc.want {
+			t.Errorf("name %d, description %d bytes: %d %s", len(tc.name), len(tc.description), res.Code, res.Body)
+		}
+	}
+}
