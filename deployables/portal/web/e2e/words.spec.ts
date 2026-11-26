@@ -32,7 +32,7 @@ test('word portrait chips, private cloud, reversible moderation and CSV at deskt
   await page.getByRole('button', { name: 'Redaktion', exact: true }).click();
   await page.goto('/sammlungen?neu');
   await page.getByLabel('Name', { exact: true }).fill(`Abi in Worten ${Date.now()}`);
-  await page.getByRole('combobox', { name: 'Klasse', exact: true }).selectOption('words');
+  await page.getByRole('group', { name: 'Klasse' }).getByText('Wortwolke').click();
   await expect(page.getByLabel('Maximale Zahl der Wörter pro Person')).toHaveValue('3');
   await page.getByLabel('Maximale Zahl der Wörter pro Person').fill('2');
   const created = page.waitForResponse(

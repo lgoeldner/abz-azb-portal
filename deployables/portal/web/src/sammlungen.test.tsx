@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import type { Category, Me, WordEntry } from './api';
 import { Sammlungen, SammlungDetail } from './sammlungen';
-import { Session, WorkspaceView, type View } from './ui';
+import { Session, WorkspaceView, kindLabel, type Kind, type View } from './ui';
 
 const student: Me['user'] = {
   id: 'student-1',
@@ -193,6 +193,7 @@ function renderPortal(
         <WorkspaceView.Provider value={workspaceView}>
           <MemoryRouter initialEntries={[path]}>
             <Routes>
+              <Route path="/" element={<Link to={path}>Abimotto-Team</Link>} />
               <Route path="/sammlungen" element={<Sammlungen />} />
               <Route path="/sammlungen/:id" element={<SammlungDetail />} />
             </Routes>
@@ -205,7 +206,7 @@ function renderPortal(
 
 async function openPersonForm(kind = 'person') {
   fireEvent.click(screen.getByRole('button', { name: /Neue Sammlung/ }));
-  fireEvent.change(screen.getByLabelText('Klasse'), { target: { value: kind } });
+  fireEvent.click(screen.getByRole('radio', { name: kindLabel[kind as Kind] }));
   expect(screen.getByLabelText('Maximale Zahl der Stimmen pro Person')).toHaveValue(1);
 }
 
@@ -221,7 +222,7 @@ describe('words polls', () => {
     renderPortal('/sammlungen', admin);
 
     fireEvent.click(screen.getByRole('button', { name: /Neue Sammlung/ }));
-    fireEvent.change(screen.getByLabelText('Klasse'), { target: { value: 'words' } });
+    fireEvent.click(screen.getByRole('radio', { name: kindLabel['words' as Kind] }));
     expect(screen.getByLabelText('Maximale Zahl der Wörter pro Person')).toHaveValue(3);
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Wortwolke' } });
     fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
@@ -618,14 +619,10 @@ describe('Sammlungen person polls', () => {
     const { writes } = installApi();
     renderPortal('/sammlungen', admin);
     fireEvent.click(screen.getByRole('button', { name: /Neue Sammlung/ }));
-    const kind = screen.getByLabelText('Klasse');
-    fireEvent.change(kind, { target: { value: 'photo' } });
-    const repeatable = screen.getByRole('switch', { name: 'Wiederholbar' });
-    expect(repeatable).toBeChecked();
-    fireEvent.click(repeatable);
-    expect(kind).toHaveValue('photo');
-    expect(kind.querySelectorAll('option')).toHaveLength(8);
-    fireEvent.click(screen.getByRole('switch', { name: 'Fortlaufend' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Fotos' }));
+    expect(screen.getByRole('switch', { name: 'Wiederholbar' })).not.toBeChecked();
+    expect(within(screen.getByRole('group', { name: 'Klasse' })).getAllByRole('radio')).toHaveLength(8);
+    fireEvent.click(screen.getByRole('button', { name: 'Ablaufdatum hinzufügen' }));
     fireEvent.click(screen.getByRole('button', { name: '1w' }));
     fireEvent.change(screen.getByLabelText('Uhrzeit'), { target: { value: '12:00' } });
     expect(screen.queryByLabelText('Antwortoption hinzufügen')).toBeNull();
@@ -759,7 +756,7 @@ describe('Sammlungen person polls', () => {
     renderPortal('/sammlungen', admin);
     await openPersonForm();
     fireEvent.click(screen.getByRole('switch', { name: 'Stimme für die eigene Person erlauben' }));
-    fireEvent.change(screen.getByLabelText('Klasse'), { target: { value: kind } });
+    fireEvent.click(screen.getByRole('radio', { name: kindLabel[kind as Kind] }));
     expect(screen.queryByRole('switch', { name: 'Stimme für die eigene Person erlauben' })).not.toBeInTheDocument();
     if (kind === 'proposal') {
       addProposalOption('A');
@@ -838,7 +835,7 @@ describe('Sammlungen person polls', () => {
       }),
     );
     await screen.findByText('Alles erledigt. Danke fürs Mitmachen!');
-    fireEvent.click(screen.getByRole('link', { name: /Alle Sammlungen ansehen/ }));
+    fireEvent.click(screen.getByRole('link', { name: /Zur Übersicht/ }));
     fireEvent.click(await screen.findByRole('link', { name: /Abimotto-Team/ }));
     expect(await screen.findByText('Gespeicherte Stimmen: Bob Beispiel, Cara Beispiel')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Gesamtergebnisse' })).not.toBeInTheDocument();
@@ -864,7 +861,7 @@ describe('Sammlungen person polls', () => {
     fireEvent.click(screen.getByRole('button', { name: /Stimme speichern/ }));
     await waitFor(() => expect(writes[0].body).toEqual({ option_ids: ['gold', 'green'] }));
     await screen.findByText('Alles erledigt. Danke fürs Mitmachen!');
-    fireEvent.click(screen.getByRole('link', { name: /Alle Sammlungen ansehen/ }));
+    fireEvent.click(screen.getByRole('link', { name: /Zur Übersicht/ }));
     fireEvent.click(await screen.findByRole('link', { name: /Abimotto-Team/ }));
     expect(await screen.findByText('Gespeicherte Stimmen: Sonnengelb, Waldgrün')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sonnengelb' })).toHaveAttribute('aria-pressed', 'true');
@@ -946,83 +943,97 @@ describe('Sammlungen person polls', () => {
 });
 
 describe('all collections overview', () => {
-  it.each(['schueler', 'redaktion'] as const)(
-    'groups by repeatability, orders one-off deadlines and collapses ended polls in %s mode',
-    async (view) => {
-      const categories = [
-        personPoll({ id: 'late', name: 'Späte Wahl', ongoing: false, closes_at: '2027-05-10T12:00:00Z' }),
-        personPoll({ id: 'no-deadline', name: 'Ohne Enddatum', ongoing: true }),
-        personPoll({
-          id: 'early',
-          name: 'Frühe Wahl',
-          ongoing: false,
-          closes_at: '2027-02-10T12:00:00Z',
-          my_option_ids: ['alice'],
-        }),
-        personPoll({ id: 'quote', name: 'Zitate', kind: 'quote', repeatable: true, ongoing: true }),
-        personPoll({
-          id: 'repeated-ballot',
-          name: 'Wiederholbare Wahl',
-          repeatable: true,
-          ongoing: false,
-          closes_at: '2027-01-10T12:00:00Z',
-        }),
-        personPoll({
-          id: 'photo',
-          name: 'Einmalige Fotos',
-          kind: 'photo',
-          ongoing: false,
-          closes_at: '2027-06-10T12:00:00Z',
-          status: 'closed',
-        }),
-        personPoll({
-          id: 'expired',
-          name: 'Abgelaufene Wahl',
-          status: 'closed',
-          ongoing: false,
-          closes_at: '2026-01-10T12:00:00Z',
-        }),
-        personPoll({ id: 'ended-repeatable', name: 'Beendete wiederholbare Wahl', status: 'closed', repeatable: true }),
-      ];
-      installApi(categories);
-      renderPortal('/sammlungen', view === 'schueler' ? student : admin, [], view);
+  it('sends the student view to the dashboard instead of the list', () => {
+    installApi();
+    renderPortal('/sammlungen', admin, [], 'schueler');
+    expect(screen.queryByRole('heading', { name: 'Sammlungen' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Abimotto-Team' })).toBeInTheDocument();
+  });
 
-      const once = await screen.findByRole('region', { name: 'Einmalig' });
-      const repeated = screen.getByRole('region', { name: 'Wiederholbar' });
-      const ids = (element: HTMLElement) =>
-        within(element)
-          .getAllByRole('link')
-          .map((link) => link.getAttribute('href'));
-      expect(ids(once)).toEqual([
-        '/sammlungen/early',
-        '/sammlungen/late',
-        '/sammlungen/photo',
-        '/sammlungen/no-deadline',
-      ]);
-      expect(ids(repeated)).toEqual(['/sammlungen/quote', '/sammlungen/repeated-ballot']);
-      expect(once.compareDocumentPosition(repeated) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(within(once).getByText('Bis 10.2.2027')).toBeInTheDocument();
-      expect(within(once).getByText('Beendet · Bis 10.6.2027')).toBeInTheDocument();
-      expect(within(repeated).getByText('Bis 10.1.2027')).toBeInTheDocument();
-      const summary = screen.getByText('Beendete Abstimmungen (2)');
-      const ended = summary.closest('details')!;
-      expect(ended).not.toHaveAttribute('open');
-      expect(repeated.compareDocumentPosition(ended) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      fireEvent.click(summary);
-      expect(
-        within(ended)
-          .getAllByRole('link', { hidden: true })
-          .map((link) => link.getAttribute('href')),
-      ).toEqual(['/sammlungen/expired', '/sammlungen/ended-repeatable']);
-      const own = screen.getByRole('link', { name: 'Meine Beiträge' });
-      expect(own).toHaveAttribute('href', '/beitraege');
-      expect(ended.compareDocumentPosition(own) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    },
-  );
+  it('keeps the selected class chip when opening the form and preselects it', async () => {
+    installApi();
+    renderPortal('/sammlungen?klasse=quote', admin);
+    fireEvent.click(screen.getByRole('button', { name: /Neue Sammlung/ }));
+    expect(screen.getByRole('radio', { name: 'Zitate' })).toBeChecked();
+    expect(screen.queryByRole('navigation', { name: 'Nach Klasse filtern' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }));
+    expect(screen.getByRole('link', { name: 'Zitate' })).toHaveAttribute('aria-current', 'true');
+  });
+
+  it('groups by repeatability, orders one-off deadlines and collapses ended polls', async () => {
+    const categories = [
+      personPoll({ id: 'late', name: 'Späte Wahl', ongoing: false, closes_at: '2027-05-10T12:00:00Z' }),
+      personPoll({ id: 'no-deadline', name: 'Ohne Enddatum', ongoing: true }),
+      personPoll({
+        id: 'early',
+        name: 'Frühe Wahl',
+        ongoing: false,
+        closes_at: '2027-02-10T12:00:00Z',
+        my_option_ids: ['alice'],
+      }),
+      personPoll({ id: 'quote', name: 'Zitate', kind: 'quote', repeatable: true, ongoing: true }),
+      personPoll({
+        id: 'repeated-ballot',
+        name: 'Wiederholbare Wahl',
+        repeatable: true,
+        ongoing: false,
+        closes_at: '2027-01-10T12:00:00Z',
+      }),
+      personPoll({
+        id: 'photo',
+        name: 'Einmalige Fotos',
+        kind: 'photo',
+        ongoing: false,
+        closes_at: '2027-06-10T12:00:00Z',
+        status: 'closed',
+      }),
+      personPoll({
+        id: 'expired',
+        name: 'Abgelaufene Wahl',
+        status: 'closed',
+        ongoing: false,
+        closes_at: '2026-01-10T12:00:00Z',
+      }),
+      personPoll({ id: 'ended-repeatable', name: 'Beendete wiederholbare Wahl', status: 'closed', repeatable: true }),
+    ];
+    installApi(categories);
+    renderPortal('/sammlungen', admin);
+
+    const once = await screen.findByRole('region', { name: 'Einmalig' });
+    const repeated = screen.getByRole('region', { name: 'Wiederholbar' });
+    const ids = (element: HTMLElement) =>
+      within(element)
+        .getAllByRole('link')
+        .map((link) => link.getAttribute('href'));
+    expect(ids(once)).toEqual([
+      '/sammlungen/early',
+      '/sammlungen/late',
+      '/sammlungen/photo',
+      '/sammlungen/no-deadline',
+    ]);
+    expect(ids(repeated)).toEqual(['/sammlungen/quote', '/sammlungen/repeated-ballot']);
+    expect(once.compareDocumentPosition(repeated) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(once).getByText('Bis 10.2.2027')).toBeInTheDocument();
+    expect(within(once).getByText('Beendet · Bis 10.6.2027')).toBeInTheDocument();
+    expect(within(repeated).getByText('Bis 10.1.2027')).toBeInTheDocument();
+    const summary = screen.getByText('Beendete Abstimmungen (2)');
+    const ended = summary.closest('details')!;
+    expect(ended).not.toHaveAttribute('open');
+    expect(repeated.compareDocumentPosition(ended) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(summary);
+    expect(
+      within(ended)
+        .getAllByRole('link', { hidden: true })
+        .map((link) => link.getAttribute('href')),
+    ).toEqual(['/sammlungen/expired', '/sammlungen/ended-repeatable']);
+    const own = screen.getByRole('link', { name: 'Meine Beiträge' });
+    expect(own).toHaveAttribute('href', '/beitraege');
+    expect(ended.compareDocumentPosition(own) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 
   it('keeps class filtering and the own submissions link available', async () => {
     installApi([personPoll(), personPoll({ id: 'quote', name: 'Zitate', kind: 'quote', repeatable: true })]);
-    renderPortal('/sammlungen?klasse=quote', student);
+    renderPortal('/sammlungen?klasse=quote', admin);
     const repeated = await screen.findByRole('region', { name: 'Wiederholbar' });
     expect(within(repeated).getAllByRole('link')).toHaveLength(1);
     expect(screen.queryByRole('region', { name: 'Einmalig' })).toBeNull();

@@ -98,7 +98,7 @@ describe('PollStack', () => {
     expect(screen.getByText('Keine Sammlungen verfügbar')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Vorherige Sammlung' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Nächste Sammlung' })).toBeDisabled();
-    expect(screen.getByRole('link', { name: /Alle Sammlungen/ })).toHaveAttribute('href', '/sammlungen');
+    expect(screen.queryByRole('link', { name: /Zur Übersicht/ })).toBeNull();
 
     rerender(<PollStack items={[category()]} />);
     expect(screen.getByText('1 / 1')).toBeInTheDocument();

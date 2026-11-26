@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import type { Category } from './api';
+import { Link, useLocation } from 'react-router-dom';
+import { day, type Category } from './api';
 import { Arrow, btn, isSubmissionCollection, KindIcon, kindIcon, kindLabel } from './ui';
 import { BallotForm } from './BallotForm';
 import './PollStack.css';
@@ -9,6 +9,7 @@ import './PollStack.css';
 type Selection = { id: string; index: number; direction: 'next' | 'previous' };
 
 export function PollStack({ items: available, initialId }: { items: Category[]; initialId?: string }) {
+  const onDashboard = useLocation().pathname === '/';
   const [saving, setSaving] = useState(false);
   const [completed, setCompleted] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string[]>>({});
@@ -70,6 +71,7 @@ export function PollStack({ items: available, initialId }: { items: Category[]; 
                 <KindIcon icon={kindIcon[item.kind]} className="size-5" />
                 {kindLabel[item.kind]}
               </span>
+              {item.closes_at && <span className="text-sm text-muted">Bis {day(item.closes_at)}</span>}
             </span>
             <div>
               <h3 className="poll-stack__title">{item.name}</h3>
@@ -111,9 +113,11 @@ export function PollStack({ items: available, initialId }: { items: Category[]; 
         ) : (
           <div className="poll-stack__empty">
             <p>Alles erledigt. Danke fürs Mitmachen!</p>
-            <Link className={btn.text} to="/sammlungen">
-              Alle Sammlungen ansehen <Arrow />
-            </Link>
+            {!onDashboard && (
+              <Link className={btn.text} to="/">
+                Zur Übersicht <Arrow />
+              </Link>
+            )}
           </div>
         )}
       </div>

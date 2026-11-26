@@ -86,12 +86,21 @@
   overflow-wrap: anywhere;
 }
 
+/* Long names are cut off; the description stays whole because voting happens on this card. */
+.poll-stack__title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
 .poll-stack__description {
   display: block;
   max-width: 48ch;
   margin-top: 0.75rem;
   color: var(--color-muted);
   font-size: 1rem;
+  overflow-wrap: anywhere;
 }
 
 .poll-stack__bottomline {

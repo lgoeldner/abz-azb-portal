@@ -130,7 +130,7 @@ test('admin opens access management and activity log on mobile', async ({ page }
 });
 
 test('old bookmarks under /abstimmungen land on the Sammlungen pages', async ({ page }) => {
-  await signInAs(page, 'Jahrgang');
+  await signInAs(page, 'Administration');
   await page.goto('/abstimmungen/30000000-0000-4000-8000-000000000001');
   await expect(page).toHaveURL(/\/sammlungen\/30000000-0000-4000-8000-000000000001$/);
   await page.goto('/abstimmungen');

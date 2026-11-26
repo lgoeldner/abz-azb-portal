@@ -96,7 +96,6 @@ test('dev debug disclosures preserve navigation, privacy and read permissions', 
     ['/', category.id],
     ['/beitraege', submission.id],
     ['/beitraege/debug-submission', submission.id],
-    ['/sammlungen', poll.id],
     ['/sammlungen/debug-poll', poll.id],
   ]) {
     await page.goto(path, { waitUntil: 'domcontentloaded' });

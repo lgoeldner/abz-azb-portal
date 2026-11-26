@@ -282,7 +282,7 @@ test('poll chips, switches and count controls fit narrow and wide screens', asyn
   for (const width of [320, 390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/sammlungen?neu');
-    await page.getByRole('combobox', { name: 'Klasse', exact: true }).selectOption('proposal');
+    await page.getByRole('group', { name: 'Klasse' }).getByText('Vorschlagswahl').click();
     const optionInput = page.getByRole('textbox', { name: 'Antwortoption hinzufügen' });
     const longOption = 'Abimotto ' + 'X'.repeat(180);
     await optionInput.fill(longOption);

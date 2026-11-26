@@ -33,6 +33,7 @@ import {
   type MyBallot,
   type Submission,
   type User,
+  day,
 } from './api';
 import {
   Arrow,
@@ -772,9 +773,6 @@ function StudentNav() {
             )}
           </div>
         </details>
-        <NavItem to="/sammlungen" icon={Library}>
-          Alle Sammlungen
-        </NavItem>
         <NavItem to="/beitraege" icon={FileText}>
           Meine Beiträge
         </NavItem>
@@ -915,6 +913,10 @@ function StudentHome() {
     .sort(newestOpened);
   const todo = [...todoBallots, ...oneOffContributions];
   const waiting = [...todo, ...repeatableContributions];
+  // Everything else students can still open: saved votes, own one-off entries and ended collections.
+  const finished = (categories.data ?? [])
+    .filter((c) => c.status !== 'draft' && !waiting.some((w) => w.id === c.id))
+    .sort(newestOpened);
   const title =
     categories.data && submissions.data
       ? waiting.length === 0
@@ -940,8 +942,7 @@ function StudentHome() {
             <Failure error={categories.error} retry={() => categories.refetch()} />
           ) : todo.length === 0 ? (
             <Empty>
-              Gerade gibt es keine neuen Aufgaben. Unter <Link to="/sammlungen">Alle Sammlungen</Link> kannst du deine
-              gespeicherten Stimmen ändern.
+              Gerade gibt es keine neuen Aufgaben. Gespeicherte Stimmen änderst du unter „Erledigt und beendet“.
             </Empty>
           ) : (
             <PollStack items={todo} />
@@ -974,8 +975,13 @@ function StudentHome() {
                         <KindIcon icon={kindIcon[collection.kind]} />
                         {kindLabel[collection.kind]}
                       </span>
-                      <h3 className={heading}>{collection.name}</h3>
-                      {collection.description && <p className="text-[15px] text-muted">{collection.description}</p>}
+                      <h3 className={`${heading} line-clamp-2 break-words`}>{collection.name}</h3>
+                      {collection.description && (
+                        <p className="line-clamp-3 break-words text-[15px] text-muted">{collection.description}</p>
+                      )}
+                      {collection.closes_at && (
+                        <span className="text-sm text-muted">Bis {day(collection.closes_at)}</span>
+                      )}
                       <span className="mt-auto flex items-center justify-between gap-3 pt-2 text-sm">
                         <span className="text-muted">
                           {submissions.isPending || submissions.error
@@ -996,6 +1002,38 @@ function StudentHome() {
           )}
         </div>
       </section>
+
+      {finished.length > 0 && !submissions.isPending && (
+        <details className="mt-10 rounded-ui bg-white">
+          <summary className="cursor-pointer px-5 py-4 text-[15px] font-semibold">
+            Erledigt und beendet ({finished.length})
+          </summary>
+          <ul className="divide-y divide-line border-t border-line">
+            {finished.map((c) => (
+              <li key={c.id}>
+                <Link to={`/sammlungen/${c.id}`} className="flex items-center gap-4 px-5 py-3 hover:bg-pop/30">
+                  <KindIcon icon={kindIcon[c.kind]} className="size-4 text-muted" />
+                  <span className="min-w-0 flex-1">
+                    <strong className="line-clamp-2 break-words text-[15px] font-semibold">{c.name}</strong>
+                    <span className="block text-[13px] text-muted">
+                      {kindLabel[c.kind]} ·{' '}
+                      {c.status === 'closed'
+                        ? 'Beendet'
+                        : hasVoted(c)
+                          ? 'Abgestimmt'
+                          : own.some((s) => s.category_id === c.id)
+                            ? 'Eingereicht'
+                            : 'Offen'}
+                      {c.status === 'open' && c.closes_at && ` · Bis ${day(c.closes_at)}`}
+                    </span>
+                  </span>
+                  <Arrow />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       <section aria-labelledby="home-beitraege" className="mt-10">
         <div className="flex items-baseline justify-between gap-4">
@@ -1334,7 +1372,7 @@ function EditorialHome() {
                         />
                         <span className="min-w-0 flex-1">
                           <span className="flex min-w-0 items-center gap-2">
-                            <strong className="block min-w-0 flex-1 break-words text-[15px] font-semibold leading-snug">
+                            <strong className="line-clamp-2 min-w-0 flex-1 break-words text-[15px] font-semibold leading-snug">
                               {c.name}
                             </strong>
                             {isBallot(c.kind) && <Badge status={c.status} />}
