@@ -375,9 +375,8 @@ function Login() {
 const navItem =
   'flex min-h-10 items-center justify-between gap-3 rounded-full px-3.5 py-1.5 text-[15px] transition-transform active:scale-[.98] max-[651px]:min-h-11';
 const groupLabel = 'px-3.5 text-sm font-bold text-ink';
-// 54px ring around a 38px avatar; 94px wide as the closed pill with the panel icon.
-const menuPill =
-  'flex h-[54px] items-center overflow-hidden rounded-full bg-white p-2 shadow-lg ease-out active:scale-95';
+// 48px ring (the size of the settings/logout buttons) around a 38px avatar; 88px wide as the closed pill with the panel icon.
+const menuPill = 'flex h-12 items-center overflow-hidden rounded-full bg-white p-[5px] ease-out active:scale-95';
 
 function Layout() {
   const { user } = useSession();
@@ -409,7 +408,7 @@ function Layout() {
           <Dialog.Trigger
             aria-label="Menü öffnen"
             // Hidden until the dialog unmounts, so this pill never shows through the one morphing inside it.
-            className={`${menuPill} fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-40 w-[94px] transition-transform group-has-[aside[role=dialog]]/shell:opacity-0 min-[651px]:hidden`}
+            className={`${menuPill} fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-40 w-[88px] shadow-lg transition-transform group-has-[aside[role=dialog]]/shell:opacity-0 min-[651px]:hidden`}
           >
             <MenuFace />
           </Dialog.Trigger>
@@ -428,7 +427,7 @@ function Layout() {
               </div>
               <Dialog.Close
                 aria-label="Menü schließen"
-                className={`${menuPill} pointer-events-auto absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 w-[54px] transition-[width,scale] duration-300 group-data-[ending-style]:w-[94px] group-data-[starting-style]:w-[94px]`}
+                className={`${menuPill} pointer-events-auto absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 w-12 transition-[width,scale,box-shadow] duration-300 group-data-[ending-style]:w-[88px] group-data-[ending-style]:shadow-lg group-data-[starting-style]:w-[88px] group-data-[starting-style]:shadow-lg`}
               >
                 <MenuFace iconClass="opacity-0 transition-opacity duration-300 group-data-[ending-style]:opacity-100 group-data-[starting-style]:opacity-100" />
               </Dialog.Close>
@@ -518,9 +517,9 @@ function SidebarBody({ close, mobile = false }: { close: () => void; mobile?: bo
         {editorial(user) && <ViewSwitch onSwitch={close} />}
         <div className="flex items-center gap-3">
           {mobile ? (
-            <span className="size-[54px] flex-none" />
+            <span className="size-12 flex-none" />
           ) : (
-            <Avatar user={user} className="size-10 border-2 border-white text-sm" />
+            <Avatar user={user} className="size-12 border-[5px] border-white text-sm" />
           )}
           <strong className="min-w-0 flex-1 line-clamp-2 break-words text-[15px] font-semibold leading-tight">
             {user.name}
