@@ -9,6 +9,7 @@ import {
   House,
   Library,
   LogOut,
+  PanelLeft,
   Plus,
   ScrollText,
   Settings,
@@ -374,6 +375,9 @@ function Login() {
 const navItem =
   'flex min-h-10 items-center justify-between gap-3 rounded-full px-3.5 py-1.5 text-[15px] transition-transform active:scale-[.98] max-[651px]:min-h-11';
 const groupLabel = 'px-3.5 text-sm font-bold text-ink';
+// 54px ring around a 38px avatar; 94px wide as the closed pill with the panel icon.
+const menuPill =
+  'flex h-[54px] items-center overflow-hidden rounded-full bg-white p-2 shadow-lg ease-out active:scale-95';
 
 function Layout() {
   const { user } = useSession();
@@ -392,24 +396,26 @@ function Layout() {
   const view: [View, (view: View) => void] = [editorialRoute ? 'redaktion' : preferredView, setView];
   return (
     <WorkspaceView.Provider value={view}>
-      <div data-workspace={view[0]} ref={setRoot}>
+      <div data-workspace={view[0]} ref={setRoot} className="group/shell">
         <a
           className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-full focus:bg-white focus:px-3 focus:py-2 focus:text-sm"
           href="#inhalt"
         >
           Zum Inhalt
         </a>
-        {/* ponytail: below 651px the sidebar is a full-screen Base UI dialog (focus trap, Esc, scroll lock) opened by the floating avatar;
+        {/* ponytail: below 651px the sidebar is a full-screen Base UI dialog (focus trap, Esc, scroll lock) opened by the floating avatar pill;
             no resize listener, so a phone rotated past 651px while open keeps the dialog until closed. */}
         <Dialog.Root open={menu} onOpenChange={setMenu}>
           <Dialog.Trigger
             aria-label="Menü öffnen"
-            className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-40 rounded-full shadow-lg transition-transform active:scale-95 min-[651px]:hidden"
+            // Hidden until the dialog unmounts, so this pill never shows through the one morphing inside it.
+            className={`${menuPill} fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-40 w-[94px] transition-transform group-has-[aside[role=dialog]]/shell:opacity-0 min-[651px]:hidden`}
           >
-            <Avatar user={user} className="size-12 border-[5px] border-white text-base" />
+            <MenuFace />
           </Dialog.Trigger>
           <Dialog.Portal container={root}>
-            {/* Shell stays put and click-through; only the inner panel slides, so the avatar stays on top of it.
+            {/* Shell stays put and click-through; only the inner panel slides, so the pill stays on top of it
+                and shrinks into the ring around the avatar.
                 Base UI waits only for animations on the popup itself, so the shell runs a near-invisible opacity
                 transition of the same 300ms to stay mounted while the panel slides out. */}
             <Dialog.Popup
@@ -422,9 +428,9 @@ function Layout() {
               </div>
               <Dialog.Close
                 aria-label="Menü schließen"
-                className="pointer-events-auto absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 rounded-full shadow-lg transition-transform active:scale-95"
+                className={`${menuPill} pointer-events-auto absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 w-[54px] transition-[width,scale] duration-300 group-data-[ending-style]:w-[94px] group-data-[starting-style]:w-[94px]`}
               >
-                <Avatar user={user} className="size-12 border-[5px] border-white text-base" />
+                <MenuFace iconClass="opacity-0 transition-opacity duration-300 group-data-[ending-style]:opacity-100 group-data-[starting-style]:opacity-100" />
               </Dialog.Close>
             </Dialog.Popup>
           </Dialog.Portal>
@@ -468,6 +474,16 @@ function Layout() {
   );
 }
 
+function MenuFace({ iconClass = '' }: { iconClass?: string }) {
+  const { user } = useSession();
+  return (
+    <>
+      <Avatar user={user} className="size-[38px] text-sm" />
+      <PanelLeft aria-hidden="true" className={`mx-2.5 size-5 flex-none ${iconClass}`} />
+    </>
+  );
+}
+
 // Shared by the desktop aside and the full-screen mobile dialog. The footer stays one row so it takes little scroll space.
 function SidebarBody({ close, mobile = false }: { close: () => void; mobile?: boolean }) {
   const { user } = useSession();
@@ -502,7 +518,7 @@ function SidebarBody({ close, mobile = false }: { close: () => void; mobile?: bo
         {editorial(user) && <ViewSwitch onSwitch={close} />}
         <div className="flex items-center gap-3">
           {mobile ? (
-            <span className="size-12 flex-none" />
+            <span className="size-[54px] flex-none" />
           ) : (
             <Avatar user={user} className="size-10 border-2 border-white text-sm" />
           )}
