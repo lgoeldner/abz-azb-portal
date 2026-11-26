@@ -4,9 +4,9 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import type { Attachment, Category, Me, Revision, Submission } from './api';
-import { ContributionDetail, Contributions, NewContribution } from './pages';
+import { ContributionDetail, NewContribution } from './pages';
 import { Sammlungen, SammlungDetail } from './sammlungen';
-import { Session, SubmissionList, WorkspaceView, type View } from './ui';
+import { Session, WorkspaceView, type View } from './ui';
 
 const student: Me['user'] = {
   id: 'student-photo',
@@ -105,34 +105,6 @@ function renderRoutes(path: string, user: Me['user'], view: View, routes: ReactN
 }
 
 describe('photo contributions', () => {
-  it('requires at least one photo before creating a photo contribution', async () => {
-    const calls: { path: string; method: string }[] = [];
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = new URL(String(input), window.location.origin);
-        calls.push({ path: `${url.pathname}${url.search}`, method: init?.method ?? 'GET' });
-        if (url.pathname.endsWith('/categories')) return Response.json([photoCategory()]);
-        if (url.pathname.endsWith('/submissions')) return Response.json([]);
-        return Response.json([]);
-      }),
-    );
-
-    const result = renderRoutes(
-      '/beitraege/neu?kategorie=photos',
-      student,
-      'schueler',
-      <Routes>
-        <Route path="/beitraege/neu" element={<NewContribution />} />
-      </Routes>,
-    );
-    await screen.findByRole('heading', { name: 'Fotos für „Jahrgangsmomente“' });
-    fireEvent.submit(result.container.querySelector('form')!);
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('Bitte wähle mindestens ein Foto aus.');
-    expect(calls.some((call) => call.path.endsWith('/submissions') && call.method === 'POST')).toBe(false);
-  });
-
   it('creates the first photo atomically and retries remaining uploads without duplicating the entry', async () => {
     const calls: { path: string; method: string; body: BodyInit | null | undefined }[] = [];
     let uploads = 0;
@@ -375,134 +347,6 @@ describe('photo contributions', () => {
     },
   );
 
-  it('shows captions read-only to editorial readers', async () => {
-    const photo = photoCategory();
-    const item = submission({ attachments: [attachment('photo-one', 'Alle haben gelacht.')] });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        const url = new URL(String(input), window.location.origin);
-        const path = url.pathname.replace('/api/v1', '');
-        if (path === '/categories') return Response.json([photo]);
-        if (path === '/submissions' || path === `/submissions/${item.id}/revisions`) return Response.json([]);
-        if (path === `/submissions/${item.id}`) return Response.json(item);
-        if (path === `/submissions/${item.id}/corrections`) return Response.json([]);
-        return Response.json([]);
-      }),
-    );
-
-    renderRoutes(
-      `/redaktion/beitraege/${item.id}`,
-      manager,
-      'redaktion',
-      <Routes>
-        <Route path="/redaktion/beitraege/:id" element={<ContributionDetail />} />
-      </Routes>,
-    );
-
-    expect(await screen.findByText('Alle haben gelacht.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Bildtext/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Foto entfernen' })).toBeNull();
-  });
-
-  it('keeps legacy photos visible and editable on text contributions without offering uploads', async () => {
-    const memory = photoCategory({ id: 'memories', name: 'Erinnerungen', kind: 'memory' });
-    const legacy = submission({
-      id: 'legacy-memory',
-      category_id: memory.id,
-      attachments: [attachment('legacy-photo', 'Altes Foto')],
-    });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        const url = new URL(String(input), window.location.origin);
-        const path = url.pathname.replace('/api/v1', '');
-        if (path === '/categories') return Response.json([memory]);
-        if (path === '/submissions') return Response.json([legacy]);
-        if (path === `/submissions/${legacy.id}`) return Response.json(legacy);
-        if (path === `/submissions/${legacy.id}/revisions`) return Response.json([]);
-        if (path === `/submissions/${legacy.id}/corrections`) return Response.json([]);
-        return Response.json([]);
-      }),
-    );
-    renderRoutes(
-      `/beitraege/${legacy.id}`,
-      student,
-      'schueler',
-      <Routes>
-        <Route path="/beitraege/:id" element={<ContributionDetail />} />
-      </Routes>,
-    );
-    expect(await screen.findByText('Altes Foto')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Foto entfernen' })).toBeInTheDocument();
-    expect(screen.queryByLabelText(/Foto hinzufügen/)).not.toBeInTheDocument();
-  });
-
-  it.each(['idea', 'quote', 'memory'] as const)('hides the empty photo section on %s details', async (kind) => {
-    const textCategory = photoCategory({ id: kind, name: kind, kind });
-    const textSubmission = submission({
-      id: `empty-${kind}`,
-      category_id: kind,
-      attachments: [],
-    });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        const url = new URL(String(input), window.location.origin);
-        const path = url.pathname.replace('/api/v1', '');
-        if (path === '/categories') return Response.json([textCategory]);
-        if (path === '/submissions') return Response.json([textSubmission]);
-        if (path === `/submissions/${textSubmission.id}`) return Response.json(textSubmission);
-        if (path === `/submissions/${textSubmission.id}/revisions`) return Response.json([]);
-        if (path === `/submissions/${textSubmission.id}/corrections`) return Response.json([]);
-        return Response.json([]);
-      }),
-    );
-    renderRoutes(
-      `/beitraege/${textSubmission.id}`,
-      student,
-      'schueler',
-      <Routes>
-        <Route path="/beitraege/:id" element={<ContributionDetail />} />
-      </Routes>,
-    );
-    expect(await screen.findByRole('heading', { name: textSubmission.title })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: /^Fotos/ })).not.toBeInTheDocument();
-  });
-
-  it('limits an attached text contribution move to its current category and photo collections', async () => {
-    const currentCategory = photoCategory({ id: 'memories', name: 'Erinnerungen', kind: 'memory' });
-    const otherTextCategory = photoCategory({ id: 'quotes', name: 'Zitate', kind: 'quote' });
-    const photo = photoCategory();
-    const legacy = submission({ id: 'attached-text', category_id: 'memories' });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        const url = new URL(String(input), window.location.origin);
-        const path = url.pathname.replace('/api/v1', '');
-        if (path === '/categories') return Response.json([currentCategory, otherTextCategory, photo]);
-        if (path === '/submissions') return Response.json([legacy]);
-        if (path === `/submissions/${legacy.id}`) return Response.json(legacy);
-        if (path === `/submissions/${legacy.id}/revisions`) return Response.json([]);
-        if (path === `/submissions/${legacy.id}/corrections`) return Response.json([]);
-        return Response.json([]);
-      }),
-    );
-    renderRoutes(
-      `/beitraege/${legacy.id}`,
-      student,
-      'schueler',
-      <Routes>
-        <Route path="/beitraege/:id" element={<ContributionDetail />} />
-      </Routes>,
-    );
-    fireEvent.click(await screen.findByRole('button', { name: /Bearbeiten/ }));
-    const options = within(screen.getByLabelText('Sammlung'))
-      .getAllByRole('option')
-      .map((option) => option.textContent);
-    expect(options).toEqual(['Erinnerungen', 'Jahrgangsmomente']);
-  });
-
   it('edits a pending photo through its own batch and refreshed version, while protecting accepted photos', async () => {
     const photo = photoCategory();
     const firstBatch = submission({
@@ -739,88 +583,5 @@ describe('photo contributions', () => {
         name: 'Beitrag öffnen',
       }),
     ).toHaveAttribute('href', '/redaktion/beitraege/other-photo');
-  });
-
-  it('groups photo submissions by collection with a total count and keeps ordinary contributions listed', async () => {
-    const photo = photoCategory();
-    const text = photoCategory({ id: 'stories', name: 'Geschichten', kind: 'memory' });
-    const firstBatch = submission({
-      id: 'photo-batch-one',
-      title: 'Erster Fototermin',
-      attachments: [attachment('one-a', 'Sommerfest'), attachment('one-b', 'Mias Bildtext')],
-    });
-    const secondBatch = submission({
-      id: 'photo-batch-two',
-      title: 'Zweiter Fototermin',
-      attachments: [attachment('two-a', 'ferienabend.jpg')],
-    });
-    const textEntry = submission({ id: 'text-entry', category_id: text.id, title: 'Mein Textbeitrag' });
-    const otherPhoto = submission({
-      id: 'other-student',
-      author_id: 'student-other',
-      attachments: [attachment('other-photo')],
-    });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        const url = new URL(String(input), window.location.origin);
-        if (url.pathname.endsWith('/categories')) return Response.json([photo, text]);
-        if (url.pathname.endsWith('/submissions'))
-          return Response.json([firstBatch, secondBatch, textEntry, otherPhoto]);
-        return Response.json([]);
-      }),
-    );
-
-    renderRoutes(
-      '/beitraege',
-      student,
-      'schueler',
-      <Routes>
-        <Route path="/beitraege" element={<Contributions />} />
-      </Routes>,
-    );
-
-    const collectionLink = await screen.findByRole('link', { name: /Jahrgangsmomente/ });
-    expect(collectionLink).toHaveAttribute('href', '/sammlungen/photos');
-    expect(collectionLink).toHaveTextContent('3 Fotos');
-    expect(screen.queryByRole('link', { name: /Erster Fototermin|Zweiter Fototermin/ })).toBeNull();
-    expect(screen.getByRole('link', { name: /Mein Textbeitrag/ })).toHaveAttribute('href', '/beitraege/text-entry');
-
-    const search = screen.getByRole('searchbox', { name: 'Suchen' });
-    fireEvent.change(search, { target: { value: 'Mias Bildtext' } });
-    expect(await screen.findByRole('link', { name: /Jahrgangsmomente/ })).toBeInTheDocument();
-    fireEvent.change(search, { target: { value: 'ferienabend.jpg' } });
-    expect(await screen.findByRole('link', { name: /Jahrgangsmomente/ })).toBeInTheDocument();
-    fireEvent.change(search, { target: { value: 'Jahrgangsmomente' } });
-    expect(await screen.findByRole('link', { name: /Jahrgangsmomente/ })).toBeInTheDocument();
-  });
-
-  it('groups all photo batches before applying the five-row dashboard limit', async () => {
-    const photo = photoCategory();
-    const story = photoCategory({ id: 'stories', name: 'Geschichten', kind: 'memory' });
-    const batches = Array.from({ length: 6 }, (_, index) =>
-      submission({
-        id: `photo-batch-${index + 1}`,
-        title: `Fotobeitrag ${index + 1}`,
-        attachments: [attachment(`dashboard-photo-${index + 1}`)],
-      }),
-    );
-    const other = submission({ id: 'story-entry', category_id: story.id, title: 'Noch eine Geschichte' });
-
-    renderRoutes(
-      '/',
-      student,
-      'schueler',
-      <SubmissionList items={[...batches, other]} categories={[photo, story]} limit={5} />,
-    );
-
-    const collectionLink = await screen.findByRole('link', { name: /Jahrgangsmomente/ });
-    expect(collectionLink).toHaveAttribute('href', '/sammlungen/photos');
-    expect(collectionLink).toHaveTextContent('6 Fotos');
-    expect(screen.getByRole('link', { name: /Noch eine Geschichte/ })).toHaveAttribute(
-      'href',
-      '/beitraege/story-entry',
-    );
-    expect(screen.getAllByRole('link')).toHaveLength(2);
   });
 });

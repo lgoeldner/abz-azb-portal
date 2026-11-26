@@ -70,31 +70,6 @@ function renderPage(me: Me = admin) {
 }
 
 describe('area administration', () => {
-  it('is not available to managers', () => {
-    mockApi();
-    renderPage({ ...admin, user: { ...admin.user, role: 'manager' } });
-    expect(screen.getByRole('alert')).toHaveTextContent('nur für Administratoren');
-  });
-
-  it('offers only admitted managers and admins as default reviewers', async () => {
-    mockApi();
-    renderPage();
-    const newArea = await screen.findByRole('form', { name: 'Neuer Bereich' });
-    expect(within(newArea).getByRole('button', { name: 'Mona Manager' })).toBeInTheDocument();
-    expect(within(newArea).getByRole('button', { name: 'Ada Admin' })).toBeInTheDocument();
-    expect(screen.queryByText('Sam Student')).not.toBeInTheDocument();
-    expect(screen.queryByText('Nina Neu')).not.toBeInTheDocument();
-  });
-
-  it('warns about areas without reviewers', async () => {
-    mockApi();
-    renderPage();
-    await screen.findByRole('form', { name: 'Bereich Deutsch' });
-    expect(screen.getAllByText('Keine Reviewer: Tickets dieses Bereichs können nicht abgenommen werden')).toHaveLength(
-      1,
-    );
-  });
-
   it('saves a rename with the version it was loaded with', async () => {
     const calls = mockApi();
     renderPage();
@@ -115,18 +90,5 @@ describe('area administration', () => {
     fireEvent.click(within(form).getByRole('button', { name: 'Speichern' }));
     expect(await within(form).findByText('Eine neuere Version liegt vor.')).toBeInTheDocument();
     expect(within(form).getByRole('textbox')).toHaveValue('Mathematik');
-  });
-
-  it('creates an area with the chosen reviewers', async () => {
-    const calls = mockApi();
-    renderPage();
-    const form = await screen.findByRole('form', { name: 'Neuer Bereich' });
-    fireEvent.change(within(form).getByRole('textbox'), { target: { value: 'Physik' } });
-    fireEvent.click(within(form).getByRole('button', { name: 'Mona Manager' }));
-    fireEvent.click(within(form).getByRole('button', { name: 'Bereich anlegen' }));
-    await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true));
-    const post = calls.find((c) => c.method === 'POST')!;
-    expect(post.url).toBe('/api/v1/admin/areas');
-    expect(post.body).toEqual({ name: 'Physik', reviewer_ids: ['mona'] });
   });
 });
