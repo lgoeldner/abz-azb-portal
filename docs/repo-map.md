@@ -177,8 +177,8 @@ test `deployables/portal/web/src/App.test.tsx` :: component tests (vitest), unan
 test `deployables/portal/web/src/PeoplePicker.test.tsx` :: search, chip placement/removal, limits and disabled candidates [person, picker]
 test `deployables/portal/web/src/sammlungen.test.tsx` :: overview repeatability groups, deadline order/chips, ended-poll collapse and class filtering; poll defaults, independent repeatability switches, proposal option authoring chips, candidate mode, count stepper, person/proposal multi-vote behavior, hide/delete permissions, saved-choice revisits, word-chip context menus and editorial isolation from the student stack [poll, ui]
 test `deployables/portal/web/e2e/portal.spec.ts` :: Playwright journeys against a running seeded app [e2e]
-test `deployables/portal/web/e2e/verwaltung.spec.ts` :: Verwaltung e2e [e2e, admin]
-test `deployables/portal/web/e2e/responsive.spec.ts` :: phone-width layout checks [e2e, responsive]
+test `deployables/portal/web/e2e/verwaltung.spec.ts` :: Redaktion creates every collection kind without admin requests [e2e, admin]
+test `deployables/portal/web/e2e/responsive.spec.ts` :: per-role overflow and navigation checks across viewport widths [e2e, responsive]
 
 ## Frontend routes
 
@@ -191,7 +191,6 @@ page /abstimmungen[/:id], /verwaltung/sammlungen, /verwaltung/rubriken, /admin :
 
 ## Domain rules
 
-test `deployables/portal/web/e2e/words.spec.ts` :: live word creation/cap, lowercase chips, student privacy, distinct merged counts, chip context menus for rename/exclude/restore, read-only manager CSV and responsive cloud [words, e2e, permissions]
 rule Sammlung = categories row; kind selects contribution or ballot content; independent repeatable permits one or many contributions/ballot entries per person; ongoing means manual close, otherwise required closes_at automatically closes; all kinds support draft/open/closed and hiding preserves data [sammlung, kind, repeatable, ongoing, deadline, lifecycle]
 rule Managers create all eight kinds with atomic creator grants, read all submissions and manage/annotate assigned categories; admins manage all categories and assign grants; only authors mutate pending originals and only admins see named ballots [permissions]
 rule Default dev login uses existing users.id UUIDs; legacy OIDC protocol fixtures derive subject=UUIDv5(display_slug) [login, fixtures]
@@ -215,7 +214,6 @@ test `deployables/portal/server/internal/portal/photo_submissions_test.go` :: at
 rule Only photo collections accept new images; image-bearing contributions cannot move into non-photo collections or change collection type away from photo; legacy non-photo images remain accessible. Photo collections require a validated image on creation and retain their last image; optional per-photo captions stay author-owned and versioned; legacy image-less originals remain accessible [photo, persistence, permissions]
 test `deployables/portal/web/src/quote.test.tsx` :: quote attribution/body/context payload, failed-save retry preservation and linked non-quote collection forms [quote, form, retry]
 test `deployables/portal/web/src/photo.test.tsx` :: photo-only creation/upload controls, multipart batch creation, retry safety, captions/history, per-photo version routing, one-time collection appends, grouped counts, own-photo privacy and read-only editorial gallery [photo, gallery, invariant]
-test `deployables/portal/web/e2e/photos.spec.ts` :: synthetic multi-batch collection gallery, responsive columns/no overflow, batch upload return and single collection list entry [photo, gallery, e2e]
 rule Photo collection navigation unifies upload batches: author lists link once per collection, uploads return to the collection gallery, photos open in a lightbox, pending captions remain editable in place, and removal asks for an inline confirmation; removing a batch's last photo withdraws the batch (withdrawn batches leave the student gallery) [photo, collection, batch]
 
 file `deployables/portal/web/src/EndDatePicker.tsx` :: accessible German DayPicker calendar, local time and today-relative 1d/1w/4w shortcuts, touch controls [date, calendar, poll, form]

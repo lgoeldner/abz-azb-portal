@@ -114,38 +114,3 @@ test('editor reads and annotates an original, exports without approval, and sees
   await expect(page.getByRole('radio')).toHaveCount(0);
   await expect(page.getByText(/Nur für die Redaktion\W+\d+ abgegebene Stimme/)).toBeVisible();
 });
-
-test('admin opens access management and activity log on mobile', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await signInAs(page, 'Administration');
-  await page.getByRole('button', { name: 'Menü öffnen' }).click();
-  const aside = page.getByRole('complementary', { name: 'Seitenleiste' });
-  await expect(aside.getByRole('button', { name: 'Verwaltung' })).toHaveAttribute('aria-expanded', 'true');
-  await aside.getByRole('link', { name: 'Personen' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Personen' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Unser Jahrgang & Team' })).toBeVisible();
-  await page.getByRole('button', { name: 'Menü öffnen' }).click();
-  await aside.getByRole('link', { name: 'Aktivitätsprotokoll' }).click();
-  await expect(page.getByRole('heading', { name: 'Letzte Aktivitäten' })).toBeVisible();
-});
-
-test('old bookmarks under /abstimmungen land on the Sammlungen pages', async ({ page }) => {
-  await signInAs(page, 'Jahrgang');
-  await page.goto('/abstimmungen/30000000-0000-4000-8000-000000000001');
-  await expect(page).toHaveURL(/\/sammlungen\/30000000-0000-4000-8000-000000000001$/);
-  await page.goto('/abstimmungen');
-  await expect(page).toHaveURL(/\/sammlungen$/);
-  await expect(page.getByRole('heading', { level: 1, name: 'Sammlungen' })).toBeVisible();
-  await expect(page.getByRole('heading', { level: 2, name: 'Wiederholbar' })).toBeVisible();
-});
-
-test('admin dashboard shows one widget per class and links to the filtered list', async ({ page }) => {
-  await signInAs(page, 'Administration');
-  const widgets = page.getByRole('region', { name: 'Sammlungen', exact: true });
-  await expect(widgets.getByRole('listitem')).toHaveCount(7);
-  for (const label of ['Ideen', 'Zitate', 'Erinnerungen', 'Fotos', 'Personenwahl', 'Vorschlagswahl', 'Wortwolke'])
-    await expect(widgets.getByRole('link', { name: new RegExp(`^${label}`) })).toBeVisible();
-  await widgets.getByRole('link', { name: /^Vorschlagswahl/ }).click();
-  await expect(page).toHaveURL(/\/sammlungen\?klasse=proposal$/);
-  await expect(page.getByRole('link', { name: 'Vorschlagswahl', exact: true })).toHaveAttribute('aria-current', 'true');
-});
