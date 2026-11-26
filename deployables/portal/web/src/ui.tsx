@@ -10,7 +10,7 @@ import {
   UserRound,
   type LucideIcon,
 } from 'lucide-react';
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useState, type ReactNode, type ComponentProps } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -413,6 +413,42 @@ export function Avatar({
     >
       {initialsOf(user.name) || '?'}
     </span>
+  );
+}
+/** Scrollable checkbox list of people with avatars (ticket assignees, collection editors). */
+export function PersonChecklist<T extends { id: string; name: string }>({
+  people,
+  checked,
+  onToggle,
+  name = (person) => person.name,
+  extra,
+  ...group
+}: {
+  people: T[];
+  checked: (person: T) => boolean;
+  onToggle: (person: T, checked: boolean) => void;
+  name?: (person: T) => string;
+  extra?: (person: T) => ReactNode;
+} & Pick<ComponentProps<'div'>, 'id' | 'role' | 'aria-label'>) {
+  return (
+    <div {...group} className="grid max-h-60 gap-0.5 overflow-y-auto rounded-ui border border-[#e9e9e7] bg-white p-1.5">
+      {people.map((p) => (
+        <label
+          key={p.id}
+          className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg px-2 text-sm hover:bg-soft"
+        >
+          <input
+            type="checkbox"
+            className="size-4 flex-none"
+            checked={checked(p)}
+            onChange={(e) => onToggle(p, e.target.checked)}
+          />
+          <Avatar user={p} />
+          <span className="min-w-0 flex-1 truncate">{name(p)}</span>
+          {extra?.(p)}
+        </label>
+      ))}
+    </div>
   );
 }
 export type TicketStatus = 'todo' | 'in_progress' | 'review' | 'done';
