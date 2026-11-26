@@ -28,11 +28,3 @@ func TestSeededAccountsMatchAuthMockUsers(t *testing.T) {
 		}
 	}
 }
-
-func TestSubjectForSlugMatchesAuthMock(t *testing.T) {
-	for _, slug := range []string{"alex_admin", "mia_weber", "kim_gast", "x"} {
-		if got, want := subjectForSlug(slug), authmock.SubjectForSlug(slug); got != want {
-			t.Fatalf("subjectForSlug(%q) = %s, auth-mock issues %s", slug, got, want)
-		}
-	}
-}

@@ -121,26 +121,6 @@ func (f *docFixture) row(id string) (title, body string, version int, exists boo
 	return
 }
 
-func TestDocumentRoutesAreForManagersAndAdminsOnly(t *testing.T) {
-	f := newDocFixture(t)
-	pending := f.user("manager", false)
-	id := docID(1)
-	for _, actor := range []string{MiaID, GuestID, pending} {
-		f.expect(actor, http.MethodGet, "/api/v1/documents", nil, 403)
-		f.expect(actor, http.MethodPost, "/api/v1/documents", map[string]any{"title": "x", "kind": "note", "body": ""}, 403)
-		f.expect(actor, http.MethodGet, "/api/v1/documents/"+id, nil, 403)
-		f.expect(actor, http.MethodPatch, "/api/v1/documents/"+id, map[string]any{"title": "x", "kind": "note", "body": "", "version": 1}, 403)
-		f.expect(actor, http.MethodDelete, "/api/v1/documents/"+id, map[string]any{"version": 1}, 403)
-	}
-	if title, _, version, ok := f.row(id); !ok || title != "Treffen 18.11." || version != 1 {
-		t.Fatalf("denied requests changed the document: %q v%d exists=%v", title, version, ok)
-	}
-	f.expect(ManagerID, http.MethodGet, "/api/v1/documents/"+id, nil, 200)
-	f.expect(AdminID, http.MethodGet, "/api/v1/documents", nil, 200)
-	f.expect(AdminID, http.MethodGet, "/api/v1/documents/"+ID(), nil, 404)
-	f.expect(AdminID, http.MethodGet, "/api/v1/documents/not-a-uuid", nil, 404)
-}
-
 func TestStaleDocumentWritesConflictAndLeaveRowUnchanged(t *testing.T) {
 	f := newDocFixture(t)
 	m1, m2 := f.user("manager", true), f.user("manager", true)

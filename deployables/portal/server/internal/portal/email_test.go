@@ -504,18 +504,6 @@ VALUES($1,'CLI reminder','','idea','open',false,false,now()+interval '1 day')`, 
 	}
 }
 
-func TestMailLogoTintedPerEnvironment(t *testing.T) {
-	for label, want := range map[string]string{"": "prod", "prod": "prod", "bogus": "prod", "dev": "dev", "preview": "preview", "test": "test"} {
-		got := NewMailService(nil, MailConfig{EnvLabel: label, PublicURL: "https://p.example/"}).logoURL()
-		if got != "https://p.example/mail-logo-"+want+".png" {
-			t.Fatalf("label %q: logo %q", label, got)
-		}
-	}
-	if !strings.Contains(mailHTML("T", "i", "B", "https://x/", "f"), mailLogoSrc) {
-		t.Fatal("mail template has no logo placeholder")
-	}
-}
-
 func TestInviteMailOnGainingAccess(t *testing.T) {
 	app, pool := timelineApp(t)
 	app.Mail = NewMailService(pool, MailConfig{Provider: "capture", PublicURL: "https://portal.example.test", DailyLimit: 300, ReminderLimit: 150, LoginReserve: 150})

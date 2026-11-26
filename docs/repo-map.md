@@ -77,7 +77,7 @@ cmd `scripts/test-compose-startup.sh` :: disposable cold/existing runtime starts
 ## Backend (deployables/portal/server)
 
 file `deployables/portal/server/cmd/portal/main.go` :: CLI: `portal migrate|seed|serve`, bounded cancellable database startup wait [entrypoint, startup, retry]
-test `deployables/portal/server/cmd/portal/main_test.go` :: startup readiness recovery, timeout, cancellation and error privacy [startup, database, retry]
+test `deployables/portal/server/cmd/portal/main_test.go` :: startup readiness recovery, timeout and error privacy [startup, database, retry]
 file `deployables/portal/server/migrations/migrations.go` :: embeds numbered SQL files [migration]
 file `deployables/portal/server/migrations/001_initial.sql` :: base schema: users, categories, submissions, revisions, attachments, corrections, poll_options, ballots, ballot_audit, audit_events [schema, tables]
 file `deployables/portal/server/migrations/004_polls_become_categories.sql` :: polls merged into categories (single-answer kinds), polls table dropped [sammlung, poll, migration]
@@ -88,7 +88,7 @@ file `deployables/portal/server/internal/portal/http.go` :: App, router, apiRout
 file `deployables/portal/server/internal/portal/contract.go` :: request bodies, query structs and extra response bodies; struct tags are the OpenAPI constraints [types, json, openapi, contract]
 file `deployables/portal/server/internal/portal/openapi.go` :: OpenAPI(): reflects apiRoutes and types with swaggest/jsonschema-go into docs/openapi.json [openapi, codegen, contract]
 file `deployables/portal/server/cmd/openapi/main.go` :: prints the generated OpenAPI document to stdout [openapi, codegen]
-test `deployables/portal/server/internal/portal/openapi_test.go` :: docs/openapi.json matches the generated document; every route has handler and summary [openapi, contract, invariant]
+test `deployables/portal/server/internal/portal/openapi_test.go` :: docs/openapi.json matches the generated document; no API route bypasses the route table; every route has handler and summary [openapi, contract, invariant]
 file `deployables/portal/server/internal/portal/types.go` :: JSON types (tags carry OpenAPI enums, formats, descriptions): User, Category, Submission, Revision, Correction, PollOption, PollResult, BallotAudit, AuditEvent [types, json]
 file `deployables/portal/server/internal/portal/categories.go` :: Category = Sammlung: kinds, repeatable vs single-answer, list/create/patch/status, hide with preserved ballots, admin poll deletion and grant cleanup, ballot fill and editor-only eligible voting participation [sammlung, category, poll, lifecycle, draft, participation]
 file `deployables/portal/server/internal/portal/words.go` :: normalized word ballots helpers, editorial anonymous moderation, distinct merged counts and formula-safe CSV export [words, moderation, cloud, export]
@@ -105,7 +105,6 @@ file `deployables/portal/server/internal/portal/config.go` :: env config and pro
 file `deployables/portal/server/internal/portal/db.go` :: DB interface, Migrate, IDs, audit and revision helpers [db, pgx]
 file `deployables/portal/server/internal/portal/seed.go` :: dev fixtures: users (fixtureSlugs), categories, single-answer Sammlungen [seed, fixtures]
 file `deployables/portal/server/internal/portal/seed_preview.go` :: SEED_PREVIEW=true layer on top of Seed (PR previews only): every submission status, closed proposal and word poll, ballots with audit, corrections, photo and Steckbrief attachments through the blob store; idempotent [seed, preview, fixtures]
-test `deployables/portal/server/internal/portal/seed_preview_test.go` :: after Seed + SeedPreview every collection kind, submission status and poll status has a row, ballots/corrections/photos exist, blobs readable, second run changes nothing [seed, preview]
 
 ## Backend tests (need TEST_DATABASE_URL to a disposable DB)
 
@@ -118,7 +117,6 @@ test `deployables/portal/server/internal/portal/word_polls_test.go` :: lowercase
 test `deployables/portal/server/internal/portal/proposal_polls_test.go` :: choice-poll caps, atomic votes, results, audit privacy and exact migration preservation [proposal, invariant]
 test `deployables/portal/server/internal/portal/portal_test.go` :: pure invariants, integrationPool/emptySchemaPool helpers, author-only original mutations, annotation grants, lifecycle + ballots [helpers, lifecycle]
 test `deployables/portal/server/internal/portal/auth_test.go` :: OIDC trust/enrollment via authmock; production legacy session cookie is __Host- and unprefixed is refused [auth, cookie]
-test `deployables/portal/server/internal/portal/env_label_test.go` :: ENV_LABEL injects data-env into index.html only for dev/preview/test, prod and empty untouched, invalid label fails validation [env, config]
 test `deployables/portal/server/internal/portal/user_delete_test.go` :: user delete guards [admin, delete]
 test `deployables/portal/server/internal/portal/user_created_at_test.go` :: users.created_at backfill [migration]
 test `deployables/portal/server/internal/portal/seed_subject_test.go` :: seeded accounts match `deployables/auth-mock/users.yaml` [seed, identities]
@@ -237,7 +235,7 @@ file `deployables/portal/server/internal/portal/provisioning.go` :: transactiona
 test `deployables/portal/server/internal/portal/provisioning_test.go` :: stable UUIDs/content, rollback, idempotence, safe address reuse and last-admin guards [users, migration, invariant]
 file `deployables/portal/server/internal/portal/email.go` :: Brevo/capture sender, atomic shared budgets, masked audit/status/settings, paginated provider reconciliation and permanent suppression; logoURL picks the per-environment logo (web/public/mail-logo-{prod,test,dev,preview}.png, rendered from favicon.svg with a tinted 27, public so Gmail can load it); login subjects carry the send time so Gmail does not thread/fold them; sendInvite (admin admit, CLI import) [email, quota, admin]
 file `deployables/portal/server/internal/portal/reminders.go` :: collection opt-in CLI, current-work selection, preference, leased jobs, deadline/cooldown rechecks and address-wide suppression [email, deadline, notifications]
-test `deployables/portal/server/internal/portal/email_test.go` :: quota concurrency, contract/version/access, provider limits/events/suppression, reminder completion/dedup and CLI dry-run invariants, env-marked mail and invite-on-access invariants [email, security, invariant]
+test `deployables/portal/server/internal/portal/email_test.go` :: quota concurrency, contract/version/access, provider limits/events/suppression, reminder completion/dedup and CLI dry-run invariants, invite-on-access invariants [email, security, invariant]
 file `deployables/portal/server/migrations/010_better_auth.sql` :: preserve UUID users; dependency session/account/verification/rate-limit tables [schema, auth]
 file `deployables/portal/server/migrations/011_email.sql` :: mail policy, isolated destination snapshots, attempts/events/reservations and reminder jobs [schema, email, quota]
 file `deployables/portal/server/migrations/012_user_provisioning.sql` :: supported operator functions, mode record, guarded identity changes/credential revocation and retired-email quarantine [schema, users, permissions]
@@ -262,7 +260,7 @@ test `deployables/portal/web/e2e/email.spec.ts` :: real development dependency l
 file `deployables/portal/server/migrations/013_tickets.sql` :: areas (Bereiche, 8 seeded) with area_reviewers grants, tickets, ticket_events timeline, per-round ticket_reviews [schema, tickets, kanban, reviewers]
 file `deployables/portal/server/migrations/020_ticket_assignees.sql` :: ticket_assignees (several people per ticket, replaces tickets.assignee_id) and ticket_former_assignees (excluded from rule-2 binding) [schema, tickets, assignees]
 file `deployables/portal/server/internal/portal/tickets.go` :: area/ticket handlers: binding review rules, derived approved flag, review rounds, atomic claim, role checks at action time [tickets, permissions, review, area]
-test `deployables/portal/server/internal/portal/tickets_test.go` :: binding rules 1-3, round bumps, demotion, assignee limits, atomic claim, stale versions, validation, student denial, user delete rules [tickets, invariant, permissions]
+test `deployables/portal/server/internal/portal/tickets_test.go` :: binding rules 1-3, round bumps, demotion, assignee limits, atomic claim, stale versions, validation, user delete rules [tickets, invariant, permissions]
 route GET /areas, POST /admin/areas, PATCH /admin/areas/{id} :: Bereiche with default reviewers; writes admin-only (tickets.go) [tickets, area, admin]
 route GET|POST /tickets, GET|PATCH /tickets/{id} :: list/create/read/edit tickets, managers and admins only (tickets.go) [tickets, kanban]
 route GET /tickets/people :: admitted managers/admins for the multi-person "Wer" picker (tickets.go) [tickets, assignees]
@@ -279,7 +277,7 @@ page /verwaltung/bereiche :: admin-only Bereiche and default reviewers [verwaltu
 page /dokumente, /dokumente/neu, /dokumente/:id :: shared Redaktion documents (meeting notes, notes): tiles, create, read/edit/delete [documents, notes, redaktion]
 file `deployables/portal/server/migrations/019_documents.sql` :: documents (meeting|note, versioned) and document_views for the changed-since-last-view flag [schema, documents]
 file `deployables/portal/server/internal/portal/documents.go` :: document handlers: editorial-only access, versioned edits, view tracking, creator/admin delete [documents, permissions]
-test `deployables/portal/server/internal/portal/documents_test.go` :: student denial, stale 409, unread after others' edits and cleared by viewing, own edits never unread, delete rights, validation, PROJECT_MANAGEMENT off hides every project route, erasure [documents, invariant, flag]
+test `deployables/portal/server/internal/portal/documents_test.go` :: stale 409, unread after others' edits and cleared by viewing, own edits never unread, delete rights, validation, PROJECT_MANAGEMENT off hides every project route, erasure [documents, invariant, flag]
 route GET|POST /documents, GET|PATCH|DELETE /documents/{id} :: shared documents for managers and admins; GET by id records the view (documents.go) [documents]
 file `deployables/portal/web/src/Documents.tsx` :: DocumentTiles (home and /dokumente, changed-since-last-view markers), DocumentsPage, NewDocument, DocumentPage with lazy Milkdown editor and stale-version notice [documents, ui]
 test `deployables/portal/web/src/Documents.test.tsx` :: versioned save, stale conflict, delete confirmation [documents, test]

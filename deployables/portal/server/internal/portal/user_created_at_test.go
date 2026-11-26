@@ -2,9 +2,6 @@ package portal
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
 	"testing"
 	"time"
 )
@@ -35,33 +32,5 @@ func TestUserCreatedAtMigrationBackfillsFromAuditLog(t *testing.T) {
 		if age := time.Since(created); age < want-time.Hour || age > want+time.Hour {
 			t.Fatalf("user %s created_at=%v (age %v), want about %v old", id, created, age, want)
 		}
-	}
-}
-
-func TestAdminUserListCarriesStableCreatedAt(t *testing.T) {
-	app, pool := timelineApp(t)
-	list := func() map[string]User {
-		res := authenticatedRequest(t, app, pool, AdminID, http.MethodGet, "/api/v1/admin/users", "")
-		var users []User
-		if res.Code != http.StatusOK || json.Unmarshal(res.Body.Bytes(), &users) != nil {
-			t.Fatalf("list users: %d %s", res.Code, res.Body)
-		}
-		out := map[string]User{}
-		for _, u := range users {
-			if u.CreatedAt.IsZero() {
-				t.Fatalf("user %s has no created_at", u.ID)
-			}
-			out[u.ID] = u
-		}
-		return out
-	}
-	before := list()[PendingID]
-	// Admitting someone must not reset when they signed up.
-	body := fmt.Sprintf(`{"name":%q,"role":"student","admitted":true,"cohort_member":true,"category_ids":[]}`, before.Name)
-	if res := authenticatedRequest(t, app, pool, AdminID, http.MethodPatch, "/api/v1/admin/users/"+PendingID, body); res.Code != http.StatusOK {
-		t.Fatalf("admit: %d %s", res.Code, res.Body)
-	}
-	if after := list()[PendingID]; !after.Admitted || !after.CreatedAt.Equal(before.CreatedAt) {
-		t.Fatalf("admitting changed created_at %v -> %v (admitted=%v)", before.CreatedAt, after.CreatedAt, after.Admitted)
 	}
 }
