@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
-tmp=$(mktemp -d)
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/backup-test.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/bin" "$tmp/uploads" "$tmp/repository" "$tmp/status"
 cat > "$tmp/bin/pg_dump" <<'SH'
