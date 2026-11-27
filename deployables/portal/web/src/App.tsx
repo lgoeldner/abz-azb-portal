@@ -20,7 +20,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   api,
@@ -268,9 +268,15 @@ function RedirectToSammlung() {
 const time = (value: string | null | undefined) => (value ? new Date(value).getTime() : 0);
 const statusOrder = { open: 0, draft: 1, closed: 2 } as const;
 
-function Mark({ className = 'size-8' }: { className?: string }) {
+// accent overrides the corner colour; default follows the workspace (red in Schüler, blue in Redaktion).
+function Mark({ className = 'size-8', accent }: { className?: string; accent?: string }) {
   return (
-    <svg aria-hidden="true" viewBox="0 0 40 40" className={`flex-none ${className}`}>
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 40 40"
+      className={`flex-none ${className}`}
+      style={accent ? ({ '--color-accent': accent } as CSSProperties) : undefined}
+    >
       <g transform="rotate(-7 20 20)">
         <path d="M5 4h30a2 2 0 0 1 2 2v28a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" className="fill-ink" />
         <path d="M37 6v11H26a2 2 0 0 1-2-2V4h11a2 2 0 0 1 2 2z" className="fill-accent" />
@@ -427,11 +433,11 @@ function Layout() {
         {/* Phones: account left, menu and mode right in one row; below 360px the menu sits above the mode pill.
             From 651px: the menu button sits above the account card's left edge. */}
         <div
-          className={`pointer-events-none fixed ${floatBottom} inset-x-4 z-40 flex items-end justify-between gap-2 *:pointer-events-auto min-[651px]:bottom-6 min-[651px]:left-6 min-[651px]:right-auto min-[651px]:w-[320px] min-[651px]:flex-col-reverse min-[651px]:items-stretch min-[651px]:gap-3`}
+          className={`pointer-events-none fixed ${floatBottom} inset-x-4 z-40 flex items-end justify-between gap-1.5 *:pointer-events-auto min-[651px]:bottom-6 min-[651px]:left-6 min-[651px]:right-auto min-[651px]:w-[320px] min-[651px]:flex-col-reverse min-[651px]:items-stretch min-[651px]:gap-3`}
         >
           <Dock />
           {editorial(user) && (
-            <div className="pointer-events-none flex items-end gap-2 *:pointer-events-auto max-[360px]:flex-col min-[651px]:flex-col min-[651px]:items-start">
+            <div className="pointer-events-none flex items-end gap-1.5 *:pointer-events-auto max-[360px]:flex-col min-[651px]:flex-col min-[651px]:items-start">
               <NavDrawer container={root} />
               <ModeFab />
             </div>
@@ -501,7 +507,7 @@ function Dock() {
       {/* Decorative; dropped on narrow phones so account pill, menu button and mode pill fit in one row. */}
       <Avatar
         user={user}
-        className={`size-12 border-[3px] border-white text-sm ring-1 ring-black/10 [grid-area:avatar] max-[360px]:hidden ${editor ? 'max-[420px]:hidden' : ''}`}
+        className={`size-12 border-[3px] border-white text-sm ring-1 ring-black/10 [grid-area:avatar] max-[360px]:hidden ${editor ? 'max-[398px]:hidden' : ''}`}
       />
       <strong className="line-clamp-2 min-w-0 break-words px-1 text-[15px] font-semibold leading-tight [grid-area:name] max-[651px]:sr-only">
         {user.name}
@@ -535,7 +541,7 @@ const modes = {
 };
 const motion = 'duration-200 ease-out motion-reduce:transition-none';
 // Text pill, 48px tall and as wide as the longer label, so the whole pill is the tap target.
-const modePill = 'flex h-12 w-full items-center justify-center rounded-full px-5 text-lg font-bold active:scale-95';
+const modePill = 'flex h-12 w-full items-center justify-center rounded-full px-3 text-lg font-bold active:scale-95';
 
 // Redaktionsmenü for editors in both views, blue like the Redaktion mode: a bottom sheet on phones; from 651px a floating card as wide as the account card, opening over its trigger.
 // Static links only; individual Abstimmungen and Beiträge stay on their list pages.
@@ -560,15 +566,16 @@ function NavDrawer({ container }: { container: HTMLElement | null }) {
       <Drawer.Portal container={container}>
         <Drawer.Backdrop className="fixed inset-0 z-50 bg-black/40 transition-opacity duration-300 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none min-[651px]:bg-transparent" />
         <Drawer.Viewport className="fixed inset-0 z-50">
-          {/* ponytail: bottom-[150px] = 24px offset + 114px editor account card + 12px gap, so the card opens over the menu pill; follow the Dock if it changes. */}
-          <Drawer.Popup className="absolute inset-x-0 bottom-0 flex max-h-[85dvh] flex-col rounded-t-[30px] bg-white text-ink shadow-lg outline-none [--color-pill:#e4e6e9] transition-[transform,opacity] duration-300 ease-out [transform:translateY(var(--drawer-swipe-movement-y,0px))] data-[swiping]:transition-none motion-reduce:transition-none max-[651px]:pb-[env(safe-area-inset-bottom)] max-[651px]:data-[ending-style]:[transform:translateY(100%)] max-[651px]:data-[starting-style]:[transform:translateY(100%)] min-[651px]:bottom-[150px] min-[651px]:left-6 min-[651px]:right-auto min-[651px]:max-h-[calc(100dvh-174px)] min-[651px]:w-[320px] min-[651px]:rounded-[30px] min-[651px]:data-[ending-style]:opacity-0 min-[651px]:data-[starting-style]:opacity-0 min-[651px]:data-[ending-style]:[transform:translateY(1rem)] min-[651px]:data-[starting-style]:[transform:translateY(1rem)]">
+          {/* ponytail: bottom-[150px] = 24px offset + 114px editor account card + 12px gap, so the card opens over the menu pill; follow the Dock if it changes.
+              Phones: the ::after block continues the sheet below its edge, so the upward rubber band never shows the page. */}
+          <Drawer.Popup className="absolute inset-x-0 bottom-0 flex max-h-[85dvh] flex-col rounded-t-[30px] bg-white text-ink shadow-lg outline-none [--color-pill:#e4e6e9] transition-[transform,opacity] duration-300 ease-out [transform:translateY(var(--drawer-swipe-movement-y,0px))] data-[swiping]:transition-none motion-reduce:transition-none max-[651px]:pb-[env(safe-area-inset-bottom)] max-[651px]:after:absolute max-[651px]:after:inset-x-0 max-[651px]:after:top-full max-[651px]:after:h-[50dvh] max-[651px]:after:bg-white max-[651px]:data-[ending-style]:[transform:translateY(100%)] max-[651px]:data-[starting-style]:[transform:translateY(100%)] min-[651px]:bottom-[150px] min-[651px]:left-6 min-[651px]:right-auto min-[651px]:max-h-[calc(100dvh-174px)] min-[651px]:w-[320px] min-[651px]:rounded-[30px] min-[651px]:data-[ending-style]:opacity-0 min-[651px]:data-[starting-style]:opacity-0 min-[651px]:data-[ending-style]:[transform:translateY(1rem)] min-[651px]:data-[starting-style]:[transform:translateY(1rem)]">
             <span
               aria-hidden="true"
               className="mx-auto mt-2.5 h-1.5 w-10 flex-none rounded-full bg-pill min-[651px]:hidden"
             />
             <div className="flex min-h-[60px] flex-none items-center justify-between py-1.5 pl-3 pr-1.5">
               <Drawer.Title className="flex items-center gap-2.5 text-xl font-extrabold tracking-tight">
-                <Mark className="size-9" />
+                <Mark className="size-9" accent="var(--color-redaktion)" />
                 Redaktionsmenü
               </Drawer.Title>
               <Drawer.Close
