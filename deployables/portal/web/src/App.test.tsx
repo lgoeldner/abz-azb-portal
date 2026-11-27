@@ -714,7 +714,9 @@ describe('navigation by view', () => {
         submission('s3', 'memory', 'someone-else'),
       ],
     });
-    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Hey Mia. 4 Abstimmungen warten.');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Hey Mia. 4 Abstimmungen warten.' }),
+    ).toBeInTheDocument();
     const main = screen.getByRole('main');
     const voting = within(main).getByRole('region', { name: 'Jetzt dran' });
     const submissionQueue = within(main).getByRole('region', { name: 'Wiederholbar' });

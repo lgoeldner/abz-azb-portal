@@ -389,8 +389,9 @@ function Layout() {
   useEffect(() => {
     if (landing) return;
     if (!viewByEntry.has(location.key)) viewByEntry.set(location.key, view);
-    setView(view);
-  }, [landing, location.key, view, setView, viewByEntry]);
+    // Only editors have a view to remember; a student must not reset it for an editor on the same browser.
+    if (editorial(user)) setView(view);
+  }, [landing, location.key, view, setView, viewByEntry, user]);
   if (landing) return <Navigate to="/redaktion" replace />;
   return (
     <WorkspaceView.Provider value={[view, setView]}>

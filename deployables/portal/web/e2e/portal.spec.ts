@@ -37,7 +37,10 @@ test('student signs in, submits a contribution, and returns to the open ballots'
 test('back navigation restores the Schüler or Redaktion view of each page', async ({ page }) => {
   await signInAs(page, 'Redaktion');
   await expect(page).toHaveURL(/\/redaktion$/);
-  await page.getByRole('region', { name: 'Meine Abstimmungen' }).getByRole('link', { name: 'Alle' }).click();
+  await page
+    .getByRole('region', { name: 'Meine Abstimmungen' })
+    .getByRole('link', { name: 'Alle', exact: true })
+    .click();
   await expect(page.getByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeVisible();
   const account = page.getByRole('region', { name: 'Konto' });
   await account.getByRole('button', { name: 'Schüler' }).click();
@@ -142,8 +145,17 @@ test('old bookmarks under /abstimmungen land on the Abstimmungen pages', async (
 test('admin dashboard shows one widget per class and links to the filtered list', async ({ page }) => {
   await signInAs(page, 'Administration');
   const widgets = page.getByRole('region', { name: 'Abstimmungen', exact: true });
-  await expect(widgets.getByRole('listitem')).toHaveCount(7);
-  for (const label of ['Ideen', 'Zitate', 'Erinnerungen', 'Fotos', 'Personenwahl', 'Auswahl', 'Wortwolke'])
+  await expect(widgets.getByRole('listitem')).toHaveCount(8);
+  for (const label of [
+    'Ideen',
+    'Zitate',
+    'Erinnerungen',
+    'Fotos',
+    'Steckbrief',
+    'Personenwahl',
+    'Auswahl',
+    'Wortwolke',
+  ])
     await expect(widgets.getByRole('link', { name: new RegExp(`^${label}`) })).toBeVisible();
   await widgets.getByRole('link', { name: /^Auswahl/ }).click();
   await expect(page).toHaveURL(/\/sammlungen\?klasse=proposal$/);
