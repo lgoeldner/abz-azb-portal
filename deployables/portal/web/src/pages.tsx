@@ -119,7 +119,11 @@ function QuoteCitation({ s, caption, onEdit }: { s: Submission; caption: string;
       <span className={`${label} quote-writing-label`}>
         <span className="flex items-baseline justify-between gap-3">
           {caption}
-          {onEdit && <span className="text-sm font-semibold text-muted">Bearbeiten ✎</span>}
+          {onEdit && (
+            <span className="text-sm font-semibold text-muted">
+              Bearbeiten <span aria-hidden="true">✎</span>
+            </span>
+          )}
         </span>
         <QuotePaper>
           <span className="quote-text">{s.body || 'Kein Text hinzugefügt.'}</span>
@@ -739,7 +743,8 @@ export function ContributionDetail() {
       >
         ← {isRedaktion ? 'Zur Sammlung' : own ? 'Meine Beiträge' : 'Redaktion'}
       </Link>
-      <PageHead title={s.title} action={<Badge status={s.status} />}>
+      {/* A quote's title is its attribution, already shown under the citation. */}
+      <PageHead title={isQuote ? (categoryName ?? 'Zitat') : s.title} action={<Badge status={s.status} />}>
         <span className="flex flex-wrap gap-x-2">
           {categoryName && <span>{categoryName}</span>}
           <span>Von {s.author_name}</span>

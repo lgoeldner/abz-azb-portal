@@ -466,7 +466,7 @@ describe('photo contributions', () => {
         <Route path="/beitraege/:id" element={<ContributionDetail />} />
       </Routes>,
     );
-    expect(await screen.findByRole('heading', { name: textSubmission.title })).toBeInTheDocument();
+    expect(await screen.findByText(textSubmission.title)).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /^Fotos/ })).not.toBeInTheDocument();
   });
 
