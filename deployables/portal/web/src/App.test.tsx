@@ -382,6 +382,42 @@ describe('verwaltung', () => {
     expect(document.querySelector('a[href="/verwaltung/sammlungen"]')).toBeNull();
   });
 
+  it.each([
+    ['admin', admin, true],
+    ['manager', editor, false],
+  ])('the Redaktion menu lists static pages; Verwaltung only for admins (%s)', async (_role, me, verwaltung) => {
+    localStorage.clear();
+    mount('/redaktion', me);
+    fireEvent.click(await screen.findByRole('button', { name: 'Redaktionsmenü' }));
+    const menu = await screen.findByRole('navigation', { name: 'Redaktionsmenü' });
+    const hrefs = within(menu)
+      .getAllByRole('link')
+      .map((a) => a.getAttribute('href'));
+    expect(hrefs).toEqual(
+      expect.arrayContaining(['/redaktion', '/sammlungen?neu', '/sammlungen', '/redaktion/beitraege']),
+    );
+    expect(hrefs.some((href) => /^\/(sammlungen|redaktion\/beitraege)\/./.test(href ?? ''))).toBe(false);
+    expect(within(menu).queryByRole('group', { name: 'Verwaltung' }) !== null).toBe(verwaltung);
+    expect(hrefs.includes('/verwaltung/personen')).toBe(verwaltung);
+    fireEvent.click(within(menu).getByRole('link', { name: 'Alle Beiträge' }));
+    await waitFor(() => expect(screen.queryByRole('navigation', { name: 'Redaktionsmenü' })).toBeNull());
+  });
+
+  it('offers the Redaktion menu to editors in the Schüler view too, but never to students', async () => {
+    mount('/', guest);
+    await screen.findByRole('region', { name: 'Konto' });
+    expect(screen.queryByRole('button', { name: 'Redaktionsmenü' })).toBeNull();
+    cleanup();
+    localStorage.setItem('view', 'schueler');
+    mount('/', editor);
+    fireEvent.click(await screen.findByRole('button', { name: 'Redaktionsmenü' }));
+    const menu = await screen.findByRole('navigation', { name: 'Redaktionsmenü' });
+    fireEvent.click(within(menu).getByRole('link', { name: 'Alle Abstimmungen' }));
+    // The Schüler view would redirect /sammlungen to /, so the menu must switch to Redaktion first.
+    expect(await screen.findByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeInTheDocument();
+    expect(document.querySelector('[data-workspace="redaktion"]')).toBeInTheDocument();
+  });
+
   it('filters people with the quick filter chips', async () => {
     mount('/verwaltung/personen');
     await screen.findByText('Gast Gerda');
