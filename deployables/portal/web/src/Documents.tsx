@@ -104,14 +104,14 @@ function Tiles({ docs, limit }: { docs: Document[]; limit?: number }) {
   );
 }
 
-/** Home page tiles. With limit only that many show, plus a link to all of them. */
+/** Home page tiles, folded unless something changed. With limit only that many show, plus a link to all of them. */
 export function DocumentTiles({ limit }: { limit?: number }) {
   const docs = useData<Document[]>('/documents');
   return (
-    <section aria-labelledby="doc-tiles">
-      <h2 id="doc-tiles" className="mb-3 text-xl font-extrabold tracking-tight">
-        Dokumente
-      </h2>
+    <details open={Boolean(docs.error) || Boolean(docs.data?.some((doc) => doc.unread))}>
+      <summary className="min-h-11 cursor-pointer py-2">
+        <h2 className="inline text-xl font-extrabold tracking-tight">Dokumente</h2>
+      </summary>
       {docs.error ? (
         <Failure error={docs.error} retry={() => docs.refetch()} />
       ) : !docs.data ? (
@@ -119,7 +119,7 @@ export function DocumentTiles({ limit }: { limit?: number }) {
       ) : (
         <Tiles docs={docs.data} limit={limit} />
       )}
-    </section>
+    </details>
   );
 }
 

@@ -13,6 +13,9 @@
   --color-pop: #c8f23c;
   --color-accent: #d81e44;
   --color-accent-dark: #b01236;
+  /* Actions that lead into the Redaktion are blue in both views. */
+  --color-redaktion: #1d5fbf;
+  --color-redaktion-dark: #16488e;
   --color-ok: #1f6b3a;
   --color-ok-tint: #d9f2d0;
   --color-wait: #7a5200;

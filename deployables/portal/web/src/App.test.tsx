@@ -1282,7 +1282,7 @@ describe('editor home', () => {
 
   it('shows every writable poll across lifecycle states and counts only assigned collections', async () => {
     const fetchMock = mountEditor();
-    const assigned = await screen.findByRole('region', { name: 'Deine Abstimmungen' });
+    const assigned = await screen.findByRole('region', { name: 'Meine Abstimmungen' });
     await within(assigned).findByRole('link', { name: /Laufende Wahl/ });
     const links = within(assigned)
       .getAllByRole('link')
@@ -1332,7 +1332,7 @@ describe('editor home', () => {
 
   it('shows assignment empty states while keeping all readable collections accessible', async () => {
     mountEditor([]);
-    const assigned = await screen.findByRole('region', { name: 'Deine Abstimmungen' });
+    const assigned = await screen.findByRole('region', { name: 'Meine Abstimmungen' });
     await waitFor(() => expect(within(assigned).queryByRole('list')).toBeNull());
     expect(await within(assigned).findByRole('link', { name: /Neue Abstimmung/ })).toHaveAttribute(
       'href',
@@ -1372,7 +1372,7 @@ describe('editor home', () => {
   it('keeps the personal student dashboard when a manager selects Schüler mode', async () => {
     const fetchMock = mountEditor(undefined, { view: 'schueler' });
     await screen.findByRole('heading', { level: 1, name: /Hey Mia/ });
-    expect(screen.queryByRole('region', { name: 'Deine Abstimmungen' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Meine Abstimmungen' })).toBeNull();
     expect(screen.getByRole('region', { name: 'Jetzt dran' })).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([path]) => String(path).includes('/admin/'))).toBe(false);
     localStorage.clear();
@@ -1479,17 +1479,21 @@ describe('sammlungen', () => {
     return calls;
   }
 
-  it('sends students from the list to the dashboard with ended collections but no drafts', async () => {
+  it('sends students from the list to the dashboard without drafts or editorial buttons', async () => {
     mount('/sammlungen');
-    const main = screen.getByRole('main', { hidden: true });
-    const summary = await screen.findByText(/Erledigt und beendet/);
-    const finished = summary.closest('details')!;
-    expect(within(finished).getByRole('link', { hidden: true, name: /Altlast/ })).toHaveAttribute(
-      'href',
-      '/sammlungen/alt',
-    );
-    expect(main).not.toHaveTextContent('Geheimer Entwurf');
+    await screen.findByRole('heading', { level: 1, name: /Hey/ });
+    expect(screen.getByRole('main', { hidden: true })).not.toHaveTextContent('Geheimer Entwurf');
     expect(screen.queryByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Zum Redaktionsbereich|Neue Abstimmung/ })).toBeNull();
+  });
+
+  it.each([
+    ['Zum Redaktionsbereich', 'Redaktion'],
+    ['Neue Abstimmung', 'Neue Abstimmung'],
+  ])('takes a manager in Schüler view through „%s“ into the Redaktion', async (button, title) => {
+    mount('/', manager, all, 'schueler');
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(button) }));
+    expect(await screen.findByRole('heading', { level: 1, name: title })).toBeInTheDocument();
   });
 
   it('shows drafts and the create button to managers', async () => {

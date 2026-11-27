@@ -46,6 +46,7 @@ import {
   PageHead,
   Session,
   SubmissionList,
+  card,
   btn,
   allKinds,
   Avatar,
@@ -911,6 +912,13 @@ function Overview() {
 
 function StudentHome() {
   const { user } = useSession();
+  const [, setView] = useWorkspaceView();
+  const navigate = useNavigate();
+  // Editorial routes render nothing for the student view, so switch the view first.
+  const toRedaktion = (to: string) => {
+    setView('redaktion');
+    navigate(to);
+  };
   const categories = useData<Category[]>('/categories');
   const submissions = useData<Submission[]>('/submissions');
   const myBallots = useData<MyBallot[]>('/me/ballots');
@@ -928,10 +936,6 @@ function StudentHome() {
     .sort(newestOpened);
   const todo = [...todoBallots, ...oneOffContributions];
   const waiting = [...todo, ...repeatableContributions];
-  // Everything else students can still open: saved votes, own one-off entries and ended collections.
-  const finished = (categories.data ?? [])
-    .filter((c) => c.status !== 'draft' && !waiting.some((w) => w.id === c.id))
-    .sort(newestOpened);
   const title =
     categories.data && submissions.data
       ? waiting.length === 0
@@ -940,7 +944,16 @@ function StudentHome() {
       : `Hey ${first}.`;
   return (
     <>
-      <PageHead title={title}>
+      <PageHead
+        title={title}
+        action={
+          editorial(user) && (
+            <button type="button" className={btn.redaktion} onClick={() => toRedaktion('/')}>
+              Zum Redaktionsbereich <Arrow />
+            </button>
+          )
+        }
+      >
         {waiting.length > 0
           ? 'Deine Stimme und deine Geschichten machen unsere Abizeitung.'
           : 'Vielleicht fällt dir noch eine Geschichte ein, die in die Abizeitung gehört.'}
@@ -956,19 +969,24 @@ function StudentHome() {
           ) : categories.error ? (
             <Failure error={categories.error} retry={() => categories.refetch()} />
           ) : todo.length === 0 ? (
-            <Empty>
-              Gerade gibt es keine neuen Aufgaben. Gespeicherte Stimmen änderst du unter „Erledigt und beendet“.
-            </Empty>
+            <Empty>Gerade gibt es keine neuen Aufgaben. Gespeicherte Stimmen änderst du unter „Meine Beiträge“.</Empty>
           ) : (
             <PollStack items={todo} />
           )}
         </div>
       </section>
 
-      <section aria-labelledby="home-wiederholbar" className="mt-10">
-        <h2 id="home-wiederholbar" className={heading}>
-          Wiederholbar
-        </h2>
+      <section aria-labelledby="home-wiederholbar" className="mt-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="home-wiederholbar" className={heading}>
+            Wiederholbar
+          </h2>
+          {editorial(user) && (
+            <button type="button" className={`${btn.redaktion} ml-auto`} onClick={() => toRedaktion('/sammlungen?neu')}>
+              <Plus aria-hidden="true" className="size-4 shrink-0" /> Neue Abstimmung
+            </button>
+          )}
+        </div>
         <div className="mt-4">
           {categories.isPending ? (
             <Loading />
@@ -1018,49 +1036,10 @@ function StudentHome() {
         </div>
       </section>
 
-      {finished.length > 0 && !submissions.isPending && (
-        <details className="mt-10 rounded-ui bg-white">
-          <summary className="cursor-pointer px-5 py-4 text-[15px] font-semibold">
-            Erledigt und beendet ({finished.length})
-          </summary>
-          <ul className="divide-y divide-line border-t border-line">
-            {finished.map((c) => (
-              <li key={c.id}>
-                <Link to={`/sammlungen/${c.id}`} className="flex items-center gap-4 px-5 py-3 hover:bg-pop/30">
-                  <KindIcon icon={kindIcon[c.kind]} className="size-4 text-muted" />
-                  <span className="min-w-0 flex-1">
-                    <strong className="line-clamp-2 break-words text-[15px] font-semibold">{c.name}</strong>
-                    <span className="block text-[13px] text-muted">
-                      {kindLabel[c.kind]} ·{' '}
-                      {c.status === 'closed'
-                        ? 'Beendet'
-                        : hasVoted(c)
-                          ? 'Abgestimmt'
-                          : own.some((s) => s.category_id === c.id)
-                            ? 'Eingereicht'
-                            : 'Offen'}
-                      {c.status === 'open' && c.closes_at && ` · Bis ${day(c.closes_at)}`}
-                    </span>
-                  </span>
-                  <Arrow />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-
       <section aria-labelledby="home-beitraege" className="mt-10">
-        <div className="flex items-baseline justify-between gap-4">
-          <h2 id="home-beitraege" className={heading}>
-            Deine Beiträge
-          </h2>
-          {(own.length > 0 || ownBallots.length > 0) && (
-            <Link to="/beitraege" className={btn.text}>
-              Alle ansehen <Arrow />
-            </Link>
-          )}
-        </div>
+        <h2 id="home-beitraege" className={heading}>
+          Deine Beiträge
+        </h2>
         <div className="mt-4">
           {submissions.isPending || categories.isPending || myBallots.isPending ? (
             <Loading />
@@ -1074,7 +1053,12 @@ function StudentHome() {
               }}
             />
           ) : own.length || ownBallots.length ? (
-            <SubmissionList items={own} categories={categories.data ?? []} ballots={ownBallots} limit={10} />
+            <>
+              <SubmissionList items={own} categories={categories.data ?? []} ballots={ownBallots} limit={3} />
+              <Link to="/beitraege" className={`${btn.text} mt-4 min-h-11`}>
+                Meine Beiträge <Arrow />
+              </Link>
+            </>
           ) : (
             <Empty>Die erste Geschichte wartet auf dich. Such dir oben eine Abstimmung aus.</Empty>
           )}
@@ -1106,7 +1090,6 @@ function EditorialHome() {
   const writableCategoryIds = new Set((categories.data ?? []).filter((c) => canEdit(user, c.id)).map((c) => c.id));
   const writableSubmissions = (submissions.data ?? []).filter((s) => writableCategoryIds.has(s.category_id));
   const recentSubmissions = writableSubmissions.toSorted((a, b) => time(b.created_at) - time(a.created_at)).slice(0, 3);
-  const card = 'flex min-w-0 flex-col rounded-ui bg-white p-5 sm:p-6';
   const figure = 'block text-4xl font-extrabold tabular-nums leading-none tracking-tight';
   const state = (q: { isPending: boolean; error: Error | null; refetch: () => unknown }) =>
     q.isPending ? (
@@ -1143,6 +1126,114 @@ function EditorialHome() {
       .slice(0, 2)
       .join('')
       .toUpperCase();
+  const collections = (
+    <section aria-labelledby="home-neueste" className={card}>
+      <div className="flex items-baseline justify-between gap-4">
+        <h2 id="home-neueste" className={`${heading} flex items-center gap-2`}>
+          <Vote aria-hidden="true" className="size-[18px] shrink-0" />
+          {isAdmin ? 'Neueste Abstimmungen' : 'Meine Abstimmungen'}
+        </h2>
+        <Link to="/sammlungen" className={btn.text}>
+          Alle <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
+        </Link>
+      </div>
+      {state(categories) ??
+        (latest.length === 0 ? (
+          <div className="mt-4">
+            {isAdmin ? (
+              <Empty>Noch keine Abstimmung.</Empty>
+            ) : (
+              <Empty>Dir sind noch keine Abstimmungen zugewiesen.</Empty>
+            )}
+          </div>
+        ) : (
+          <ul className="mt-3 divide-y divide-line">
+            {latest.map((c) => {
+              const participation = isBallot(c.kind) ? c.participation : null;
+              const showParticipation = Boolean(participation);
+              const voted = participation?.voted ?? 0;
+              const eligible = participation?.eligible ?? 0;
+              const percent = eligible === 0 ? 0 : Math.max(0, Math.min(100, (voted / eligible) * 100));
+              return (
+                <li key={c.id} className="min-w-0">
+                  <Link
+                    to={`/sammlungen/${c.id}`}
+                    className={`-mx-2 flex gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30 ${showParticipation ? 'items-start' : 'items-center'}`}
+                  >
+                    <KindIcon
+                      icon={kindIcon[c.kind]}
+                      className={`size-4 shrink-0 text-muted ${showParticipation ? 'mt-1' : ''}`}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <strong className="line-clamp-2 min-w-0 flex-1 break-words text-[15px] font-semibold leading-snug">
+                          {c.name}
+                        </strong>
+                        {isBallot(c.kind) && <Badge status={c.status} />}
+                      </span>
+                      <span className="block text-[13px] text-muted">
+                        {[kindLabel[c.kind], c.status === 'open' && isBallot(c.kind) ? since(c.opened_at) : '']
+                          .filter(Boolean)
+                          .join(', ')}
+                      </span>
+                      {showParticipation && (
+                        <span className="mt-2 block">
+                          <span className="flex items-center gap-1 text-[12px] leading-4 text-muted">
+                            <span className="tabular-nums">
+                              {voted} von {eligible}
+                            </span>{' '}
+                            abgestimmt
+                          </span>
+                          <span
+                            role="progressbar"
+                            aria-label={`Wahlbeteiligung: ${c.name}`}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-valuenow={percent}
+                            aria-valuetext={`${voted} von ${eligible} Personen abgestimmt (${Math.round(percent)} %)`}
+                            className="mt-1 block h-1.5 overflow-hidden rounded-full"
+                            style={{ backgroundColor: '#e5e7eb' }}
+                          >
+                            <span
+                              aria-hidden="true"
+                              className="block h-full rounded-full"
+                              style={{ width: `${percent}%`, backgroundColor: participationColor(percent) }}
+                            />
+                          </span>
+                        </span>
+                      )}
+                    </span>
+                    {showParticipation && (
+                      <span className="w-24 flex-none whitespace-nowrap pt-0.5 text-right">
+                        <strong className="block text-3xl font-extrabold tabular-nums leading-none tracking-tight">
+                          {Math.round(percent)}%
+                        </strong>
+                        <span className="mt-1 block text-[12px] font-normal leading-4 text-muted">Teilgenommen</span>
+                      </span>
+                    )}
+                  </Link>
+                  <DevDebug
+                    label="Abstimmung"
+                    data={{
+                      id: c.id,
+                      status: c.status,
+                      kind: c.kind,
+                      version: c.version,
+                      options: c.options.length,
+                    }}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        ))}
+      {!isAdmin && (
+        <Link to="/sammlungen?neu" className={`${btn.redaktion} mt-5`}>
+          <Plus aria-hidden="true" className="size-4 shrink-0" /> Neue Abstimmung
+        </Link>
+      )}
+    </section>
+  );
   return (
     <>
       <PageHead title="Redaktion">
@@ -1152,22 +1243,25 @@ function EditorialHome() {
             ? undefined
             : 'Überblick über Rubriken und Beiträge aus den Abstimmungen, die dir zugewiesen sind.'}
       </PageHead>
+      {/* DOM order puts the tasks first on phones. */}
+      <div className={`mb-10 grid items-start gap-4 ${projects ? 'lg:grid-cols-2' : ''}`}>
+        {projects && <MyTasks user={session} />}
+        {collections}
+      </div>
       {projects && (
-        <>
-          <div className="mb-10">
-            <MyTasks user={session} />
-          </div>
-          <div className="mb-10">
-            <DocumentTiles limit={6} />
-          </div>
-        </>
+        <div className="mb-10">
+          <DocumentTiles limit={6} />
+        </div>
       )}
       {(isAdmin || !projects) && (
         <section aria-labelledby="home-sammlungen" className="mb-10">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <h2 id="home-sammlungen" className={heading}>
               Abstimmungen
             </h2>
+            <Link to="/sammlungen?neu" className={btn.redaktion}>
+              <Plus aria-hidden="true" className="size-4 shrink-0" /> Neue Abstimmung
+            </Link>
           </div>
           {(isAdmin ? state(categories) : managerCategoriesState) ?? (
             <ul className="mt-4 grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">
@@ -1223,237 +1317,129 @@ function EditorialHome() {
           )}
         </section>
       )}
-      <div className="grid items-start gap-4 lg:grid-cols-[5fr_7fr]">
-        {isAdmin ? (
-          <section aria-labelledby="home-personen" className={card}>
-            <h2 id="home-personen" className={`${heading} flex items-center gap-2`}>
-              <Users aria-hidden="true" className="size-[18px] shrink-0" />
-              Personen
-            </h2>
-            {state(users) ?? (
-              <>
-                <div className="mt-5 flex flex-wrap gap-x-10 gap-y-3">
-                  <p>
-                    <strong className={figure}>{users.data?.length}</strong>
-                    <span className="mt-1.5 block text-[13px] text-muted">Angemeldet</span>
-                  </p>
-                  <p>
-                    <strong className={`${figure} ${waiting.length ? 'text-wait' : ''}`}>{waiting.length}</strong>
-                    <span className="mt-1.5 block text-[13px] text-muted">
-                      {waiting.length === 1 ? 'wartet' : 'warten'} auf Freigabe
-                    </span>
-                  </p>
-                </div>
-                <h3 className="mt-7 flex items-center gap-2 text-sm font-bold">
-                  <Hourglass aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0 text-muted" />
-                  Zuletzt angemeldet, noch nicht freigegeben
-                </h3>
-                {waiting.length === 0 ? (
-                  <p className="mt-2 flex items-center gap-2 text-[15px] text-muted">
-                    <UserCheck aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0" />
-                    Alle sind freigegeben.
-                  </p>
-                ) : (
-                  <ul aria-label="Warten auf Freigabe" className="mt-2 divide-y divide-line">
-                    {waiting.slice(0, 3).map((u) => (
-                      <li key={u.id}>
-                        <Link
-                          to="/verwaltung/personen"
-                          className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30"
-                        >
-                          <span
-                            aria-hidden="true"
-                            className="grid size-8 flex-none place-items-center rounded-full bg-soft text-xs font-bold text-ink"
-                          >
-                            {initials(u.name) || '?'}
-                          </span>
-                          <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{u.name}</span>
-                          <span className="flex-none text-[13px] text-muted">{since(u.created_at)}</span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {waiting.length > 3 && <p className="mt-1 text-[13px] text-muted">und {waiting.length - 3} weitere</p>}
-                <Link to="/verwaltung/personen" className={`${btn.text} mt-5 self-start`}>
-                  Zugänge verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-                </Link>
-                <Link to="/verwaltung/email" className={`${btn.text} mt-3 self-start`}>
-                  E-Mail-Versand verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-                </Link>
-                <DevDebug
-                  label="Personen"
-                  data={{
-                    total: users.data?.length ?? 0,
-                    waiting: waiting.length,
-                    admins: (users.data ?? []).filter((u) => u.role === 'admin').length,
-                  }}
-                />
-              </>
-            )}
-          </section>
-        ) : (
-          <section aria-labelledby="home-beitraege" className={card}>
-            <h2 id="home-beitraege" className={`${heading} flex items-center gap-2`}>
-              <FileText aria-hidden="true" className="size-[18px] shrink-0" />
-              Gesammelte Beiträge
-            </h2>
-            <p className="mt-5">
-              <strong className={figure}>
-                {categories.isPending || submissions.isPending || categories.error || submissions.error
-                  ? '–'
-                  : writableSubmissions.length}
-              </strong>
-              <span className="mt-1.5 block text-[13px] text-muted">In deinen zugewiesenen Abstimmungen</span>
-            </p>
-            {categories.isPending || submissions.isPending ? (
-              <div className="mt-4">
-                <Loading />
+      {isAdmin ? (
+        <section aria-labelledby="home-personen" className={card}>
+          <h2 id="home-personen" className={`${heading} flex items-center gap-2`}>
+            <Users aria-hidden="true" className="size-[18px] shrink-0" />
+            Personen
+          </h2>
+          {state(users) ?? (
+            <>
+              <div className="mt-5 flex flex-wrap gap-x-10 gap-y-3">
+                <p>
+                  <strong className={figure}>{users.data?.length}</strong>
+                  <span className="mt-1.5 block text-[13px] text-muted">Angemeldet</span>
+                </p>
+                <p>
+                  <strong className={`${figure} ${waiting.length ? 'text-wait' : ''}`}>{waiting.length}</strong>
+                  <span className="mt-1.5 block text-[13px] text-muted">
+                    {waiting.length === 1 ? 'wartet' : 'warten'} auf Freigabe
+                  </span>
+                </p>
               </div>
-            ) : categories.error || submissions.error ? (
-              <div className="mt-4">
-                <Failure
-                  error={(categories.error ?? submissions.error)!}
-                  retry={() => {
-                    categories.refetch();
-                    submissions.refetch();
-                  }}
-                />
-              </div>
-            ) : recentSubmissions.length === 0 ? (
-              <div className="mt-4">
-                <Empty>In deinen zugewiesenen Abstimmungen gibt es noch keine Beiträge.</Empty>
-              </div>
-            ) : (
-              <ul className="mt-3 divide-y divide-line">
-                {recentSubmissions.map((submission) => (
-                  <li key={submission.id}>
-                    <Link
-                      to={`/redaktion/beitraege/${submission.id}`}
-                      className="-mx-2 flex min-w-0 items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30"
-                    >
-                      <span className="min-w-0 flex-1">
-                        <strong className="block truncate text-[15px] font-semibold">{submission.title}</strong>
-                        <small className="mt-0.5 block text-[13px] text-muted">
-                          {categories.data?.find((c) => c.id === submission.category_id)?.name ?? 'Beitrag'} ·{' '}
-                          {date(submission.created_at)}
-                        </small>
-                      </span>
-                      <Badge status={submission.status} />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        )}
-        <section aria-labelledby="home-neueste" className={card}>
-          <div className="flex items-baseline justify-between gap-4">
-            <h2 id="home-neueste" className={`${heading} flex items-center gap-2`}>
-              <Vote aria-hidden="true" className="size-[18px] shrink-0" />
-              {isAdmin ? 'Neueste Abstimmungen' : 'Deine Abstimmungen'}
-            </h2>
-            <Link to="/sammlungen" className={btn.text}>
-              Alle <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-            </Link>
-          </div>
-          {state(categories) ??
-            (latest.length === 0 ? (
-              <div className="mt-4">
-                {isAdmin ? (
-                  <Empty>Noch keine Abstimmung.</Empty>
-                ) : (
-                  <Empty>
-                    Dir sind noch keine Abstimmungen zugewiesen.{' '}
-                    <Link to="/sammlungen?neu">Neue Abstimmung anlegen →</Link>
-                  </Empty>
-                )}
-              </div>
-            ) : (
-              <ul className="mt-3 divide-y divide-line">
-                {latest.map((c) => {
-                  const participation = isBallot(c.kind) ? c.participation : null;
-                  const showParticipation = Boolean(participation);
-                  const voted = participation?.voted ?? 0;
-                  const eligible = participation?.eligible ?? 0;
-                  const percent = eligible === 0 ? 0 : Math.max(0, Math.min(100, (voted / eligible) * 100));
-                  return (
-                    <li key={c.id} className="min-w-0">
+              <h3 className="mt-7 flex items-center gap-2 text-sm font-bold">
+                <Hourglass aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0 text-muted" />
+                Zuletzt angemeldet, noch nicht freigegeben
+              </h3>
+              {waiting.length === 0 ? (
+                <p className="mt-2 flex items-center gap-2 text-[15px] text-muted">
+                  <UserCheck aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0" />
+                  Alle sind freigegeben.
+                </p>
+              ) : (
+                <ul aria-label="Warten auf Freigabe" className="mt-2 divide-y divide-line">
+                  {waiting.slice(0, 3).map((u) => (
+                    <li key={u.id}>
                       <Link
-                        to={`/sammlungen/${c.id}`}
-                        className={`-mx-2 flex gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30 ${showParticipation ? 'items-start' : 'items-center'}`}
+                        to="/verwaltung/personen"
+                        className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30"
                       >
-                        <KindIcon
-                          icon={kindIcon[c.kind]}
-                          className={`size-4 shrink-0 text-muted ${showParticipation ? 'mt-1' : ''}`}
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="flex min-w-0 items-center gap-2">
-                            <strong className="line-clamp-2 min-w-0 flex-1 break-words text-[15px] font-semibold leading-snug">
-                              {c.name}
-                            </strong>
-                            {isBallot(c.kind) && <Badge status={c.status} />}
-                          </span>
-                          <span className="block text-[13px] text-muted">
-                            {[kindLabel[c.kind], c.status === 'open' && isBallot(c.kind) ? since(c.opened_at) : '']
-                              .filter(Boolean)
-                              .join(', ')}
-                          </span>
-                          {showParticipation && (
-                            <span className="mt-2 block">
-                              <span className="flex items-center gap-1 text-[12px] leading-4 text-muted">
-                                <span className="tabular-nums">
-                                  {voted} von {eligible}
-                                </span>{' '}
-                                abgestimmt
-                              </span>
-                              <span
-                                role="progressbar"
-                                aria-label={`Wahlbeteiligung: ${c.name}`}
-                                aria-valuemin={0}
-                                aria-valuemax={100}
-                                aria-valuenow={percent}
-                                aria-valuetext={`${voted} von ${eligible} Personen abgestimmt (${Math.round(percent)} %)`}
-                                className="mt-1 block h-1.5 overflow-hidden rounded-full"
-                                style={{ backgroundColor: '#e5e7eb' }}
-                              >
-                                <span
-                                  aria-hidden="true"
-                                  className="block h-full rounded-full"
-                                  style={{ width: `${percent}%`, backgroundColor: participationColor(percent) }}
-                                />
-                              </span>
-                            </span>
-                          )}
+                        <span
+                          aria-hidden="true"
+                          className="grid size-8 flex-none place-items-center rounded-full bg-soft text-xs font-bold text-ink"
+                        >
+                          {initials(u.name) || '?'}
                         </span>
-                        {showParticipation && (
-                          <span className="w-24 flex-none whitespace-nowrap pt-0.5 text-right">
-                            <strong className="block text-3xl font-extrabold tabular-nums leading-none tracking-tight">
-                              {Math.round(percent)}%
-                            </strong>
-                            <span className="mt-1 block text-[12px] font-normal leading-4 text-muted">
-                              Teilgenommen
-                            </span>
-                          </span>
-                        )}
+                        <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{u.name}</span>
+                        <span className="flex-none text-[13px] text-muted">{since(u.created_at)}</span>
                       </Link>
-                      <DevDebug
-                        label="Abstimmung"
-                        data={{
-                          id: c.id,
-                          status: c.status,
-                          kind: c.kind,
-                          version: c.version,
-                          options: c.options.length,
-                        }}
-                      />
                     </li>
-                  );
-                })}
-              </ul>
-            ))}
+                  ))}
+                </ul>
+              )}
+              {waiting.length > 3 && <p className="mt-1 text-[13px] text-muted">und {waiting.length - 3} weitere</p>}
+              <Link to="/verwaltung/personen" className={`${btn.text} mt-5 self-start`}>
+                Zugänge verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
+              </Link>
+              <Link to="/verwaltung/email" className={`${btn.text} mt-3 self-start`}>
+                E-Mail-Versand verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
+              </Link>
+              <DevDebug
+                label="Personen"
+                data={{
+                  total: users.data?.length ?? 0,
+                  waiting: waiting.length,
+                  admins: (users.data ?? []).filter((u) => u.role === 'admin').length,
+                }}
+              />
+            </>
+          )}
         </section>
-      </div>
+      ) : (
+        <section aria-labelledby="home-beitraege" className={card}>
+          <h2 id="home-beitraege" className={`${heading} flex items-center gap-2`}>
+            <FileText aria-hidden="true" className="size-[18px] shrink-0" />
+            Gesammelte Beiträge
+          </h2>
+          <p className="mt-5">
+            <strong className={figure}>
+              {categories.isPending || submissions.isPending || categories.error || submissions.error
+                ? '–'
+                : writableSubmissions.length}
+            </strong>
+            <span className="mt-1.5 block text-[13px] text-muted">In deinen zugewiesenen Abstimmungen</span>
+          </p>
+          {categories.isPending || submissions.isPending ? (
+            <div className="mt-4">
+              <Loading />
+            </div>
+          ) : categories.error || submissions.error ? (
+            <div className="mt-4">
+              <Failure
+                error={(categories.error ?? submissions.error)!}
+                retry={() => {
+                  categories.refetch();
+                  submissions.refetch();
+                }}
+              />
+            </div>
+          ) : recentSubmissions.length === 0 ? (
+            <div className="mt-4">
+              <Empty>In deinen zugewiesenen Abstimmungen gibt es noch keine Beiträge.</Empty>
+            </div>
+          ) : (
+            <ul className="mt-3 divide-y divide-line">
+              {recentSubmissions.map((submission) => (
+                <li key={submission.id}>
+                  <Link
+                    to={`/redaktion/beitraege/${submission.id}`}
+                    className="-mx-2 flex min-w-0 items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <strong className="block truncate text-[15px] font-semibold">{submission.title}</strong>
+                      <small className="mt-0.5 block text-[13px] text-muted">
+                        {categories.data?.find((c) => c.id === submission.category_id)?.name ?? 'Beitrag'} ·{' '}
+                        {date(submission.created_at)}
+                      </small>
+                    </span>
+                    <Badge status={submission.status} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </>
   );
 }

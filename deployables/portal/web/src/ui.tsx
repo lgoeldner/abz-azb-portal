@@ -34,6 +34,8 @@ export const btn = {
     'inline-flex items-center justify-center gap-3 rounded-full bg-ink px-6 py-3 text-[15px] font-bold text-white transition-transform hover:bg-accent active:scale-95 hover:-translate-y-0.5',
   secondary:
     'inline-flex items-center justify-center gap-2 rounded-full bg-pop px-5 py-2.5 text-[15px] font-bold text-ink transition-transform hover:-translate-y-0.5 active:scale-95',
+  redaktion:
+    'inline-flex items-center justify-center gap-3 rounded-full bg-redaktion px-6 py-3 text-[15px] font-bold text-white transition-transform hover:bg-redaktion-dark active:scale-95 hover:-translate-y-0.5',
   text: 'inline-flex items-center gap-2 bg-transparent p-0 text-sm font-bold text-ink underline decoration-2 underline-offset-4 decoration-pop hover:decoration-accent hover:text-accent-dark',
   danger: 'inline-flex items-center gap-2 bg-transparent p-0 text-sm font-bold text-bad hover:underline',
 };
@@ -42,6 +44,7 @@ export const field =
 export const label = 'block text-sm font-bold';
 export const panel = 'rounded-ui bg-soft p-5 sm:p-6';
 export const heading = 'text-xl font-extrabold tracking-tight';
+export const card = 'flex min-w-0 flex-col rounded-ui bg-white p-5 sm:p-6';
 export const notice = 'rounded-ui bg-soft px-4 py-3 text-sm';
 
 export const Session = createContext<Me>(null!);

@@ -148,35 +148,34 @@ function mount(
 }
 
 describe('student contributions and ballot history', () => {
-  it('shows Alle ansehen for a poll-only student and opens the submitted ballot', async () => {
+  it('links to Meine Beiträge for a poll-only student and opens the submitted ballot', async () => {
     mount('/', {
       submissionData: [],
       ballotData: [ballot('only-entry', 'words', 'Unser Jahrgang in drei Worten', 'words', 4)],
     });
     const own = await screen.findByRole('region', { name: 'Deine Beiträge' });
-    const allLink = await within(own).findByRole('link', { name: /Alle ansehen/ });
+    const allLink = await within(own).findByRole('link', { name: /Meine Beiträge/ });
     expect(within(own).getByText('Unser Jahrgang in drei Worten')).toBeInTheDocument();
     fireEvent.click(allLink);
     expect(await screen.findByRole('heading', { level: 1, name: 'Meine Beiträge' })).toBeInTheDocument();
     expect(within(screen.getByRole('main')).getByText('Unser Jahrgang in drei Worten')).toBeInTheDocument();
   });
 
-  it('shows the newest ten combined rows on home, groups photos before limiting, and opens the full list', async () => {
+  it('shows the newest three combined rows on home, groups photos before limiting, and opens the full list', async () => {
     mount('/');
     const own = await screen.findByRole('region', { name: 'Deine Beiträge' });
     const list = await within(own).findByRole('list');
     const rows = within(list).getAllByRole('listitem');
 
-    expect(rows).toHaveLength(10);
+    expect(rows).toHaveLength(3);
     expect(rows[0]).toHaveTextContent('Unser Jahrgang in drei Worten');
     expect(rows[1]).toHaveTextContent('Fotoalbum');
     expect(rows[1]).toHaveTextContent('3 Fotos');
     expect(rows[2]).toHaveTextContent('Geschichte s9');
-    expect(rows[5]).toHaveTextContent('Unser Jahrgang in drei Worten');
     expect(rows.every((row) => !row.textContent?.includes('Geschichte someone-else'))).toBe(true);
     expect(screen.queryByText('Erledigte Abstimmungen')).toBeNull();
 
-    fireEvent.click(within(own).getByRole('link', { name: /Alle ansehen/ }));
+    fireEvent.click(within(own).getByRole('link', { name: /Meine Beiträge/ }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Meine Beiträge' })).toBeInTheDocument();
     const allRows = within(screen.getByRole('main')).getByRole('list');
     expect(within(allRows).getAllByRole('listitem')).toHaveLength(14);
