@@ -544,7 +544,9 @@ function NavDrawer({ container }: { container: HTMLElement | null }) {
   const projects = projectsEnabled(session);
   const [, setView] = useWorkspaceView();
   const [open, setOpen] = useState(false);
-  const label = 'px-4 pb-1 pt-3 text-sm font-bold text-muted';
+  // Subheading with a hairline filling the rest of the row.
+  const label =
+    'flex items-center gap-3 px-4 pb-1 pt-3 text-sm font-bold text-muted after:h-px after:flex-1 after:bg-black/10';
   return (
     <Drawer.Root open={open} onOpenChange={setOpen} swipeDirection="down">
       <Drawer.Trigger className="flex-none rounded-[30px] bg-white p-1.5 text-ink shadow-lg">
@@ -564,8 +566,16 @@ function NavDrawer({ container }: { container: HTMLElement | null }) {
               aria-hidden="true"
               className="mx-auto mt-2.5 h-1.5 w-10 flex-none rounded-full bg-pill min-[651px]:hidden"
             />
-            <div className="flex flex-none items-center justify-between py-1.5 pl-5 pr-1.5">
-              <Drawer.Title className="text-lg font-extrabold">Redaktionsmenü</Drawer.Title>
+            <div className="flex min-h-[60px] flex-none items-center justify-between py-1.5 pl-3 pr-1.5">
+              <Drawer.Title className="flex items-center gap-2.5 text-xl font-extrabold tracking-tight">
+                <span
+                  aria-hidden="true"
+                  className="grid size-9 place-items-center rounded-full bg-redaktion text-white"
+                >
+                  <Grip className="size-5" />
+                </span>
+                Redaktionsmenü
+              </Drawer.Title>
               <Drawer.Close
                 aria-label="Menü schließen"
                 className="grid size-12 place-items-center rounded-full hover:bg-pill min-[651px]:hidden"
