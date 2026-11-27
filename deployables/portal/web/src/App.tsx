@@ -2,14 +2,17 @@ import { Dialog } from '@base-ui/react/dialog';
 import {
   ArrowRight,
   ChevronDown,
+  ChevronUp,
   ClipboardList,
   FileText,
   Files,
+  GraduationCap,
   Hourglass,
   House,
   Library,
   LogOut,
   PanelLeft,
+  PenLine,
   Plus,
   ScrollText,
   Settings,
@@ -19,7 +22,7 @@ import {
   Vote,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   api,
@@ -441,6 +444,7 @@ function Layout() {
         >
           <SidebarBody close={() => setMenu(false)} />
         </aside>
+        {editorial(user) && <ModeFab />}
         <div className="flex min-h-screen flex-col bg-paper max-[651px]:pb-20 min-[651px]:pl-[300px]">
           <main
             id="inhalt"
@@ -541,13 +545,115 @@ function SidebarBody({ close, mobile = false }: { close: () => void; mobile?: bo
   );
 }
 
-function ViewSwitch({ onSwitch }: { onSwitch: () => void }) {
-  const [view, setView] = useWorkspaceView();
+function useSwitchView() {
+  const [, setView] = useWorkspaceView();
   const navigate = useNavigate();
-  const choose = (next: View) => {
+  return (next: View) => {
     setView(next);
-    onSwitch();
     navigate('/');
+  };
+}
+
+// Fixed badge colors per mode, so the option previews the workspace it leads to.
+const modes = {
+  schueler: { label: 'Schüler', Icon: GraduationCap, badge: 'bg-[#15181f] text-[#c8f23c]' },
+  redaktion: { label: 'Redaktion', Icon: PenLine, badge: 'bg-[#1d5fbf] text-white' },
+};
+const modeRow = 'flex h-[38px] w-full items-center gap-2.5 rounded-full pr-3 text-left active:scale-95';
+
+function ModeFace({ mode, caption }: { mode: View; caption: string }) {
+  const { label, Icon, badge } = modes[mode];
+  return (
+    <>
+      <span
+        className={`grid size-[38px] flex-none place-items-center rounded-full ${badge} transition-[rotate,scale] duration-500 ease-[cubic-bezier(.34,1.56,.64,1)] starting:-rotate-90 starting:scale-50`}
+      >
+        <Icon aria-hidden="true" className="size-5" />
+      </span>
+      <span className="min-w-20 flex-1 transition-[opacity,translate] delay-100 duration-300 ease-out starting:translate-y-2 starting:opacity-0">
+        <span className="block text-[11px] leading-3 text-[#5d6270]">{caption}</span>
+        <span className="block text-sm font-bold leading-4">{label}</span>
+      </span>
+    </>
+  );
+}
+
+// Mobile mode switch: a pill naming the current mode that grows upward to offer the other one.
+function ModeFab() {
+  const [view] = useWorkspaceView();
+  const switchView = useSwitchView();
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const other: View = view === 'redaktion' ? 'schueler' : 'redaktion';
+  // Document listeners, because iOS Safari does not focus tapped buttons, so blur alone would never close it.
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e: PointerEvent) => {
+      if (!trigger.current?.parentElement?.contains(e.target as Node)) setOpen(false);
+    };
+    const escape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setOpen(false);
+      trigger.current?.focus();
+    };
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [open]);
+  return (
+    <div
+      className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-40 rounded-3xl bg-white p-[5px] text-[#15181f] shadow-lg transition-opacity group-has-[aside[role=dialog]]/shell:opacity-0 min-[651px]:hidden"
+      onBlur={(e) => {
+        if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget)) setOpen(false);
+      }}
+    >
+      <div
+        inert={!open}
+        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr] opacity-0'}`}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <button
+            key={other}
+            type="button"
+            aria-label={`Zu ${modes[other].label} wechseln`}
+            className={`${modeRow} mb-1.5 transition-[translate,scale] duration-500 ease-[cubic-bezier(.34,1.56,.64,1)] hover:bg-[#15181f]/5 focus-visible:-outline-offset-2 ${open ? '' : 'translate-y-6 scale-75'}`}
+            onClick={() => {
+              setOpen(false);
+              trigger.current?.focus();
+              switchView(other);
+            }}
+          >
+            <ModeFace mode={other} caption="Wechseln zu" />
+          </button>
+        </div>
+      </div>
+      <button
+        ref={trigger}
+        type="button"
+        aria-label={`Ansicht: ${modes[view].label}`}
+        aria-expanded={open}
+        className={`${modeRow} transition-transform`}
+        onClick={() => setOpen(!open)}
+      >
+        <ModeFace key={view} mode={view} caption="Ansicht" />
+        <ChevronUp
+          aria-hidden="true"
+          className={`size-4 flex-none transition-[rotate] duration-300 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+    </div>
+  );
+}
+
+function ViewSwitch({ onSwitch }: { onSwitch: () => void }) {
+  const [view] = useWorkspaceView();
+  const switchView = useSwitchView();
+  const choose = (next: View) => {
+    onSwitch();
+    switchView(next);
   };
   const seg = (active: boolean) =>
     `min-h-10 flex-1 rounded-full px-3 text-sm transition-transform active:scale-95 ${active ? 'bg-ink font-bold text-pop' : 'font-semibold text-ink hover:bg-white/60'}`;

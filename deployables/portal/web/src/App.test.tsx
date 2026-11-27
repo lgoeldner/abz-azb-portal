@@ -758,6 +758,7 @@ describe('navigation by view', () => {
 
     expect(screen.queryByRole('button', { name: 'Schüler' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Redaktion' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Ansicht:/ })).toBeNull();
     expect(urls.some((url) => url.includes('/results') || url.includes('/audit'))).toBe(false);
   });
 
@@ -950,6 +951,23 @@ describe('navigation by view', () => {
       within(within(aside).getByRole('group', { name: 'Beiträge' })).getByRole('link', { name: /Erinnerungen/ }),
     ).toHaveAttribute('href', '/sammlungen/memory');
     expect(within(aside).getByRole('link', { name: 'Neue Abstimmung' })).toHaveAttribute('href', '/sammlungen?neu');
+
+    // Phone switch: Esc and outside taps close it, the offered option switches back and forth.
+    const fab = screen.getByRole('button', { name: 'Ansicht: Redaktion' });
+    fireEvent.click(fab);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(fab).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(fab);
+    fireEvent.pointerDown(main);
+    expect(fab).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(fab);
+    fireEvent.click(screen.getByRole('button', { name: 'Zu Schüler wechseln' }));
+    expect(await screen.findByRole('heading', { level: 1, name: /^Hey / })).toBeInTheDocument();
+    expect(fab).toHaveAccessibleName('Ansicht: Schüler');
+    expect(fab).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(fab);
+    fireEvent.click(screen.getByRole('button', { name: 'Zu Redaktion wechseln' }));
+    expect(await within(main).findByRole('heading', { level: 1, name: 'Redaktion' })).toBeInTheDocument();
 
     fireEvent.click(within(aside).getByRole('button', { name: 'Schüler' }));
     expect(await screen.findByRole('heading', { level: 1, name: /^Hey / })).toHaveTextContent(
