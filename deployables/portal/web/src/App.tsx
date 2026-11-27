@@ -20,7 +20,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   api,
@@ -268,15 +268,10 @@ function RedirectToSammlung() {
 const time = (value: string | null | undefined) => (value ? new Date(value).getTime() : 0);
 const statusOrder = { open: 0, draft: 1, closed: 2 } as const;
 
-// accent overrides the corner colour; default follows the workspace (red in Schüler, blue in Redaktion).
-function Mark({ className = 'size-8', accent }: { className?: string; accent?: string }) {
+// Colours follow the surrounding workspace; `workspace` pins one palette (corner, 27, ink, paper) regardless of the view.
+function Mark({ className = 'size-8', workspace }: { className?: string; workspace?: View }) {
   return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 40 40"
-      className={`flex-none ${className}`}
-      style={accent ? ({ '--color-accent': accent } as CSSProperties) : undefined}
-    >
+    <svg aria-hidden="true" viewBox="0 0 40 40" className={`flex-none ${className}`} data-workspace={workspace}>
       <g transform="rotate(-7 20 20)">
         <path d="M5 4h30a2 2 0 0 1 2 2v28a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" className="fill-ink" />
         <path d="M37 6v11H26a2 2 0 0 1-2-2V4h11a2 2 0 0 1 2 2z" className="fill-accent" />
@@ -575,7 +570,7 @@ function NavDrawer({ container }: { container: HTMLElement | null }) {
             />
             <div className="flex min-h-[60px] flex-none items-center justify-between py-1.5 pl-3 pr-1.5">
               <Drawer.Title className="flex items-center gap-2.5 text-xl font-extrabold tracking-tight">
-                <Mark className="size-9" accent="var(--color-redaktion)" />
+                <Mark className="size-9" workspace="redaktion" />
                 Redaktionsmenü
               </Drawer.Title>
               <Drawer.Close
