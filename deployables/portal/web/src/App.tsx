@@ -484,9 +484,10 @@ function Dock() {
   const location = useLocation();
   const editor = editorial(user);
   return (
+    // Pinned to the neutral Redaktion grey, so the olive Schüler pill never tints the floating controls.
     <section
       aria-label="Konto"
-      className={`flex items-center gap-1.5 rounded-[30px] bg-white p-1.5 shadow-lg min-[651px]:grid min-[651px]:w-[320px] ${
+      className={`flex items-center gap-1.5 rounded-[30px] bg-white p-1.5 shadow-lg ring-1 ring-black/5 [--color-pill:#e4e6e9] min-[651px]:grid min-[651px]:w-[320px] ${
         editor
           ? "min-[651px]:grid-cols-[auto_minmax(0,1fr)_auto] min-[651px]:[grid-template-areas:'switch_switch_logout'_'avatar_name_settings']"
           : "min-[651px]:grid-cols-[auto_minmax(0,1fr)_auto_auto] min-[651px]:[grid-template-areas:'avatar_name_settings_logout']"
@@ -500,7 +501,7 @@ function Dock() {
       {/* Decorative; dropped on narrow phones so account pill, menu button and mode pill fit in one row. */}
       <Avatar
         user={user}
-        className={`size-12 text-sm [grid-area:avatar] max-[360px]:hidden ${editor ? 'max-[420px]:hidden' : ''}`}
+        className={`size-12 border-[3px] border-white text-sm shadow-md ring-1 ring-black/10 [grid-area:avatar] max-[360px]:hidden ${editor ? 'max-[420px]:hidden' : ''}`}
       />
       <strong className="line-clamp-2 min-w-0 break-words px-1 text-[15px] font-semibold leading-tight [grid-area:name] max-[651px]:sr-only">
         {user.name}
