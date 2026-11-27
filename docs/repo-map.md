@@ -34,6 +34,7 @@ cmd `scripts/preview-cleanup.sh` :: gh-based close <pr> (deployments inactive) a
 test `scripts/test-preview-cleanup.sh` :: invariants of preview-cleanup.sh against a fake gh: only preview deployments past the TTL or of the closed PR, only image versions older than TTL+1 day [preview, cleanup]
 file `.github/workflows/images.yaml` :: on push to dev or main: build portal/auth/backup images, push to GHCR as :<sha> and :<branch>; test pulls :dev (never PR code) [ci, docker, ghcr, images]
 file `.githooks/pre-commit` :: prettier/gofmt on staged files, tests for touched deployables [hook, format, test]
+file `docs/style-guide.md` :: frontend UI rules: no drop shadows except floating pills, no blur [style, ui, design, shadow]
 file `docs/implementation-contract.md` :: binding API/permission contract, lead-owned [contract, permissions, types]
 file `docs/poll-implementation-plans.md` :: nine proposed poll formats and the implemented configurable word portrait with implementation steps and invariant tests [poll, plan, voting]
 file `docs/openapi.json` :: generated OpenAPI spec (from Go route table and types, never edit by hand); source of generated TS types [openapi, schema]
