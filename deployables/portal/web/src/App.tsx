@@ -568,12 +568,7 @@ function NavDrawer({ container }: { container: HTMLElement | null }) {
             />
             <div className="flex min-h-[60px] flex-none items-center justify-between py-1.5 pl-3 pr-1.5">
               <Drawer.Title className="flex items-center gap-2.5 text-xl font-extrabold tracking-tight">
-                <span
-                  aria-hidden="true"
-                  className="grid size-9 place-items-center rounded-full bg-redaktion text-white"
-                >
-                  <Grip className="size-5" />
-                </span>
+                <Mark className="size-9" />
                 Redaktionsmenü
               </Drawer.Title>
               <Drawer.Close
