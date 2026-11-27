@@ -26,6 +26,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       </BrowserRouter>
       <Toaster
         position="bottom-right"
+        // Clears the floating menu pill and mode switch on phones.
+        mobileOffset={{ bottom: 80 }}
         toastOptions={{ style: { borderRadius: 'var(--radius-ui)', fontFamily: 'var(--font-sans)' } }}
       />
     </QueryClientProvider>

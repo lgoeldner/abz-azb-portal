@@ -345,7 +345,7 @@ func (a *App) editSubmission(w http.ResponseWriter, r *http.Request) error {
 			return e
 		}
 		if from == "steckbrief" || kind == "steckbrief" {
-			return bad("Steckbriefe können nicht in andere Sammlungen verschoben werden.")
+			return bad("Steckbriefe können nicht in andere Abstimmungen verschoben werden.")
 		}
 	}
 	if in.CategoryID != s.CategoryID && len(s.Attachments) > 0 && kind != "photo" {

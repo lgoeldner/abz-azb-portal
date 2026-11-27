@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from './App';
+import { kindLabel } from './ui';
 
 const user = {
   id: 'student-1',
@@ -13,7 +14,11 @@ const user = {
   category_ids: [],
 };
 const repeatable = ['idea', 'quote', 'memory', 'photo'];
-// A complete Sammlung as the API returns it; extra properties can override defaults independently by kind.
+const klassen = (group: HTMLElement) =>
+  within(group)
+    .getAllByRole('radio')
+    .map((radio) => radio.closest('label')!.textContent);
+// A complete Abstimmung as the API returns it; extra properties can override defaults independently by kind.
 const sammlung = (id: string, name: string, kind: string, extra: Record<string, unknown> = {}) => ({
   id,
   name,
@@ -37,6 +42,15 @@ const sammlung = (id: string, name: string, kind: string, extra: Record<string, 
   ...extra,
 });
 const category = sammlung('memory', 'Erinnerungen', 'memory', { description: 'Was bleibt' });
+// Stands in for the browser back button.
+function Back() {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => navigate(-1)}>
+      Zurück (Test)
+    </button>
+  );
+}
 
 it('starts provider login without fetching identities from the portal', async () => {
   const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
@@ -108,7 +122,7 @@ describe('contribution submission', () => {
     );
 
     expect(
-      await screen.findByText('Neue Beiträge können nur in offenen Sammlungen eingereicht werden.'),
+      await screen.findByText('Neue Beiträge können nur in offenen Abstimmungen eingereicht werden.'),
     ).toBeInTheDocument();
     expect(screen.queryByPlaceholderText('Gib deinem Beitrag einen Namen')).toBeNull();
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
@@ -314,6 +328,42 @@ describe('verwaltung', () => {
   const openMenu = async (name: string) =>
     fireEvent.click(await screen.findByRole('button', { name: `Aktionen für ${name}` }));
 
+  it.each([
+    ['admin', admin, true],
+    ['manager', editor, false],
+  ])('the Redaktion menu lists static pages; Verwaltung only for admins (%s)', async (_role, me, verwaltung) => {
+    localStorage.clear();
+    mount('/redaktion', me);
+    fireEvent.click(await screen.findByRole('button', { name: 'Redaktionsmenü' }));
+    const menu = await screen.findByRole('navigation', { name: 'Redaktionsmenü' });
+    const hrefs = within(menu)
+      .getAllByRole('link')
+      .map((a) => a.getAttribute('href'));
+    expect(hrefs).toEqual(
+      expect.arrayContaining(['/redaktion', '/sammlungen?neu', '/sammlungen', '/redaktion/beitraege']),
+    );
+    expect(hrefs.some((href) => /^\/(sammlungen|redaktion\/beitraege)\/./.test(href ?? ''))).toBe(false);
+    expect(within(menu).queryByRole('group', { name: 'Verwaltung' }) !== null).toBe(verwaltung);
+    expect(hrefs.includes('/verwaltung/personen')).toBe(verwaltung);
+    fireEvent.click(within(menu).getByRole('link', { name: 'Alle Beiträge' }));
+    await waitFor(() => expect(screen.queryByRole('navigation', { name: 'Redaktionsmenü' })).toBeNull());
+  });
+
+  it('offers the Redaktion menu to editors in the Schüler view too, but never to students', async () => {
+    mount('/', guest);
+    await screen.findByRole('region', { name: 'Konto' });
+    expect(screen.queryByRole('button', { name: 'Redaktionsmenü' })).toBeNull();
+    cleanup();
+    localStorage.setItem('view', 'schueler');
+    mount('/', editor);
+    fireEvent.click(await screen.findByRole('button', { name: 'Redaktionsmenü' }));
+    const menu = await screen.findByRole('navigation', { name: 'Redaktionsmenü' });
+    fireEvent.click(within(menu).getByRole('link', { name: 'Alle Abstimmungen' }));
+    // The Schüler view would redirect /sammlungen to /, so the menu must switch to Redaktion first.
+    expect(await screen.findByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeInTheDocument();
+    expect(document.querySelector('[data-workspace="redaktion"]')).toBeInTheDocument();
+  });
+
   it('promotes a guest by changing only cohort_member', async () => {
     const calls = mount('/verwaltung/personen');
     fireEvent.click(await screen.findByRole('button', { name: 'Zum Jahrgangsmitglied machen: Gast Gerda' }));
@@ -400,10 +450,10 @@ describe('verwaltung', () => {
 
   it('grants a new category to a manager with the full user payload', async () => {
     const calls = mount('/sammlungen');
-    fireEvent.click(await screen.findByRole('button', { name: /Neue Sammlung/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Neue Abstimmung/ }));
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Neu' } });
-    fireEvent.click(await screen.findByLabelText('Sam Redaktion'));
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Sam Redaktion' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     await waitFor(() => expect(calls).toHaveLength(2));
     expect(calls[0]).toMatchObject({ url: '/categories', method: 'POST' });
     expect(calls[1]).toEqual({
@@ -419,24 +469,26 @@ describe('verwaltung', () => {
     });
   });
 
-  it('does not carry unsaved grant changes over to another Sammlung', async () => {
+  it('does not carry unsaved grant changes over to another Abstimmung', async () => {
     const quotes = sammlung('quotes', 'Zitate', 'quote');
     const photos = sammlung('photos', 'Fotos', 'photo');
     const calls = mount('/sammlungen/quotes', admin, undefined, undefined, [category, quotes, photos]);
-    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung bearbeiten' }));
-    fireEvent.click(await screen.findByLabelText('Sam Redaktion'));
-    expect(screen.getByLabelText('Sam Redaktion')).toBeChecked();
-    fireEvent.click(within(screen.getByRole('complementary')).getByRole('link', { name: /Fotos/ }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung bearbeiten' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Abstimmung bearbeiten' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Sam Redaktion' }));
+    expect(screen.getByRole('checkbox', { name: 'Sam Redaktion' })).toBeChecked();
+    fireEvent.click(screen.getByRole('link', { name: '← Abstimmungen' }));
+    const photoLinks = await within(screen.getByRole('main')).findAllByRole('link', { name: /Fotos/ });
+    fireEvent.click(photoLinks.find((a) => a.getAttribute('href') === '/sammlungen/photos')!);
+    fireEvent.click(await screen.findByRole('button', { name: 'Abstimmung bearbeiten' }));
     await waitFor(() => expect(screen.getByLabelText('Name')).toHaveValue('Fotos'));
-    expect(screen.getByLabelText('Sam Redaktion')).not.toBeChecked();
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    expect(screen.getByRole('checkbox', { name: 'Sam Redaktion' })).not.toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     await waitFor(() => expect(calls.some((c) => c.url === '/categories/photos')).toBe(true));
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Sammlung speichern' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Abstimmung speichern' })).toBeNull());
     expect(calls.filter((c) => c.url.startsWith('/admin/users'))).toEqual([]);
   });
 
-  it('merges grants into the current server state and retries a failed save without a second Sammlung', async () => {
+  it('merges grants into the current server state and retries a failed save without a second Abstimmung', async () => {
     let server = { ...editor, category_ids: ['memory'] };
     let failGrant = true;
     const calls = mount(
@@ -457,14 +509,14 @@ describe('verwaltung', () => {
       },
       () => [admin, server],
     );
-    fireEvent.click(await screen.findByRole('button', { name: /Neue Sammlung/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Neue Abstimmung/ }));
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Neu' } });
-    fireEvent.click(await screen.findByLabelText('Sam Redaktion'));
-    // Another admin grants a further Sammlung while this form is open.
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Sam Redaktion' }));
+    // Another admin grants a further Abstimmung while this form is open.
     server = { ...server, category_ids: ['memory', 'quotes'] };
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     expect(await screen.findByText('Kurz nicht erreichbar.')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     await waitFor(() => expect(server.category_ids).toEqual(['memory', 'quotes', 'new-cat']));
     expect(calls.filter((c) => c.url === '/categories' && c.method === 'POST')).toHaveLength(1);
   });
@@ -477,7 +529,7 @@ describe('verwaltung', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Berechtigungen bearbeiten' }));
       expect(screen.queryByLabelText('Name')).toBeNull();
       expect(screen.queryByRole('button', { name: 'Definition bearbeiten' })).toBeNull();
-      fireEvent.click(await screen.findByLabelText('Sam Redaktion'));
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Sam Redaktion' }));
       fireEvent.click(screen.getByRole('button', { name: 'Berechtigungen speichern' }));
       await waitFor(() => expect(calls).toHaveLength(1));
       expect(calls[0]).toMatchObject({
@@ -543,6 +595,7 @@ describe('navigation by view', () => {
       <QueryClientProvider client={client}>
         <MemoryRouter>
           <App />
+          <Back />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -571,17 +624,24 @@ describe('navigation by view', () => {
       ],
       submissions: [],
     });
-    const aside = await screen.findByRole('complementary');
-    const voted = await within(aside).findByRole('link', { name: /Mehrfachwahl/ });
-    expect(voted.closest('details')).not.toBeNull();
-    expect(
-      within(aside)
-        .getByRole('link', { name: /Wortwolke/ })
-        .closest('details'),
-    ).not.toBeNull();
+    await screen.findByRole('heading', { level: 1, name: /Gerade ist alles erledigt|warten|wartet/ });
     const main = screen.getByRole('main');
     expect(within(main).queryByRole('heading', { name: 'Mehrfachwahl' })).toBeNull();
     expect(within(main).queryByRole('heading', { name: 'Wortwolke' })).toBeNull();
+  });
+
+  it('restores the view of a shared page on back navigation', async () => {
+    const who = { id: 'manager-1', name: 'Sam Redaktion', role: 'manager', admitted: true, cohort_member: false };
+    mount({ ...who, category_ids: ['memory'] }, { polls: [], submissions: [] });
+    const assigned = await screen.findByRole('region', { name: 'Meine Abstimmungen' });
+    fireEvent.click(within(assigned).getByRole('link', { name: 'Alle' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole('region', { name: 'Konto' })).getByRole('button', { name: 'Schüler' }));
+    expect(await screen.findByRole('heading', { level: 1, name: /^Hey / })).toBeInTheDocument();
+    // /sammlungen redirects the Schüler view home, so this only holds if back restores the Redaktion view.
+    fireEvent.click(screen.getByRole('button', { name: 'Zurück (Test)' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeInTheDocument();
+    expect(document.querySelector('[data-workspace="redaktion"]')).toBeInTheDocument();
   });
 });
 
@@ -677,7 +737,7 @@ describe('sammlungen', () => {
     return calls;
   }
 
-  it('renders the ballot flow for a single-answer Sammlung and saves the vote', async () => {
+  it('renders the ballot flow for a single-answer Abstimmung and saves the vote', async () => {
     const calls = mount('/sammlungen/motto');
     expect(await screen.findByRole('heading', { level: 1, name: 'Abstimmen' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Zwei' }));
@@ -690,7 +750,7 @@ describe('sammlungen', () => {
 
   it('opens a draft with the current version', async () => {
     const calls = mount('/sammlungen/entwurf', { ...manager, category_ids: ['entwurf'] });
-    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung öffnen' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Abstimmung öffnen' }));
     await waitFor(() =>
       expect(calls).toEqual([
         { url: '/categories/entwurf/status', method: 'POST', body: { version: 1, status: 'open' } },
@@ -700,29 +760,25 @@ describe('sammlungen', () => {
 
   it('offers all eight classes to managers and creates a choice poll', async () => {
     const calls = mount('/sammlungen?neu', manager);
-    const klasse = await screen.findByLabelText('Klasse');
-    expect(
-      within(klasse)
-        .getAllByRole('option')
-        .map((o) => o.textContent),
-    ).toEqual([
+    const klasse = await screen.findByRole('group', { name: 'Klasse' });
+    expect(klassen(klasse)).toEqual([
       'Ideen',
       'Zitate',
       'Erinnerungen',
       'Fotos',
       'Steckbrief',
       'Personenwahl',
-      'Vorschlagswahl',
+      'Auswahl',
       'Wortwolke',
     ]);
-    fireEvent.change(klasse, { target: { value: 'proposal' } });
+    fireEvent.click(screen.getByRole('radio', { name: kindLabel['proposal'] }));
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Neues Motto' } });
     for (const option of ['A', 'B']) {
       fireEvent.change(screen.getByLabelText('Antwortoption hinzufügen'), { target: { value: option } });
       fireEvent.click(screen.getByRole('button', { name: 'Hinzufügen' }));
     }
     expect(screen.queryByLabelText(/eigene Person/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     await waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0]).toEqual({
       url: '/categories',

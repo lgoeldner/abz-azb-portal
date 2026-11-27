@@ -11,8 +11,8 @@ import (
 )
 
 type CategoryInput struct {
-	Name          string           `json:"name"`
-	Description   string           `json:"description"`
+	Name          string           `json:"name" maxLength:"100"`
+	Description   string           `json:"description" maxLength:"500"`
 	Kind          string           `json:"kind" enum:"idea,quote,memory,photo,steckbrief,person,proposal,words"`
 	Template      string           `json:"template" required:"false" enum:",standard" description:"Steckbrief collections only; defaults to standard on creation and is fixed afterwards. Other kinds require it empty or omitted."`
 	Ongoing       bool             `json:"ongoing" required:"false" description:"No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability."`
@@ -49,8 +49,8 @@ type UserEdit struct {
 }
 
 type CategoryEdit struct {
-	Name          string           `json:"name" required:"false"`
-	Description   string           `json:"description" required:"false"`
+	Name          string           `json:"name" required:"false" maxLength:"100"`
+	Description   string           `json:"description" required:"false" maxLength:"500"`
 	Kind          string           `json:"kind" required:"false" enum:"idea,quote,memory,photo,steckbrief,person,proposal,words"`
 	Template      string           `json:"template" required:"false" enum:",standard" description:"Fixed after creation: omitted preserves the stored value, a different value is rejected."`
 	Ongoing       bool             `json:"ongoing" required:"false" description:"No scheduled closing when true (default); false requires a future closes_at. Stored independently of content kind and repeatability."`

@@ -31,7 +31,7 @@ func (a *App) vote(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	if !ballotKind(p.Kind) {
-		return bad("Für diese Sammlung kann nicht abgestimmt werden.")
+		return bad("Für diese Abstimmung kann nicht abgestimmt werden.")
 	}
 	if p.Status == "draft" && !editor(u) {
 		return missing()
@@ -301,7 +301,7 @@ func (a *App) results(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	if !ballotKind(c.Kind) {
-		return bad("Diese Sammlung hat keine Abstimmung.")
+		return bad("Hier kann nicht abgestimmt werden.")
 	}
 	if c.Kind == "words" {
 		out, err := wordResults(r.Context(), a.DB, id)
@@ -341,7 +341,7 @@ func (a *App) ballotAudit(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	if !ballotKind(c.Kind) {
-		return bad("Diese Sammlung hat keine Abstimmung.")
+		return bad("Hier kann nicht abgestimmt werden.")
 	}
 	rows, e := a.DB.Query(r.Context(), "SELECT b.user_id::text,u.name,b.option_id::text,o.label,b.created_at,b.ballot_id::text FROM ballot_audit b JOIN users u ON u.id=b.user_id JOIN poll_options o ON o.id=b.option_id WHERE b.poll_id=$1 ORDER BY b.created_at,b.ballot_id,b.option_id,b.id", id)
 	if e != nil {

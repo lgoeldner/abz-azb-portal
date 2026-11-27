@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -165,16 +166,16 @@ func checkContributionCategory(ctx context.Context, db DB, id, authorID, exclude
 	var closesAt *time.Time
 	e := db.QueryRow(ctx, "SELECT kind,repeatable,status,closes_at FROM categories WHERE id=$1 FOR SHARE", id).Scan(&kind, &repeatable, &status, &closesAt)
 	if errors.Is(e, pgx.ErrNoRows) {
-		return bad("Sammlung nicht gefunden.")
+		return bad("Abstimmung nicht gefunden.")
 	}
 	if e != nil {
 		return e
 	}
 	if !contributionKind(kind) {
-		return bad("In dieser Sammlung können keine Beiträge eingereicht werden.")
+		return bad("In dieser Abstimmung können keine Beiträge eingereicht werden.")
 	}
 	if requireOpen && (status != "open" || closesAt != nil && !closesAt.After(time.Now())) {
-		return bad("In diese Sammlung können nur bei geöffnetem Status Beiträge eingereicht oder verschoben werden.")
+		return bad("In diese Abstimmung können nur bei geöffnetem Status Beiträge eingereicht oder verschoben werden.")
 	}
 	if !repeatable {
 		var exists bool
@@ -182,7 +183,7 @@ func checkContributionCategory(ctx context.Context, db DB, id, authorID, exclude
 			return e
 		}
 		if exists {
-			return bad("Für diese Sammlung ist nur ein Beitrag pro Person möglich.")
+			return bad("Für diese Abstimmung ist nur ein Beitrag pro Person möglich.")
 		}
 	}
 	return nil
@@ -252,11 +253,11 @@ func (in *categoryInput) UnmarshalJSON(data []byte) error {
 }
 
 func validateCategory(in categoryInput) error {
-	if strings.TrimSpace(in.Name) == "" || len(in.Name) > 300 || len(in.Description) > 10000 {
-		return bad("Name erforderlich (max. 300 Zeichen); Beschreibung zu lang.")
+	if strings.TrimSpace(in.Name) == "" || utf8.RuneCountInString(in.Name) > 100 || utf8.RuneCountInString(in.Description) > 500 {
+		return bad("Name erforderlich (max. 100 Zeichen); Beschreibung höchstens 500 Zeichen.")
 	}
 	if !validKind(in.Kind) {
-		return bad("Ungültiger Sammlungstyp.")
+		return bad("Ungültiger Abstimmungstyp.")
 	}
 	if in.MaxChoices != nil && (*in.MaxChoices < 1 || *in.MaxChoices > 500 || contributionKind(in.Kind) && *in.MaxChoices != 1) {
 		return bad("Maximale Auswahl muss 1 bis 500 betragen; Beitragssammlungen haben keine Mehrfachauswahl.")
@@ -276,7 +277,7 @@ func validateCategory(in categoryInput) error {
 	}
 	if contributionKind(in.Kind) {
 		if len(in.Options) != 0 {
-			return bad("Diese Sammlung hat keine Optionen.")
+			return bad("Diese Abstimmung hat keine Optionen.")
 		}
 		return nil
 	}
@@ -418,7 +419,7 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 				return e
 			}
 			if hasPhotos {
-				return bad("Eine Fotosammlung mit Bildern kann nicht in eine andere Sammlungsart geändert werden.")
+				return bad("Eine Fotosammlung mit Bildern kann nicht in eine andere Abstimmungsart geändert werden.")
 			}
 		}
 		if *in.Repeatable != old.Repeatable {
@@ -431,7 +432,7 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 			closesAt = nil
 		} else {
 			if old.ClosesAt == nil {
-				return bad("Für eine nicht fortlaufende Sammlung ist ein Endzeitpunkt erforderlich.")
+				return bad("Für eine nicht fortlaufende Abstimmung ist ein Endzeitpunkt erforderlich.")
 			}
 			closesAt = old.ClosesAt
 			if ballotKind(old.Kind) && in.hasClosesAt && (in.ClosesAt == nil || !in.ClosesAt.Equal(*old.ClosesAt) && !in.ClosesAt.After(time.Now())) {
@@ -458,7 +459,7 @@ func (a *App) writeCategory(w http.ResponseWriter, r *http.Request) error {
 		}
 		if !*in.Ongoing {
 			if in.ClosesAt == nil || !in.ClosesAt.After(time.Now()) {
-				return bad("Für eine nicht fortlaufende Sammlung ist ein zukünftiger Endzeitpunkt erforderlich.")
+				return bad("Für eine nicht fortlaufende Abstimmung ist ein zukünftiger Endzeitpunkt erforderlich.")
 			}
 			closesAt = in.ClosesAt
 		}

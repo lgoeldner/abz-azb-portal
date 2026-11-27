@@ -1,11 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Minus, Plus } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   api,
   canEdit,
   date,
+  day,
   editorial,
   json,
   patchUser,
@@ -25,6 +26,7 @@ import {
   KindIcon,
   Loading,
   PageHead,
+  PersonChecklist,
   SubmissionList,
   allKinds,
   btn,
@@ -36,7 +38,6 @@ import {
   newestOpened,
   notice,
   panel,
-  plural,
   repeatableKinds,
   singleKinds,
   useAction,
@@ -70,15 +71,27 @@ const debugData = (c: Category) => ({
   hasVoted: Boolean(c.my_option_ids?.length || c.my_option_id),
 });
 const badgeLabel = (c: Category) => (c.status === 'draft' && c.opened_at ? 'Verborgen' : undefined);
+const chip = (active: boolean) =>
+  `inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
+    active ? 'bg-ink text-white hover:bg-accent' : 'bg-pill hover:bg-pop'
+  }`;
 
 // ---------- list ----------
 export function Sammlungen() {
   const { user } = useSession();
   const [params, setParams] = useSearchParams();
+  const [view] = useWorkspaceView();
   const categories = useData<Category[]>('/categories');
   const klasse = isKind(params.get('klasse')) ? (params.get('klasse') as Kind) : null;
   const creating = editorial(user) && params.has('neu');
-  const setCreating = (open: boolean) => setParams(open ? { neu: '' } : {}, { replace: true });
+  // Only `neu` changes, so a selected class chip stays selected.
+  const setCreating = (open: boolean) => {
+    const next = new URLSearchParams(params);
+    if (open) next.set('neu', '');
+    else next.delete('neu');
+    // Opening adds a history entry so "back" returns to the list; closing replaces it so "back" skips the form.
+    setParams(next, { replace: !open });
+  };
   const shown = (categories.data ?? []).filter((c) => !klasse || c.kind === klasse);
   const endedPoll = (c: Category) => singleKinds.includes(c.kind) && c.status === 'closed';
   const byDeadline = (a: Category, b: Category) =>
@@ -87,24 +100,30 @@ export function Sammlungen() {
   const once = shown.filter((c) => !c.repeatable && !endedPoll(c)).sort(byDeadline);
   const repeatable = shown.filter((c) => c.repeatable && !endedPoll(c));
   const ended = shown.filter(endedPoll).sort(byDeadline);
-  const chip = (active: boolean) =>
-    `inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
-      active ? 'bg-ink text-white hover:bg-accent' : 'bg-pill hover:bg-pop'
-    }`;
+  // Students find every collection on the dashboard; the list is the editorial overview.
+  if (view !== 'redaktion') return <Navigate to="/" replace />;
+  if (creating)
+    return (
+      <>
+        <Link
+          className="mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink"
+          to={klasse ? `/sammlungen?klasse=${klasse}` : '/sammlungen'}
+          replace
+        >
+          ← Abstimmungen
+        </Link>
+        <PageHead title="Neue Abstimmung" />
+        <SammlungForm initialKind={klasse} onSaved={() => setCreating(false)} />
+      </>
+    );
   return (
     <>
       <PageHead
-        title="Sammlungen"
+        title="Abstimmungen"
         action={
           editorial(user) && (
-            <button className={creating ? btn.secondary : btn.primary} onClick={() => setCreating(!creating)}>
-              {creating ? (
-                'Formular schließen'
-              ) : (
-                <>
-                  Neue Sammlung <Plus aria-hidden="true" className="size-4 shrink-0" />
-                </>
-              )}
+            <button className={btn.primary} onClick={() => setCreating(true)}>
+              Neue Abstimmung <Plus aria-hidden="true" className="size-4 shrink-0" />
             </button>
           )
         }
@@ -112,7 +131,6 @@ export function Sammlungen() {
         Hier sammelt der Jahrgang Geschichten und entscheidet gemeinsam. Trage bei, so oft du willst, oder stimme mit
         ab.
       </PageHead>
-      {creating && <SammlungForm onSaved={() => setCreating(false)} />}
       <nav aria-label="Nach Klasse filtern" className="mb-8 flex flex-wrap gap-2">
         <Link to="/sammlungen" className={chip(!klasse)} aria-current={!klasse ? 'true' : undefined}>
           Alle
@@ -136,8 +154,8 @@ export function Sammlungen() {
       ) : shown.length === 0 ? (
         <Empty>
           {klasse
-            ? 'In dieser Klasse gibt es noch keine Sammlungen.'
-            : 'Hier geht’s bald los. Aktuell gibt es keine Sammlungen.'}
+            ? 'In dieser Klasse gibt es noch keine Abstimmungen.'
+            : 'Hier geht’s bald los. Aktuell gibt es keine Abstimmungen.'}
         </Empty>
       ) : (
         <div className="space-y-10">
@@ -187,7 +205,7 @@ function CollectionBadge({ collection: c }: { collection: Category }) {
         status={c.status}
         label={
           c.closes_at
-            ? `${c.status !== 'open' ? `${badgeLabel(c) ?? statusLabels[c.status]} · ` : ''}Bis ${new Intl.DateTimeFormat('de-DE').format(new Date(c.closes_at))}`
+            ? `${c.status !== 'open' ? `${badgeLabel(c) ?? statusLabels[c.status]} · ` : ''}Bis ${day(c.closes_at)}`
             : badgeLabel(c)
         }
       />
@@ -196,81 +214,53 @@ function CollectionBadge({ collection: c }: { collection: Category }) {
 }
 
 function Cards({ items }: { items: Category[] }) {
-  const [view] = useWorkspaceView();
-  if (view === 'redaktion')
-    return (
-      <ul className="collection-ledger divide-y divide-line rounded-ui bg-white" aria-label="Sammlungen">
-        {items.map((c) => (
-          <li key={c.id}>
-            <Link
-              to={`/sammlungen/${c.id}`}
-              className="flex min-h-20 items-center gap-4 rounded-ui px-5 py-4 transition-colors hover:bg-soft"
-            >
-              <KindIcon icon={kindIcon[c.kind]} className="size-4 text-muted" />
-              <span className="min-w-0 flex-1">
-                <strong className="block text-[15px] font-semibold">{c.name}</strong>
-                <span className="block text-sm text-muted">{c.description || kindLabel[c.kind]}</span>
-              </span>
-              <CollectionBadge collection={c} />
-              <span className="hidden text-sm text-muted sm:block">
-                {repeatableKinds.includes(c.kind) ? 'Beiträge lesen' : 'Ergebnisse ansehen'}
-              </span>
-              <Arrow />
-            </Link>
-          </li>
-        ))}
-      </ul>
-    );
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <ul className="collection-ledger divide-y divide-line rounded-ui bg-white" aria-label="Abstimmungen">
       {items.map((c) => (
-        <div className={import.meta.env.DEV ? 'flex h-full min-w-0 flex-col' : 'contents'} key={c.id}>
+        <li key={c.id}>
           <Link
-            className="flex min-w-0 flex-1 flex-col gap-3 rounded-ui bg-white p-5 transition-colors hover:border-muted"
             to={`/sammlungen/${c.id}`}
+            className="flex min-h-20 items-center gap-4 rounded-ui px-5 py-4 transition-colors hover:bg-soft"
           >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <h3 className={`${heading} min-w-0 flex-1 basis-40`}>{c.name}</h3>
-              <CollectionBadge collection={c} />
-            </div>
-            <p className="text-sm text-muted">{c.description}</p>
-            <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line pt-3 text-sm text-muted">
-              <span className="flex min-w-0 flex-1 basis-40 items-start gap-1.5">
-                <KindIcon icon={kindIcon[c.kind]} className="mt-[3px] size-4" />
-                <span>
-                  {kindLabel[c.kind]}
-                  {singleKinds.includes(c.kind) &&
-                    `, ${c.kind === 'words' ? (c.my_words?.length ? 'Deine Wörter sind gespeichert' : 'Wörter einreichen') : c.my_option_ids?.length || c.my_option_id ? 'Deine Stimme ist gespeichert' : plural(c.options.length, 'Option', 'Optionen')}`}
-                </span>
-              </span>
-              <span className="inline-flex flex-none items-center gap-1 whitespace-nowrap font-semibold text-ink">
-                {c.status !== 'open' ? 'Ansehen' : repeatableKinds.includes(c.kind) ? 'Beitragen' : 'Abstimmen'}{' '}
-                <Arrow />
-              </span>
-            </div>
+            <KindIcon icon={kindIcon[c.kind]} className="size-4 text-muted" />
+            <span className="min-w-0 flex-1">
+              <strong className="line-clamp-2 break-words text-[15px] font-semibold">{c.name}</strong>
+              <span className="line-clamp-2 break-words text-sm text-muted">{c.description || kindLabel[c.kind]}</span>
+            </span>
+            <CollectionBadge collection={c} />
+            <span className="hidden text-sm text-muted sm:block">
+              {repeatableKinds.includes(c.kind) ? 'Beiträge lesen' : 'Ergebnisse ansehen'}
+            </span>
+            <Arrow />
           </Link>
-          <DevDebug label="Sammlung" data={debugData(c)} />
-        </div>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }
 
 // ---------- create / edit ----------
-// Editors pick any class; an existing Sammlung may change class within its group.
+// Editors pick any class; an existing Abstimmung may change class within its group.
 function localDeadline(value?: string | null) {
   if (!value) return '';
   const end = new Date(value);
   return new Date(end.getTime() - end.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 
-export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null; onSaved: () => void }) {
+export function SammlungForm({
+  sammlung,
+  initialKind,
+  onSaved,
+}: {
+  sammlung?: Category | null;
+  initialKind?: Kind | null;
+  onSaved: () => void;
+}) {
   const { user } = useSession();
   const action = useAction();
   const current = useRef<Category | null>(sammlung ?? null);
-  const [kind, setKind] = useState<Kind>(sammlung?.kind ?? 'memory');
-  const [repeatable, setRepeatable] = useState(sammlung?.repeatable ?? true);
-  const repeatabilityChosen = useRef(false);
+  const [kind, setKind] = useState<Kind>(sammlung?.kind ?? initialKind ?? 'memory');
+  const [repeatable, setRepeatable] = useState(sammlung?.repeatable ?? false);
   const [ongoing, setOngoing] = useState(sammlung?.ongoing ?? true);
   const [closesAt, setClosesAt] = useState(() => localDeadline(sammlung?.closes_at));
   const single = singleKinds.includes(kind);
@@ -282,7 +272,7 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
   const roster = useData<{ id: string; name: string }[]>('/roster', kind === 'person');
   const [allPeople, setAllPeople] = useState(sammlung?.kind === 'person' ? sammlung.all_people : true);
   const [allowSelfVote, setAllowSelfVote] = useState(sammlung?.allow_self_vote ?? false);
-  const [maxChoices, setMaxChoices] = useState(sammlung?.max_choices ?? 1);
+  const [maxChoices, setMaxChoices] = useState(sammlung?.max_choices ?? (initialKind === 'words' ? 3 : 1));
   const [selected, setSelected] = useState<string[]>(
     sammlung?.options.flatMap((o) => (o.user_id ? [o.user_id] : [])) ?? [],
   );
@@ -343,7 +333,7 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
         throw new Error('Bitte mindestens zwei Kandidat:innen auswählen.');
       if (!definitionLocked && single && (!Number.isInteger(maxChoices) || maxChoices < 1 || maxChoices > 500))
         throw new Error('Die Zahl der auswählbaren Optionen muss zwischen 1 und 500 liegen.');
-      // A retry after a failed follow-up step must update the Sammlung saved by the first attempt, not create another.
+      // A retry after a failed follow-up step must update the Abstimmung saved by the first attempt, not create another.
       const target = current.current;
       const deadlineChanged = !ongoing && closesAt !== localDeadline(target?.closes_at);
       if (!ongoing && (!target || deadlineChanged) && (!closesAt || new Date(closesAt).getTime() <= Date.now()))
@@ -392,13 +382,15 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
         }
       }
       onSaved();
-    }, 'Sammlung gespeichert.');
+    }, 'Abstimmung gespeichert.');
   }
   return (
     <form className={`${panel} mb-10 space-y-5`} onSubmit={save}>
-      <h2 className={heading}>
-        {definitionLocked && ongoing ? 'Berechtigungen bearbeiten' : sammlung ? 'Sammlung bearbeiten' : 'Neue Sammlung'}
-      </h2>
+      {sammlung && (
+        <h2 className={heading}>
+          {definitionLocked && ongoing ? 'Berechtigungen bearbeiten' : 'Abstimmung bearbeiten'}
+        </h2>
+      )}
       {definitionLocked ? (
         <p className="text-sm text-muted">
           Die Definition ist seit dem Öffnen gesperrt.
@@ -407,13 +399,44 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
         </p>
       ) : (
         <>
+          <fieldset className="min-w-0">
+            <legend className="sr-only">Klasse</legend>
+            <div className="flex flex-wrap gap-2">
+              {classes.map((k) => (
+                <label
+                  key={k}
+                  className={`${chip(kind === k)} cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink`}
+                >
+                  <input
+                    type="radio"
+                    name="kind"
+                    className="sr-only"
+                    checked={kind === k}
+                    disabled={action.busy}
+                    onChange={() => {
+                      setKind(k);
+                      if (!sammlung && k === 'words') setMaxChoices(3);
+                    }}
+                  />
+                  <KindIcon icon={kindIcon[k]} />
+                  {kindLabel[k]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <label className={label}>
             Name
-            <input className={field} name="name" defaultValue={sammlung?.name} maxLength={200} required />
+            <input className={field} name="name" defaultValue={sammlung?.name} maxLength={100} required />
           </label>
           <label className={label}>
             Beschreibung
-            <textarea className={field} name="description" defaultValue={sammlung?.description} rows={3} />
+            <textarea
+              className={field}
+              name="description"
+              defaultValue={sammlung?.description}
+              maxLength={500}
+              rows={3}
+            />
           </label>
           <div className="space-y-2">
             <label className="flex cursor-pointer items-center justify-between gap-4 text-[15px]">
@@ -424,10 +447,7 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
                 role="switch"
                 checked={repeatable && kind !== 'steckbrief'}
                 disabled={!!sammlung || action.busy || kind === 'steckbrief'}
-                onChange={(event) => {
-                  repeatabilityChosen.current = true;
-                  setRepeatable(event.target.checked);
-                }}
+                onChange={(event) => setRepeatable(event.target.checked)}
               />
               <span className="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full bg-pill transition-colors after:absolute after:left-1 after:size-5 after:rounded-full after:bg-white after:transition-transform peer-checked:bg-ink peer-checked:after:translate-x-5 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink peer-disabled:cursor-not-allowed peer-disabled:opacity-60"></span>
             </label>
@@ -439,45 +459,9 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
                   : 'Ein Beitrag oder eine änderbare Stimme pro Person.'}
             </p>
           </div>
-          <div className="space-y-2">
-            <label className="flex cursor-pointer items-center justify-between gap-4 text-[15px]">
-              <span>Fortlaufend</span>
-              <input
-                className="peer sr-only"
-                type="checkbox"
-                role="switch"
-                checked={ongoing}
-                disabled={!!sammlung || action.busy}
-                onChange={(event) => setOngoing(event.target.checked)}
-              />
-              <span className="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full bg-pill transition-colors after:absolute after:left-1 after:size-5 after:rounded-full after:bg-white after:transition-transform peer-checked:bg-ink peer-checked:after:translate-x-5 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink peer-disabled:opacity-60"></span>
-            </label>
-            <p className="text-sm text-muted">
-              {ongoing ? 'Bleibt bis zum manuellen Schließen offen.' : 'Schließt automatisch zum Enddatum.'}
-            </p>
-          </div>
           {sammlung && (
-            <p className="text-sm text-muted">Wiederholbarkeit und Fortlaufend stehen nach dem Anlegen fest.</p>
+            <p className="text-sm text-muted">Wiederholbarkeit und Ablaufdatum stehen nach dem Anlegen fest.</p>
           )}
-          <label className={label}>
-            Klasse
-            <select
-              className={field}
-              value={kind}
-              onChange={(e) => {
-                const next = e.target.value as Kind;
-                setKind(next);
-                if (!sammlung && !repeatabilityChosen.current) setRepeatable(repeatableKinds.includes(next));
-                if (!sammlung && next === 'words') setMaxChoices(3);
-              }}
-            >
-              {classes.map((k) => (
-                <option key={k} value={k}>
-                  {kindLabel[k]}
-                </option>
-              ))}
-            </select>
-          </label>
           {single &&
             (kind === 'words' ? (
               <p className="text-sm text-muted">
@@ -637,31 +621,34 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
       {!ongoing && (
         <EndDatePicker value={closesAt} onChange={setClosesAt} disabled={action.busy || (!!sammlung && !single)} />
       )}
+      {!sammlung && (
+        <button type="button" className={btn.secondary} disabled={action.busy} onClick={() => setOngoing(!ongoing)}>
+          {ongoing ? (
+            <>
+              <Plus aria-hidden="true" className="size-4 shrink-0" /> Ablaufdatum hinzufügen
+            </>
+          ) : (
+            'Ablaufdatum entfernen'
+          )}
+        </button>
+      )}
       {user.role === 'admin' && (
         <fieldset className="min-w-0 space-y-3" disabled={action.busy}>
           <legend className={label}>Wer darf bearbeiten</legend>
           <p className="text-sm text-muted">
-            Die Administration darf alle Sammlungen bearbeiten. Redaktionsmitglieder bearbeiten eigene und zugewiesene
-            Sammlungen und lesen alle Beiträge.
+            Die Administration darf alle Abstimmungen bearbeiten. Redaktionsmitglieder bearbeiten eigene und zugewiesene
+            Abstimmungen und lesen alle Beiträge.
           </p>
           {users.isPending ? (
             <Loading />
           ) : users.error ? (
             <Failure error={users.error} retry={() => users.refetch()} />
           ) : managers.length ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {managers.map((manager) => (
-                <label key={manager.id} className="flex items-center gap-2.5 text-[15px]">
-                  <input
-                    className="size-4 shrink-0 accent-[var(--color-accent)]"
-                    type="checkbox"
-                    checked={grants[manager.id] ?? (!!sammlung && manager.category_ids.includes(sammlung.id))}
-                    onChange={(e) => setGrants({ ...grants, [manager.id]: e.target.checked })}
-                  />
-                  {manager.name}
-                </label>
-              ))}
-            </div>
+            <PersonChecklist
+              people={managers}
+              checked={(manager) => grants[manager.id] ?? (!!sammlung && manager.category_ids.includes(sammlung.id))}
+              onToggle={(manager, checked) => setGrants({ ...grants, [manager.id]: checked })}
+            />
           ) : (
             <p className="text-sm text-muted">Noch niemand in der Redaktion.</p>
           )}
@@ -673,7 +660,7 @@ export function SammlungForm({ sammlung, onSaved }: { sammlung?: Category | null
           Abbrechen
         </button>
         <button className={btn.primary} disabled={action.busy}>
-          {definitionLocked && ongoing ? 'Berechtigungen speichern' : 'Sammlung speichern'}
+          {definitionLocked && ongoing ? 'Berechtigungen speichern' : 'Abstimmung speichern'}
         </button>
       </div>
     </form>
@@ -695,11 +682,17 @@ export function SammlungDetail() {
   );
 }
 
-const BackLink = () => (
-  <Link className="mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink" to="/sammlungen">
-    ← Sammlungen
-  </Link>
-);
+function BackLink() {
+  const [view] = useWorkspaceView();
+  return (
+    <Link
+      className="mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink"
+      to={view === 'redaktion' ? '/sammlungen' : '/'}
+    >
+      ← {view === 'redaktion' ? 'Abstimmungen' : 'Übersicht'}
+    </Link>
+  );
+}
 
 function ClassLine({ sammlung }: { sammlung: Category }) {
   return (
@@ -727,7 +720,7 @@ function CollectionReader({ sammlung }: { sammlung: Category }) {
   const setStatus = (status: Category['status']) =>
     action.run(
       () => api(`/categories/${sammlung.id}/status`, json('POST', { version: sammlung.version, status })),
-      'Sammlungsstatus gespeichert.',
+      'Abstimmungsstatus gespeichert.',
     );
   const submissions = useData<Submission[]>(`/submissions?category_id=${sammlung.id}`);
   const items = (submissions.data ?? []).filter((s) =>
@@ -749,24 +742,24 @@ function CollectionReader({ sammlung }: { sammlung: Category }) {
               <>
                 {sammlung.status === 'draft' && (
                   <button className={btn.primary} disabled={action.busy} onClick={() => setStatus('open')}>
-                    Sammlung öffnen
+                    Abstimmung öffnen
                   </button>
                 )}
                 {sammlung.status === 'open' && (
                   <button className={btn.secondary} disabled={action.busy} onClick={() => setStatus('closed')}>
-                    Sammlung schließen
+                    Abstimmung schließen
                   </button>
                 )}
                 {sammlung.status !== 'draft' && (
                   <button className={btn.secondary} disabled={action.busy} onClick={() => setStatus('draft')}>
-                    Sammlung verbergen
+                    Abstimmung verbergen
                   </button>
                 )}
               </>
             )}
             {canEdit(user, sammlung.id) && (
               <button className={btn.secondary} onClick={() => setEditing(!editing)}>
-                {editing ? 'Formular schließen' : 'Sammlung bearbeiten'}
+                {editing ? 'Formular schließen' : 'Abstimmung bearbeiten'}
               </button>
             )}
             <a className={btn.secondary} href={`/api/v1/categories/${sammlung.id}/export?status=all`}>
@@ -777,7 +770,7 @@ function CollectionReader({ sammlung }: { sammlung: Category }) {
       >
         <ClassLine sammlung={sammlung} />
       </PageHead>
-      <DevDebug label="Sammlung" data={debugData(sammlung)} />
+      <DevDebug label="Abstimmung" data={debugData(sammlung)} />
       {action.feedback}
       {editing && canEdit(user, sammlung.id) && (
         <SammlungForm key={sammlung.id} sammlung={sammlung} onSaved={() => setEditing(false)} />
@@ -869,7 +862,7 @@ function StudentCollection({ sammlung }: { sammlung: Category }) {
       <PageHead title={sammlung.name}>
         <ClassLine sammlung={sammlung} />
       </PageHead>
-      <DevDebug label="Sammlung" data={debugData(sammlung)} />
+      <DevDebug label="Abstimmung" data={debugData(sammlung)} />
       <div>
         <section className={`${photoCollection ? '' : panel} min-w-0 space-y-5`}>
           <h2 className={heading}>
@@ -904,7 +897,7 @@ function StudentCollection({ sammlung }: { sammlung: Category }) {
               </Link>
             )}
           {sammlung.status === 'closed' && (
-            <p className={notice}>Diese Sammlung ist beendet. Deine bisherigen Beiträge bleiben hier sichtbar.</p>
+            <p className={notice}>Diese Abstimmung ist beendet. Deine bisherigen Beiträge bleiben hier sichtbar.</p>
           )}
           <h3 className="pt-2 text-sm font-bold">{photoCollection ? 'Deine Fotos' : 'Deine Beiträge hier'}</h3>
           {submissions.isPending ? (
@@ -1059,14 +1052,14 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
   const deletePoll = () => {
     if (
       !window.confirm(
-        'Diese Sammlung sowie alle Stimmen und das Stimmprotokoll werden gelöscht. Möchtest du fortfahren?',
+        'Diese Abstimmung sowie alle Stimmen und das Stimmprotokoll werden gelöscht. Möchtest du fortfahren?',
       )
     )
       return;
     action.run(async () => {
       await api<void>(`/categories/${id}`, json('DELETE', { version: poll.version }));
       navigate('/sammlungen');
-    }, 'Sammlung gelöscht.');
+    }, 'Abstimmung gelöscht.');
   };
   return (
     <>
@@ -1079,7 +1072,7 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
       >
         {!redaktion && poll.status === 'open' ? 'Deine Stimme entscheidet mit.' : <ClassLine sammlung={poll} />}
       </PageHead>
-      <DevDebug label="Sammlung" data={debugData(poll)} />
+      <DevDebug label="Abstimmung" data={debugData(poll)} />
       {action.feedback}
       {editing && writable ? (
         <SammlungForm sammlung={poll} onSaved={() => setEditing(false)} />
@@ -1153,10 +1146,10 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
                       ? 'Wen wählst du?'
                       : 'Welche Option wählst du?'
                     : poll.status === 'closed'
-                      ? 'Diese Sammlung ist beendet.'
+                      ? 'Diese Abstimmung ist beendet.'
                       : poll.opened_at
-                        ? 'Diese Sammlung ist verborgen.'
-                        : 'Diese Sammlung ist ein Entwurf.'}
+                        ? 'Diese Abstimmung ist verborgen.'
+                        : 'Diese Abstimmung ist ein Entwurf.'}
               </h2>
               {redaktion ? (
                 <ul className="divide-y divide-line" aria-label="Auswahlmöglichkeiten">
@@ -1176,7 +1169,7 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
             <aside className="min-w-0 space-y-6">
               {writable && (
                 <section className={panel}>
-                  <h3 className={heading}>Sammlung verwalten</h3>
+                  <h3 className={heading}>Abstimmung verwalten</h3>
                   <div className="mt-4 flex flex-col gap-3">
                     {poll.status === 'draft' && (
                       <>
@@ -1188,9 +1181,9 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
                         <button
                           className={btn.primary}
                           disabled={action.busy}
-                          onClick={() => setStatus('open', 'Sammlung geöffnet.')}
+                          onClick={() => setStatus('open', 'Abstimmung geöffnet.')}
                         >
-                          Sammlung öffnen
+                          Abstimmung öffnen
                         </button>
                         <p className="text-sm text-muted">
                           Die Definition kann nach dem Öffnen nicht mehr geändert werden.
@@ -1206,23 +1199,23 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
                       <button
                         className={btn.secondary}
                         disabled={action.busy}
-                        onClick={() => setStatus('closed', 'Sammlung beendet.')}
+                        onClick={() => setStatus('closed', 'Abstimmung beendet.')}
                       >
-                        Sammlung beenden
+                        Abstimmung beenden
                       </button>
                     )}
                     {poll.status !== 'draft' && (
                       <button
                         className={btn.secondary}
                         disabled={action.busy}
-                        onClick={() => setStatus('draft', 'Sammlung verborgen.')}
+                        onClick={() => setStatus('draft', 'Abstimmung verborgen.')}
                       >
-                        Sammlung verbergen
+                        Abstimmung verbergen
                       </button>
                     )}
                     {user.role === 'admin' && (
                       <button className={btn.danger} disabled={action.busy} onClick={deletePoll}>
-                        Sammlung endgültig löschen
+                        Abstimmung endgültig löschen
                       </button>
                     )}
                   </div>

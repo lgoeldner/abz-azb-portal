@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ArrowRight, FileText } from 'lucide-react';
 import type { Area, Me, Ticket } from './api';
-import { AreaTag, Empty, Failure, Loading, StatusPill, btn, heading, useData } from './ui';
+import { AreaTag, Empty, Failure, Loading, StatusPill, btn, card, heading, useData } from './ui';
 
 const LIMIT = 6;
 
@@ -56,11 +56,11 @@ function TaskList({ tickets, positions }: { tickets: Ticket[]; positions: Map<st
           <li key={ticket.id}>
             <Link to={`/tickets/${ticket.id}`} className={row}>
               <FileText aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0 text-muted" />
-              {/* Phones: title gets its own line, tags wrap below it. */}
-              <span className="min-w-0 flex-1 basis-[calc(100%-1.75rem)] truncate text-[15px] font-semibold sm:basis-0">
+              {/* Narrow card: title gets its own line, tags wrap below it. */}
+              <span className="min-w-0 flex-1 basis-[calc(100%-1.75rem)] truncate text-[15px] font-semibold @md:basis-0">
                 {ticket.title}
               </span>
-              <span className="flex gap-2 pl-7 sm:pl-0">
+              <span className="flex gap-2 pl-7 @md:pl-0">
                 <AreaTag name={ticket.area_name} position={positions.get(ticket.area_id) ?? 1} />
                 <StatusPill status={ticket.status} />
               </span>
@@ -79,7 +79,7 @@ function TaskList({ tickets, positions }: { tickets: Ticket[]; positions: Map<st
   );
 }
 
-/** First thing on the Redaktion home: my open tickets and, for reviewers, what waits for their approval. */
+/** First card on the Redaktion home: my open tickets and, for reviewers, what waits for their approval. */
 export function MyTasks({ user }: { user: Me }) {
   const viewer = user.user;
   const tickets = useData<Ticket[]>('/tickets');
@@ -88,11 +88,12 @@ export function MyTasks({ user }: { user: Me }) {
   const s = tickets.data && areas.data ? summarizeTickets(tickets.data, areas.data, viewer.id) : null;
   const positions = new Map((areas.data ?? []).map((area) => [area.id, area.position]));
   return (
-    <section aria-labelledby="my-tasks" className="min-w-0">
+    <section aria-labelledby="my-tasks" className={`${card} @container`}>
       <h2 id="my-tasks" className={heading}>
         Meine Aufgaben
       </h2>
-      <div className="mt-3">
+      {/* Focusable so keyboard users can scroll it; the padding keeps the rows' hover overhang inside. */}
+      <div role="group" aria-labelledby="my-tasks" tabIndex={0} className="-mx-2 mt-3 max-h-96 overflow-y-auto px-2">
         {error ? (
           <Failure
             error={error}
@@ -113,15 +114,15 @@ export function MyTasks({ user }: { user: Me }) {
         ) : (
           <TaskList tickets={s.mine} positions={positions} />
         )}
-      </div>
-      {s && s.canReview && s.waiting.length > 0 && (
-        <div className="mt-8">
-          <h3 className="text-base font-extrabold tracking-tight">Wartet auf deine Freigabe</h3>
-          <div className="mt-2">
-            <TaskList tickets={s.waiting} positions={positions} />
+        {s && s.canReview && s.waiting.length > 0 && (
+          <div className="mt-8">
+            <h3 className="text-base font-extrabold tracking-tight">Wartet auf deine Freigabe</h3>
+            <div className="mt-2">
+              <TaskList tickets={s.waiting} positions={positions} />
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
       {s && s.mine.length > 0 && (
         <Link to="/tickets" className={`${btn.text} mt-4 min-h-11`}>
           Zum Board <ArrowRight aria-hidden="true" className="size-4 shrink-0" />

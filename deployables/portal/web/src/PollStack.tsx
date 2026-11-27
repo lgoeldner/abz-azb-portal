@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import type { Category } from './api';
+import { Link, useLocation } from 'react-router-dom';
+import { day, type Category } from './api';
 import { Arrow, btn, isSubmissionCollection, KindIcon, kindIcon, kindLabel } from './ui';
 import { BallotForm } from './BallotForm';
 import './PollStack.css';
@@ -9,6 +9,7 @@ import './PollStack.css';
 type Selection = { id: string; index: number; direction: 'next' | 'previous' };
 
 export function PollStack({ items: available, initialId }: { items: Category[]; initialId?: string }) {
+  const onDashboard = useLocation().pathname === '/';
   const [saving, setSaving] = useState(false);
   const [completed, setCompleted] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string[]>>({});
@@ -34,16 +35,16 @@ export function PollStack({ items: available, initialId }: { items: Category[]; 
   }
 
   return (
-    <section className="poll-stack" aria-label="Sammlungen, die auf dich warten">
+    <section className="poll-stack" aria-label="Abstimmungen, die auf dich warten">
       <div className="poll-stack__controls">
         <span className="poll-stack__count" aria-hidden="true">
           {items.length ? `${index + 1} / ${items.length}` : '0 / 0'}
         </span>
-        <nav className="poll-stack__arrows" aria-label="Sammlungen durchblättern">
+        <nav className="poll-stack__arrows" aria-label="Abstimmungen durchblättern">
           <button
             type="button"
             className="poll-stack__arrow"
-            aria-label="Vorherige Sammlung"
+            aria-label="Vorherige Abstimmung"
             disabled={saving || !item || index === 0}
             onClick={() => move('previous')}
           >
@@ -52,7 +53,7 @@ export function PollStack({ items: available, initialId }: { items: Category[]; 
           <button
             type="button"
             className="poll-stack__arrow"
-            aria-label="Nächste Sammlung"
+            aria-label="Nächste Abstimmung"
             disabled={saving || !item || index === items.length - 1}
             onClick={() => move('next')}
           >
@@ -70,6 +71,7 @@ export function PollStack({ items: available, initialId }: { items: Category[]; 
                 <KindIcon icon={kindIcon[item.kind]} className="size-5" />
                 {kindLabel[item.kind]}
               </span>
+              {item.closes_at && <span className="text-sm text-muted">Bis {day(item.closes_at)}</span>}
             </span>
             <div>
               <h3 className="poll-stack__title">{item.name}</h3>
@@ -78,7 +80,7 @@ export function PollStack({ items: available, initialId }: { items: Category[]; 
             {isSubmissionCollection(item.kind) ? (
               <div className="poll-stack__bottomline">
                 <span className="poll-stack__meta">
-                  {item.status === 'open' ? 'Noch nichts eingereicht' : 'Diese Sammlung ist beendet'}
+                  {item.status === 'open' ? 'Noch nichts eingereicht' : 'Diese Abstimmung ist beendet'}
                 </span>
                 {item.status === 'open' && (
                   <Link className={btn.primary} to={`/beitraege/neu?kategorie=${item.id}`}>
@@ -111,14 +113,16 @@ export function PollStack({ items: available, initialId }: { items: Category[]; 
         ) : (
           <div className="poll-stack__empty">
             <p>Alles erledigt. Danke fürs Mitmachen!</p>
-            <Link className={btn.text} to="/sammlungen">
-              Alle Sammlungen ansehen <Arrow />
-            </Link>
+            {!onDashboard && (
+              <Link className={btn.text} to="/">
+                Zur Übersicht <Arrow />
+              </Link>
+            )}
           </div>
         )}
       </div>
       <p className="sr-only" aria-live="polite" aria-atomic="true">
-        {item ? `Sammlung ${index + 1} von ${items.length}: ${item.name}` : 'Keine Sammlungen verfügbar'}
+        {item ? `Abstimmung ${index + 1} von ${items.length}: ${item.name}` : 'Keine Abstimmungen verfügbar'}
       </p>
     </section>
   );

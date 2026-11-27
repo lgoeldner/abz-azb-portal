@@ -10,7 +10,7 @@ import {
   UserRound,
   type LucideIcon,
 } from 'lucide-react';
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useState, type ReactNode, type ComponentProps } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -34,6 +34,8 @@ export const btn = {
     'inline-flex items-center justify-center gap-3 rounded-full bg-ink px-6 py-3 text-[15px] font-bold text-white transition-transform hover:bg-accent active:scale-95 hover:-translate-y-0.5',
   secondary:
     'inline-flex items-center justify-center gap-2 rounded-full bg-pop px-5 py-2.5 text-[15px] font-bold text-ink transition-transform hover:-translate-y-0.5 active:scale-95',
+  redaktion:
+    'inline-flex items-center justify-center gap-3 rounded-full bg-redaktion px-6 py-3 text-[15px] font-bold text-white transition-transform hover:bg-redaktion-dark active:scale-95 hover:-translate-y-0.5',
   text: 'inline-flex items-center gap-2 bg-transparent p-0 text-sm font-bold text-ink underline decoration-2 underline-offset-4 decoration-pop hover:decoration-accent hover:text-accent-dark',
   danger: 'inline-flex items-center gap-2 bg-transparent p-0 text-sm font-bold text-bad hover:underline',
 };
@@ -42,6 +44,7 @@ export const field =
 export const label = 'block text-sm font-bold';
 export const panel = 'rounded-ui bg-soft p-5 sm:p-6';
 export const heading = 'text-xl font-extrabold tracking-tight';
+export const card = 'flex min-w-0 flex-col rounded-ui bg-white p-5 sm:p-6';
 export const notice = 'rounded-ui bg-soft px-4 py-3 text-sm';
 
 export const Session = createContext<Me>(null!);
@@ -161,7 +164,7 @@ export function Badge({ status, label }: { status: keyof typeof statusLabels; la
     </span>
   );
 }
-// One class (kind) per Sammlung: one icon and one label for all eight, shown wherever the class is named.
+// One class (kind) per Abstimmung: one icon and one label for all eight, shown wherever the class is named.
 export type Kind = Category['kind'];
 export const kindIcon: Record<Kind, LucideIcon> = {
   idea: Lightbulb,
@@ -180,14 +183,14 @@ export const kindLabel: Record<Kind, string> = {
   photo: 'Fotos',
   steckbrief: 'Steckbrief',
   person: 'Personenwahl',
-  proposal: 'Vorschlagswahl',
+  proposal: 'Auswahl',
   words: 'Wortwolke',
 };
 export const submissionKinds: Kind[] = ['idea', 'quote', 'memory', 'photo', 'steckbrief'];
 export const ballotKinds: Kind[] = ['person', 'proposal', 'words'];
 export const isSubmissionCollection = (kind: Kind) => submissionKinds.includes(kind);
 export const isBallot = (kind: Kind) => ballotKinds.includes(kind);
-// Keep these aliases while Sammlungen defaults migrate to the kind-based helpers.
+// Keep these aliases while Abstimmungen defaults migrate to the kind-based helpers.
 export const repeatableKinds = submissionKinds;
 export const singleKinds = ballotKinds;
 export const allKinds: Kind[] = [...submissionKinds, ...ballotKinds];
@@ -413,6 +416,42 @@ export function Avatar({
     >
       {initialsOf(user.name) || '?'}
     </span>
+  );
+}
+/** Scrollable checkbox list of people with avatars (ticket assignees, collection editors). */
+export function PersonChecklist<T extends { id: string; name: string }>({
+  people,
+  checked,
+  onToggle,
+  name = (person) => person.name,
+  extra,
+  ...group
+}: {
+  people: T[];
+  checked: (person: T) => boolean;
+  onToggle: (person: T, checked: boolean) => void;
+  name?: (person: T) => string;
+  extra?: (person: T) => ReactNode;
+} & Pick<ComponentProps<'div'>, 'id' | 'role' | 'aria-label'>) {
+  return (
+    <div {...group} className="grid max-h-60 gap-0.5 overflow-y-auto rounded-ui border border-[#e9e9e7] bg-white p-1.5">
+      {people.map((p) => (
+        <label
+          key={p.id}
+          className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg px-2 text-sm hover:bg-soft"
+        >
+          <input
+            type="checkbox"
+            className="size-4 flex-none"
+            checked={checked(p)}
+            onChange={(e) => onToggle(p, e.target.checked)}
+          />
+          <Avatar user={p} />
+          <span className="min-w-0 flex-1 truncate">{name(p)}</span>
+          {extra?.(p)}
+        </label>
+      ))}
+    </div>
   );
 }
 export type TicketStatus = 'todo' | 'in_progress' | 'review' | 'done';

@@ -138,7 +138,7 @@ describe('submission collections independent of repeatability', () => {
 
     const title = await screen.findByLabelText('Titel');
     expect(screen.getByRole('heading', { name: `Beitrag für „${selected.name}“` })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Sammlung')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Abstimmung')).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     fireEvent.change(title, { target: { value: 'Unser Ausflug' } });
     fireEvent.submit(title.closest('form')!);

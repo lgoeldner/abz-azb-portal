@@ -165,7 +165,7 @@ describe('photo contributions', () => {
       </Routes>,
     );
     const input = await screen.findByLabelText(/Mindestens ein Foto/);
-    expect(screen.queryByLabelText('Sammlung')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Abstimmung')).not.toBeInTheDocument();
     fireEvent.change(input, { target: { files: [firstFile, secondFile] } });
     // Caption fields stay hidden until asked for, one per picked photo.
     expect(screen.queryByLabelText('Bildtext optional')).toBeNull();

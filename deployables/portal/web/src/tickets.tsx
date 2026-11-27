@@ -47,6 +47,7 @@ import {
   label,
   Loading,
   PageHead,
+  PersonChecklist,
   panel,
   StatusPill,
   statusTone,
@@ -723,7 +724,7 @@ function TicketCard({
             to={'/tickets/' + t.id}
             className="min-w-0 flex-1 text-[17px] font-bold leading-snug after:absolute after:inset-0"
           >
-            {t.title}
+            <span className="line-clamp-3 break-words">{t.title}</span>
           </Link>
         </div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
@@ -741,7 +742,7 @@ function TicketCard({
             </span>
           )}
         </div>
-        {t.goal && <p className="line-clamp-3 text-[15px] leading-snug">{t.goal}</p>}
+        {t.goal && <p className="line-clamp-3 break-words text-[15px] leading-snug">{t.goal}</p>}
         <div className="flex items-center justify-between gap-2">
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
             {t.comment_count > 0 && (
@@ -796,29 +797,16 @@ function PeoplePicker({
   const list: UserRef[] = [{ id: user.id, name: user.name }];
   for (const p of [...(people.data ?? []), ...current]) if (!list.some((o) => o.id === p.id)) list.push(p);
   return (
-    <div
+    <PersonChecklist
       id={id}
       role="group"
       aria-label="Wer"
-      className="grid max-h-60 gap-0.5 overflow-y-auto rounded-ui border border-[#e9e9e7] bg-white p-1.5"
-    >
-      {list.map((p) => (
-        <label
-          key={p.id}
-          className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg px-2 text-sm hover:bg-soft"
-        >
-          <input
-            type="checkbox"
-            className="size-4 flex-none"
-            checked={value.includes(p.id)}
-            onChange={(e) => onChange(e.target.checked ? [...value, p.id] : value.filter((v) => v !== p.id))}
-          />
-          <Avatar user={p} />
-          <span className="min-w-0 flex-1 truncate">{p.id === user.id ? p.name + ' (ich)' : p.name}</span>
-          {reviewerOf(area, p.id) && <ReviewerLabel />}
-        </label>
-      ))}
-    </div>
+      people={list}
+      checked={(p) => value.includes(p.id)}
+      onToggle={(p, on) => onChange(on ? [...value, p.id] : value.filter((v) => v !== p.id))}
+      name={(p) => (p.id === user.id ? p.name + ' (ich)' : p.name)}
+      extra={(p) => reviewerOf(area, p.id) && <ReviewerLabel />}
+    />
   );
 }
 
@@ -958,7 +946,7 @@ function TicketForm({
       )}
       <label className={label}>
         Titel
-        <input className={field} value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input className={field} value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} />
       </label>
       <div className="grid gap-5 sm:grid-cols-2">
         <Field name="Bereich" help={HELP.bereich}>
@@ -1000,7 +988,13 @@ function TicketForm({
       </div>
       <Field name="Zieldefinition" help={HELP.ziel}>
         {(id) => (
-          <textarea id={id} className={field + ' min-h-24'} value={goal} onChange={(e) => setGoal(e.target.value)} />
+          <textarea
+            id={id}
+            className={field + ' min-h-24'}
+            value={goal}
+            maxLength={1000}
+            onChange={(e) => setGoal(e.target.value)}
+          />
         )}
       </Field>
       <div>

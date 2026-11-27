@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRef, useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   api,
@@ -59,6 +59,90 @@ function photoValidationError(files: File[], alreadyAttached = 0) {
   return '';
 }
 const submittable = (c: Category) => isSubmissionCollection(c.kind);
+
+// One look for quotes: the paper with large marks and the attribution below it,
+// whether the quote is being written, read or edited.
+function QuotePaper({ children }: { children: ReactNode }) {
+  return (
+    <span className="quote-paper">
+      <span className="quote-mark quote-mark-open" aria-hidden="true">
+        „
+      </span>
+      {children}
+      <span className="quote-mark quote-mark-close" aria-hidden="true">
+        “
+      </span>
+    </span>
+  );
+}
+
+type QuoteDraft = { title: string; body: string };
+
+// Uncontrolled (FormData) without draft, controlled with it.
+function QuoteFields({ draft, onChange }: { draft?: QuoteDraft; onChange?: (patch: Partial<QuoteDraft>) => void }) {
+  return (
+    <>
+      <label className={`${label} quote-writing-label`}>
+        Dein Zitat
+        <QuotePaper>
+          <textarea
+            className="quote-textarea"
+            name="body"
+            rows={4}
+            placeholder="Dieser eine Satz …"
+            maxLength={20000}
+            autoFocus={!!draft}
+            value={draft?.body}
+            onChange={onChange && ((e) => onChange({ body: e.target.value }))}
+          />
+        </QuotePaper>
+      </label>
+      <label className={`${label} quote-attribution-label`}>
+        Zitat von
+        <input
+          className="quote-attribution"
+          name="title"
+          placeholder="Name oder Quelle"
+          maxLength={200}
+          required
+          value={draft?.title}
+          onChange={onChange && ((e) => onChange({ title: e.target.value }))}
+        />
+      </label>
+    </>
+  );
+}
+
+function QuoteCitation({ s, caption, onEdit }: { s: Submission; caption: string; onEdit?: () => void }) {
+  const content = (
+    <>
+      <span className={`${label} quote-writing-label`}>
+        <span className="flex items-baseline justify-between gap-3">
+          {caption}
+          {onEdit && (
+            <span className="text-sm font-semibold text-muted">
+              Bearbeiten <span aria-hidden="true">✎</span>
+            </span>
+          )}
+        </span>
+        <QuotePaper>
+          <span className="quote-text">{s.body || 'Kein Text hinzugefügt.'}</span>
+        </QuotePaper>
+      </span>
+      <span className={`${label} quote-attribution-label`}>
+        Zitat von
+        <cite className="quote-attribution quote-attribution-read">{s.title}</cite>
+      </span>
+    </>
+  );
+  return onEdit ? (
+    <button type="button" className="quote-fields quote-citation-edit" onClick={onEdit}>
+      {content}
+    </button>
+  ) : (
+    <div className="quote-fields">{content}</div>
+  );
+}
 export function Contributions() {
   const { user } = useSession();
   const categories = useData<Category[]>('/categories');
@@ -83,7 +167,7 @@ export function Contributions() {
   return (
     <>
       <PageHead title="Meine Beiträge">
-        Deine Beiträge und abgegebenen Stimmen in den Sammlungen des Jahrgangs.
+        Deine Beiträge und abgegebenen Stimmen in den Abstimmungen des Jahrgangs.
       </PageHead>
       <div className="mb-6 flex flex-wrap items-end gap-3">
         <label className={`${label} min-w-0 w-full sm:flex-1`}>
@@ -91,7 +175,7 @@ export function Contributions() {
           <input
             type="search"
             className={field}
-            placeholder="Beitrag oder Sammlung finden …"
+            placeholder="Beitrag oder Abstimmung finden …"
             maxLength={200}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -125,7 +209,7 @@ export function Contributions() {
         <SubmissionList items={own} categories={categories.data ?? []} ballots={ownBallots} />
       ) : (
         <Empty>
-          Noch keine Beiträge. <Link to="/">Wähle auf der Startseite eine Sammlung aus.</Link>
+          Noch keine Beiträge. <Link to="/">Wähle auf der Startseite eine Abstimmung aus.</Link>
         </Empty>
       )}
     </>
@@ -230,7 +314,7 @@ export function NewContribution() {
           ? 'Lade mindestens ein Foto hoch. Zu jedem Bild kannst du einen optionalen Bildtext hinzufügen.'
           : isSteckbrief
             ? category.description || 'Dein Blatt in der Abizeitung.'
-            : 'Dein Beitrag wird in der Sammlung gespeichert. Die Redaktion sichtet die Sammlung nach dem Sammelzeitraum.'}
+            : 'Dein Beitrag wird in der Abstimmung gespeichert. Die Redaktion sichtet die Abstimmung nach dem Sammelzeitraum.'}
       </PageHead>
       {categories.isPending || submissions.isPending ? (
         <Loading />
@@ -243,14 +327,14 @@ export function NewContribution() {
           }}
         />
       ) : !categories.data?.length ? (
-        <Empty>Das Team richtet die Sammlungen gerade ein.</Empty>
+        <Empty>Das Team richtet die Abstimmungen gerade ein.</Empty>
       ) : existing && (!isPhoto || existing.status !== 'pending') ? (
         <Empty>
-          Du hast bereits einen Beitrag in dieser Sammlung.{' '}
+          Du hast bereits einen Beitrag in dieser Abstimmung.{' '}
           <Link to={`/beitraege/${existing.id}`}>Zum gespeicherten Beitrag</Link>
         </Empty>
       ) : category && category.status !== 'open' && !saved ? (
-        <Empty>Neue Beiträge können nur in offenen Sammlungen eingereicht werden.</Empty>
+        <Empty>Neue Beiträge können nur in offenen Abstimmungen eingereicht werden.</Empty>
       ) : !category ? (
         <Navigate to="/" replace />
       ) : isSteckbrief ? (
@@ -270,36 +354,7 @@ export function NewContribution() {
                 disabled={action.busy || !!saved}
               >
                 {isQuote ? (
-                  <>
-                    <label className={`${label} quote-writing-label`}>
-                      Dein Zitat
-                      <span className="quote-paper">
-                        <span className="quote-mark quote-mark-open" aria-hidden="true">
-                          „
-                        </span>
-                        <textarea
-                          className="quote-textarea"
-                          name="body"
-                          rows={4}
-                          placeholder="Dieser eine Satz …"
-                          maxLength={20000}
-                        />
-                        <span className="quote-mark quote-mark-close" aria-hidden="true">
-                          “
-                        </span>
-                      </span>
-                    </label>
-                    <label className={`${label} quote-attribution-label`}>
-                      Zitat von
-                      <input
-                        className="quote-attribution"
-                        name="title"
-                        placeholder="Name oder Quelle"
-                        maxLength={200}
-                        required
-                      />
-                    </label>
-                  </>
+                  <QuoteFields />
                 ) : (
                   <>
                     <label className={label}>
@@ -528,6 +583,24 @@ export function ContributionDetail() {
   const categoryKind = category?.kind;
   const isPhoto = categoryKind === 'photo';
   const isSteckbrief = categoryKind === 'steckbrief';
+  const isQuote = categoryKind === 'quote';
+  const conflict = action.error instanceof ApiError && action.error.status === 409;
+  const collectionField = (
+    <label className={label}>
+      Abstimmung
+      <select
+        className={field}
+        value={draft.category_id}
+        onChange={(e) => setDraft({ ...draft, category_id: e.target.value })}
+      >
+        {categoryChoices.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
   const beginEdit = () => {
     setDraft({
       title: s.title,
@@ -666,11 +739,12 @@ export function ContributionDetail() {
     <>
       <Link
         className="mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink"
-        to={isRedaktion ? `/sammlungen/${s.category_id}` : own ? '/beitraege' : '/redaktion'}
+        to={isRedaktion ? `/sammlungen/${s.category_id}` : own ? '/beitraege' : '/redaktion/beitraege'}
       >
-        ← {isRedaktion ? 'Zur Sammlung' : own ? 'Meine Beiträge' : 'Redaktion'}
+        ← {isRedaktion ? 'Zur Abstimmung' : own ? 'Meine Beiträge' : 'Redaktion'}
       </Link>
-      <PageHead title={s.title} action={<Badge status={s.status} />}>
+      {/* A quote's title is its attribution, already shown under the citation. */}
+      <PageHead title={isQuote ? (categoryName ?? 'Zitat') : s.title} action={<Badge status={s.status} />}>
         <span className="flex flex-wrap gap-x-2">
           {categoryName && <span>{categoryName}</span>}
           <span>Von {s.author_name}</span>
@@ -691,7 +765,7 @@ export function ContributionDetail() {
         }}
       />
       {action.feedback}
-      {action.error instanceof ApiError && action.error.status === 409 && editing && (
+      {conflict && editing && (
         <div className={`${notice} space-y-3`}>
           <button
             className={btn.secondary}
@@ -709,42 +783,43 @@ export function ContributionDetail() {
         <div className="min-w-0 space-y-6">
           {isSteckbrief && <Steckbrief key={s.id} category={category!} submission={s} readOnly={!editable} />}
           {editing && editable && !isPhoto ? (
-            <form className={`${panel} space-y-5`} onSubmit={save}>
+            <form className={`${panel} space-y-5 ${isQuote ? 'quote-submission-form' : ''}`} onSubmit={save}>
+              {isQuote ? (
+                <div className="quote-fields">
+                  <QuoteFields draft={draft} onChange={(patch) => setDraft({ ...draft, ...patch })} />
+                </div>
+              ) : (
+                <>
+                  <label className={label}>
+                    Titel
+                    <input
+                      className={field}
+                      value={draft.title}
+                      maxLength={200}
+                      required
+                      onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                    />
+                  </label>
+                  {collectionField}
+                  <label className={label}>
+                    Dein Beitrag
+                    <textarea
+                      className={field}
+                      rows={8}
+                      value={draft.body}
+                      onChange={(e) => setDraft({ ...draft, body: e.target.value })}
+                    />
+                  </label>
+                </>
+              )}
               <label className={label}>
-                Titel
-                <input
-                  className={field}
-                  value={draft.title}
-                  maxLength={200}
-                  required
-                  onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-                />
-              </label>
-              <label className={label}>
-                Sammlung
-                <select
-                  className={field}
-                  value={draft.category_id}
-                  onChange={(e) => setDraft({ ...draft, category_id: e.target.value })}
-                >
-                  {categoryChoices.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={label}>
-                Dein Beitrag
-                <textarea
-                  className={field}
-                  rows={8}
-                  value={draft.body}
-                  onChange={(e) => setDraft({ ...draft, body: e.target.value })}
-                />
-              </label>
-              <label className={label}>
-                Kontext
+                {isQuote ? (
+                  <>
+                    Kontext & Hinweise <small className="font-normal text-muted">optional</small>
+                  </>
+                ) : (
+                  'Kontext'
+                )}
                 <textarea
                   className={field}
                   rows={3}
@@ -752,6 +827,8 @@ export function ContributionDetail() {
                   onChange={(e) => setDraft({ ...draft, context: e.target.value })}
                 />
               </label>
+              {/* ponytail: the quote composer has no picker; show it only when moving is possible */}
+              {isQuote && categoryChoices.length > 1 && collectionField}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <button type="button" className={btn.secondary} onClick={() => setEditing(false)}>
                   Abbrechen
@@ -762,7 +839,22 @@ export function ContributionDetail() {
               </div>
             </form>
           ) : null}
-          {!isSteckbrief && (!isPhoto || s.body || s.context) && (
+          {isQuote && (!(editing && editable) || conflict) && (
+            <article className={`${panel} quote-submission-form space-y-5`}>
+              <QuoteCitation
+                s={s}
+                caption={editing && editable ? 'Aktueller Stand' : isRedaktion ? 'Zitat' : 'Dein Zitat'}
+                onEdit={editable && !editing ? beginEdit : undefined}
+              />
+              {s.context && (
+                <div className="border-t border-line pt-4">
+                  <h3 className="text-sm font-semibold text-muted">Kontext & Hinweise</h3>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-[15px]">{s.context}</p>
+                </div>
+              )}
+            </article>
+          )}
+          {!isSteckbrief && !isQuote && (!isPhoto || s.body || s.context) && (
             <article className={panel}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className={heading}>
@@ -887,7 +979,7 @@ export function ContributionDetail() {
                   <dd>{date(s.created_at)}</dd>
                 </div>
                 <div>
-                  <dt className="text-muted">Sammlung</dt>
+                  <dt className="text-muted">Abstimmung</dt>
                   <dd>{categoryName ?? 'Beitrag'}</dd>
                 </div>
               </dl>
@@ -905,7 +997,7 @@ export function ContributionDetail() {
             )}
             {isRedaktion && !canEdit(user, s.category_id) && (
               <p className="text-sm text-muted">
-                Du hast Leserechte. Für Anmerkungen brauchst du eine Zuweisung zu dieser Sammlung.
+                Du hast Leserechte. Für Anmerkungen brauchst du eine Zuweisung zu dieser Abstimmung.
               </p>
             )}
           </section>
@@ -973,12 +1065,12 @@ export function Editorial() {
   const [exportStatus, setExportStatus] = useState('all');
   return (
     <>
-      <PageHead title="Beiträge">Beiträge aus allen Sammlungen und Status.</PageHead>
+      <PageHead title="Beiträge">Beiträge aus allen Abstimmungen und Status.</PageHead>
       <div className="mb-6 flex flex-wrap items-end gap-3">
         <label className={`${label} min-w-0 w-full sm:w-56`}>
-          Sammlung
+          Abstimmung
           <select className={field} value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="">Alle Sammlungen</option>
+            <option value="">Alle Abstimmungen</option>
             {sammlungen.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -1021,16 +1113,16 @@ export function Editorial() {
       )}
       <section className={`${panel} mt-10 flex flex-wrap items-end justify-between gap-6`}>
         <div className="min-w-0 max-w-md">
-          <h2 className={heading}>Eine Sammlung exportieren</h2>
+          <h2 className={heading}>Eine Abstimmung exportieren</h2>
           <p className="mt-1 text-sm text-muted">
             ZIP mit CSV, Originaldateien und Manifest. Stimmdaten sind nicht enthalten.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <label className={`${label} min-w-0 w-full sm:w-56`}>
-            Sammlung
+            Abstimmung
             <select className={field} value={category} onChange={(e) => setCategory(e.target.value)}>
-              <option value="">Sammlung auswählen</option>
+              <option value="">Abstimmung auswählen</option>
               {sammlungen.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -1051,7 +1143,7 @@ export function Editorial() {
             </a>
           ) : (
             <button className={btn.primary} disabled>
-              Sammlung auswählen
+              Abstimmung auswählen
             </button>
           )}
         </div>

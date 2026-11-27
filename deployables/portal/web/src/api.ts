@@ -62,5 +62,6 @@ export const statusLabels = {
   open: 'Offen',
   closed: 'Beendet',
 };
+export const day = (value: string) => new Intl.DateTimeFormat('de-DE').format(new Date(value));
 export const date = (value: string) =>
   new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));

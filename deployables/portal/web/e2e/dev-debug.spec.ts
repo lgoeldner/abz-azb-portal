@@ -110,7 +110,7 @@ test('production builds omit debug controls for every role and view', async ({ p
       await expect(page.getByText('Debug', { exact: true })).toHaveCount(0);
       await expect(page.locator('[data-dev-debug]')).toHaveCount(0);
       if (path === `/sammlungen/${category.id}`) {
-        await expect(page.getByRole('button', { name: 'Sammlung bearbeiten' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Abstimmung bearbeiten' })).toBeVisible();
         await expect(debugMenus(page)).toHaveCount(0);
       }
     }

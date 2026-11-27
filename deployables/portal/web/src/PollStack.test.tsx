@@ -82,8 +82,8 @@ describe('PollStack', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Zusammen' }));
     fireEvent.click(screen.getByRole('button', { name: /Stimme speichern/ }));
     expect(screen.getByRole('heading', { name: 'Abimotto' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Nächste Sammlung' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Nächste Sammlung' }));
+    expect(screen.getByRole('button', { name: 'Nächste Abstimmung' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Nächste Abstimmung' }));
     expect(screen.getByRole('heading', { name: 'Abimotto' })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/categories/poll-1/ballot',
@@ -92,7 +92,7 @@ describe('PollStack', () => {
     resolveVote(Response.json({ option_ids: ['option-1'], option_id: 'option-1' }));
     await waitFor(() => expect(invalidate).toHaveBeenCalled());
     expect(screen.getByRole('heading', { name: 'Abimotto' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Nächste Sammlung' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Nächste Abstimmung' })).toBeDisabled();
     rerender(<PollStack items={[next]} />);
     expect(screen.getByRole('heading', { name: 'Nächste Frage' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Zusammen' })).toBeDisabled();
@@ -127,8 +127,8 @@ describe('PollStack', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Stimme speichern' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Bitte erneut versuchen.');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Nächste Sammlung' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Vorherige Sammlung' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nächste Abstimmung' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Vorherige Abstimmung' }));
     expect(screen.getByRole('button', { name: 'Zusammen' })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'Stimme speichern' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
