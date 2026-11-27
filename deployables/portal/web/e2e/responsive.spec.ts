@@ -220,7 +220,8 @@ test('pending and request error states remain readable on mobile', async ({ page
 for (const role of ['student', 'manager', 'admin'] as const) {
   test(`${role} pages fit the supported viewport widths and navigation remains usable`, async ({ page }) => {
     await useFixtures(page, role);
-    const path = role === 'student' ? '/beitraege' : role === 'manager' ? '/redaktion' : '/verwaltung/personen';
+    const path =
+      role === 'student' ? '/beitraege' : role === 'manager' ? '/redaktion/beitraege' : '/verwaltung/personen';
 
     for (const width of widths) {
       await page.setViewportSize({ width, height: 800 });
@@ -243,22 +244,24 @@ for (const role of ['student', 'manager', 'admin'] as const) {
           })),
       }));
       expect(layout.document, `document overflow: ${JSON.stringify(layout.offenders)}`).toBeLessThanOrEqual(width);
-      if (width <= 650) {
-        await page.getByRole('button', { name: 'Menü öffnen' }).click();
-        await expect(page.getByRole('navigation', { name: 'Hauptnavigation' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Verwaltung' })).toHaveCount(role === 'admin' ? 1 : 0);
-      }
+      const account = page.getByRole('region', { name: 'Konto' });
+      await expect(account.getByRole('button', { name: 'Abmelden' })).toBeInViewport();
+      await expect(account.getByRole('link', { name: 'Einstellungen' })).toBeInViewport();
+      // Phones get the expanding mode pill, wider screens the segmented switch in the account card.
+      const phone = width < 651;
+      await expect(page.getByRole('button', { name: /^Ansicht:/ })).toBeVisible({
+        visible: phone && role !== 'student',
+      });
+      await expect(account.getByRole('button', { name: 'Schüler' })).toBeVisible({
+        visible: !phone && role !== 'student',
+      });
     }
 
     await page.setViewportSize({ width: 640, height: 360 });
     await page.goto(path);
-    await page.getByRole('button', { name: 'Menü öffnen' }).click();
-    const aside = page.getByRole('dialog', { name: 'Seitenleiste' });
-    await expect(aside.getByRole('link', { name: 'Überblick' })).toBeVisible();
-    await aside.evaluate((element) => {
-      element.scrollTop = element.scrollHeight;
-    });
-    await expect(aside.getByRole('button', { name: /Abmelden/ })).toBeInViewport();
+    await expect(
+      page.getByRole('region', { name: 'Konto' }).getByRole('button', { name: 'Abmelden' }),
+    ).toBeInViewport();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 }

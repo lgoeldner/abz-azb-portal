@@ -14,41 +14,45 @@ async function signInAs(page: Page, role: 'Jahrgang' | 'Redaktion' | 'Administra
   const access = page.locator(`[data-user-id="${id}"]`);
   await expect(access, `Development login for ${role} is available (start a seeded development server)`).toBeVisible();
   await access.click();
-  await page.waitForURL((url) => url.pathname === '/');
-  // The sidebar brand link is hidden on mobile, so wait for the page heading instead.
+  // Editors land on /redaktion on a fresh visit.
+  await page.waitForURL((url) => url.pathname === '/' || url.pathname === '/redaktion');
   await expect(page.getByRole('main').getByRole('heading', { level: 1 })).toBeVisible();
 }
 
-// Students reach single-answer Abstimmungen from the sidebar: open ones under "Offen", answered or finished ones under "Erledigt".
-async function openFirstPoll(page: Page) {
-  const aside = page.getByRole('complementary', { name: 'Seitenleiste' });
-  const open = aside.getByRole('list', { name: 'Offen' }).getByRole('link');
-  if (await open.count()) await open.first().click();
-  else {
-    await aside.getByText(/^Erledigt/).click();
-    await aside
-      .getByRole('link', { name: /abgestimmt|beendet/ })
-      .first()
-      .click();
-  }
-}
-
-test('student signs in, submits a contribution, and can reach a ballot', async ({ page }) => {
+test('student signs in, submits a contribution, and returns to the open ballots', async ({ page }) => {
   await signInAs(page, 'Jahrgang');
-  await page
-    .getByRole('complementary', { name: 'Seitenleiste' })
-    .getByRole('link', { name: /^Ideen/ })
-    .click();
+  await page.getByRole('region', { name: 'Wiederholbar' }).getByRole('link', { name: /Ideen/ }).click();
   await page.getByRole('link', { name: /Beitrag einreichen/ }).click();
   await page.getByPlaceholder('Gib deinem Beitrag einen Namen').fill(`E2E Erinnerung ${Date.now()}`);
   await page.getByRole('textbox', { name: 'Dein Beitrag', exact: true }).fill('Eine Geschichte aus dem Testlauf.');
   await page.getByRole('button', { name: /Beitrag einreichen/ }).click();
   await expect(page.getByRole('heading', { name: /E2E Erinnerung/ })).toBeVisible();
   await expect(page.getByText('Eingereicht').first()).toBeVisible();
-  await page.getByRole('complementary', { name: 'Seitenleiste' }).getByRole('link', { name: 'Meine Beiträge' }).click();
+  await page.getByRole('link', { name: '← Meine Beiträge' }).click();
   await expect(page.getByRole('link', { name: /E2E Erinnerung/ }).first()).toBeVisible();
-  await openFirstPoll(page);
-  await expect(page).toHaveURL(/\/sammlungen\/[^/]+$/);
+  await page.getByRole('link', { name: 'AbiZeitBetrug Startseite' }).click();
+  await expect(page.getByRole('region', { name: 'Jetzt dran' })).toBeVisible();
+});
+
+test('back navigation restores the Schüler or Redaktion view of each page', async ({ page }) => {
+  await signInAs(page, 'Redaktion');
+  await expect(page).toHaveURL(/\/redaktion$/);
+  await page.getByRole('region', { name: 'Meine Abstimmungen' }).getByRole('link', { name: 'Alle' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeVisible();
+  const account = page.getByRole('region', { name: 'Konto' });
+  await account.getByRole('button', { name: 'Schüler' }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('heading', { level: 1, name: /^Hey / })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/sammlungen$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeVisible();
+  await expect(account.getByRole('button', { name: 'Redaktion' })).toHaveAttribute('aria-pressed', 'true');
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'Redaktion' })).toBeVisible();
+  await page.goForward();
+  await page.goForward();
+  await expect(page.getByRole('heading', { level: 1, name: /^Hey / })).toBeVisible();
+  await expect(account.getByRole('button', { name: 'Schüler' })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('student casts a ballot in the seeded open poll', async ({ page }) => {
@@ -69,10 +73,7 @@ test('student casts a ballot in the seeded open poll', async ({ page }) => {
 test('editor reads and annotates an original, exports without approval, and sees ballot results', async ({ page }) => {
   await signInAs(page, 'Jahrgang');
   const title = `E2E Redaktion ${Date.now()}`;
-  await page
-    .getByRole('complementary', { name: 'Seitenleiste' })
-    .getByRole('link', { name: /^Ideen/ })
-    .click();
+  await page.getByRole('region', { name: 'Wiederholbar' }).getByRole('link', { name: /Ideen/ }).click();
   await page.getByRole('link', { name: /Beitrag einreichen/ }).click();
   await page.getByPlaceholder('Gib deinem Beitrag einen Namen').fill(title);
   await page
@@ -83,8 +84,8 @@ test('editor reads and annotates an original, exports without approval, and sees
 
   await page.context().clearCookies();
   await signInAs(page, 'Redaktion');
-  await page.getByRole('complementary', { name: 'Seitenleiste' }).getByRole('link', { name: 'Alle Beiträge' }).click();
-  await expect(page).toHaveURL(/\/redaktion$/);
+  await page.getByRole('link', { name: 'Alle Beiträge' }).click();
+  await expect(page).toHaveURL(/\/redaktion\/beitraege$/);
   await page.getByPlaceholder('Titel, Text, Name …').fill(title);
   const review = page.getByRole('link', { name: new RegExp(title) });
   await expect(review, 'the submitted contribution is visible to the editor').toBeVisible();
@@ -98,15 +99,16 @@ test('editor reads and annotates an original, exports without approval, and sees
   await page.getByLabel('Anmerkung').fill('Nach der Abstimmung im Team besprechen.');
   await page.getByRole('button', { name: 'Anmerkung speichern' }).click();
   await expect(page.getByText('Nach der Abstimmung im Team besprechen.')).toBeVisible();
-  await page.getByRole('complementary', { name: 'Seitenleiste' }).getByRole('link', { name: 'Alle Beiträge' }).click();
+  await page.goBack();
   await page.getByRole('combobox', { name: 'Abstimmung' }).last().selectOption('10000000-0000-4000-8000-000000000001'); // export picker, seeded "Ideen"
   await expect(page.getByRole('link', { name: /ZIP herunterladen/ })).toHaveAttribute('href', /status=all/);
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('link', { name: /ZIP herunterladen/ }).click();
   await expect(downloadPromise).resolves.toBeTruthy();
 
+  await page.getByRole('link', { name: 'AbiZeitBetrug Startseite' }).click();
   await page
-    .getByRole('complementary', { name: 'Seitenleiste' })
+    .getByRole('region', { name: 'Meine Abstimmungen' })
     .getByRole('link', { name: /Unser Abimotto/ })
     .click();
   await expect(page.getByRole('heading', { name: /Unser Abimotto/ })).toBeVisible();
@@ -118,14 +120,12 @@ test('editor reads and annotates an original, exports without approval, and sees
 test('admin opens access management and activity log on mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await signInAs(page, 'Administration');
-  await page.getByRole('button', { name: 'Menü öffnen' }).click();
-  const aside = page.getByRole('complementary', { name: 'Seitenleiste' });
-  await expect(aside.getByRole('button', { name: 'Verwaltung' })).toHaveAttribute('aria-expanded', 'true');
-  await aside.getByRole('link', { name: 'Personen' }).click();
+  const people = page.getByRole('region', { name: 'Personen' });
+  await people.getByRole('link', { name: /Zugänge verwalten/ }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Personen' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Unser Jahrgang & Team' })).toBeVisible();
-  await page.getByRole('button', { name: 'Menü öffnen' }).click();
-  await aside.getByRole('link', { name: 'Aktivitätsprotokoll' }).click();
+  await page.goBack();
+  await people.getByRole('link', { name: /Aktivitätsprotokoll/ }).click();
   await expect(page.getByRole('heading', { name: 'Letzte Aktivitäten' })).toBeVisible();
 });
 

@@ -162,13 +162,9 @@ test('editor and admin diagnostics preserve short-screen navigation', async ({ p
           .filter({ hasText: category.id }),
       ).toHaveCount(1);
     await page.locator('summary').filter({ hasText: 'Debug: Sitzung' }).click();
-    await page.getByRole('button', { name: 'Menü öffnen' }).click();
-    const aside = page.getByRole('dialog', { name: 'Seitenleiste' });
-    await expect(aside.getByRole('link', { name: 'Überblick', exact: true })).toBeVisible();
-    await aside.evaluate((element) => {
-      element.scrollTop = element.scrollHeight;
-    });
-    await expect(aside.getByRole('button', { name: /Abmelden/ })).toBeInViewport();
+    await expect(
+      page.getByRole('region', { name: 'Konto' }).getByRole('button', { name: 'Abmelden' }),
+    ).toBeInViewport();
     if (role === 'admin') {
       await page.goto(`/sammlungen/${category.id}`, { waitUntil: 'domcontentloaded' });
       const menu = debugMenus(page).filter({ has: page.getByText('Debug: Abstimmung', { exact: true }) });
