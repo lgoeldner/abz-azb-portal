@@ -10,7 +10,7 @@ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
 FROM web-dev AS web-build
 RUN npm run build
 
-FROM golang:1.27.3-alpine AS go-build
+FROM golang:1.27.4-alpine AS go-build
 RUN apk add --no-cache ca-certificates git
 ENV GOWORK=off
 WORKDIR /src/server
