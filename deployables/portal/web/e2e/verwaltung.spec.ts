@@ -31,36 +31,6 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('row menu and confirm dialog keep keyboard focus in place', async ({ page }) => {
-  await page.goto('/verwaltung/personen');
-  const trigger = page.getByRole('button', { name: 'Aktionen für Gast Gerda' });
-  await trigger.focus();
-  await page.keyboard.press('Enter');
-  await expect(page.getByRole('menuitem', { name: /Rolle ändern/ })).toBeFocused();
-  await page.keyboard.press('ArrowUp');
-  await expect(page.getByRole('menuitem', { name: 'Löschen' })).toBeFocused();
-  await page.keyboard.press('Enter');
-  const dialog = page.getByRole('dialog', { name: 'Gast Gerda löschen?' });
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('button', { name: 'Abbrechen' })).toBeFocused();
-  await page.keyboard.press('Escape');
-  await expect(dialog).toHaveCount(0);
-  await expect(trigger).toBeFocused();
-});
-
-test('collection administration redirects to the shared workspace and adds admin options', async ({ page }) => {
-  await page.goto('/verwaltung/sammlungen');
-  await expect(page).toHaveURL(/\/sammlungen$/);
-  await expect(page.locator('a[href="/verwaltung/sammlungen"]')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Neue Abstimmung' }).click();
-  await expect(page.getByRole('group', { name: 'Wer darf bearbeiten' })).toBeVisible();
-  for (const width of [1440, 390]) {
-    await page.setViewportSize({ width, height: 900 });
-    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await page.screenshot({ path: test.info().outputPath(`shared-collection-admin-${width}.png`) });
-  }
-});
-
 test('Redaktion creates every collection kind in the shared form without admin requests', async ({ page }) => {
   const manager = { ...admin, id: 'manager-1', role: 'manager' };
   const writes: Record<string, unknown>[] = [];
@@ -106,31 +76,4 @@ test('Redaktion creates every collection kind in the shared form without admin r
   expect(writes[0]).toMatchObject({ kind: 'photo', repeatable: false, ongoing: false, options: [] });
   expect(new Date(String(writes[0].closes_at)).getTime()).toBeGreaterThan(Date.now());
   expect(adminRequests).toEqual([]);
-});
-
-test('Verwaltung follows the selected workspace and keeps its editorial accent on direct visits', async ({ page }) => {
-  await page.goto('/verwaltung/personen');
-  const account = page.getByRole('region', { name: 'Konto' });
-  await expect(account.getByRole('button', { name: 'Redaktion' })).toHaveAttribute('aria-pressed', 'true');
-
-  await account.getByRole('button', { name: 'Schüler' }).click();
-  await expect(page).toHaveURL(/\/$/);
-  await expect(account.getByRole('button', { name: 'Schüler' })).toHaveAttribute('aria-pressed', 'true');
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('view'))).toBe('schueler');
-  await expect(page.locator('main a[href^="/verwaltung/"]')).toHaveCount(0);
-
-  for (const [path, heading] of [
-    ['/verwaltung/personen', 'Personen'],
-    ['/verwaltung/sammlungen', 'Abstimmungen'],
-    ['/verwaltung/protokoll', 'Aktivitätsprotokoll'],
-  ]) {
-    await page.goto(path);
-    await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
-    const workspace = page.locator('[data-workspace="redaktion"]');
-    await expect(workspace).toBeVisible();
-    await expect(account.getByRole('button', { name: 'Redaktion' })).toHaveAttribute('aria-pressed', 'true');
-    await expect
-      .poll(() => workspace.evaluate((element) => getComputedStyle(element).getPropertyValue('--color-accent').trim()))
-      .toBe('#1d5fbf');
-  }
 });

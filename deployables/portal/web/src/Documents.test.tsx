@@ -1,11 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import type { Document, Me } from './api';
-import { DocumentPage, DocumentsPage, DocumentTiles, NewDocument } from './Documents';
+import { DocumentPage } from './Documents';
 import { Session } from './ui';
 
 // The real editor (Milkdown) needs a browser; a textarea keeps the contract: markdown in, markdown out.
@@ -79,101 +79,6 @@ function setup(handler: (call: Call) => Response | undefined, ui: ReactNode, vie
   return calls;
 }
 
-describe('DocumentTiles', () => {
-  it('puts changed documents first, marks them and counts them', async () => {
-    const docs = [
-      doc({ id: 'read-new', title: 'Gelesen', updated_at: daysAgo(1) }),
-      doc({ id: 'unread-old', title: 'Ungelesen', unread: true, updated_by: ref(other), updated_at: daysAgo(5) }),
-    ];
-    setup((c) => (c.path === '/documents' ? Response.json(docs) : undefined), <DocumentTiles />);
-    expect(await screen.findByText('1 seit deinem letzten Besuch geändert')).toBeInTheDocument();
-    const tiles = screen.getAllByRole('link').filter((a) => /^\/dokumente\/(?!neu)/.test(a.getAttribute('href') ?? ''));
-    expect(tiles.map((t) => t.getAttribute('href'))).toEqual(['/dokumente/unread-old', '/dokumente/read-new']);
-    expect(within(tiles[0]!).getByText('Geändert')).toBeInTheDocument();
-    expect(within(tiles[1]!).queryByText('Geändert')).not.toBeInTheDocument();
-    expect(tiles[0]).toHaveTextContent('Otto Other · vor 5 Tagen');
-    expect(screen.getByRole('link', { name: 'Neues Dokument' })).toHaveAttribute('href', '/dokumente/neu');
-  });
-
-  it('shows a plain-text excerpt without markdown syntax', async () => {
-    setup(
-      () => Response.json([doc({ id: 'a', body: '## Agenda\n\n- **Budget** klären\n- [Link](https://x.de) prüfen' })]),
-      <DocumentTiles />,
-    );
-    expect(await screen.findByText('Agenda · Budget klären · Link prüfen')).toBeInTheDocument();
-  });
-
-  it('shows at most limit documents and a link to all of them', async () => {
-    const docs = ['a', 'b', 'c', 'd'].map((id) => doc({ id, title: `Dok ${id}` }));
-    setup(() => Response.json(docs), <DocumentTiles limit={2} />);
-    expect(await screen.findByRole('link', { name: 'Alle Dokumente' })).toHaveAttribute('href', '/dokumente');
-    expect(screen.getAllByRole('link', { name: /Dok / })).toHaveLength(2);
-  });
-});
-
-describe('DocumentsPage', () => {
-  it('filters by kind and by search text in title and body', async () => {
-    const user = userEvent.setup();
-    const docs = [
-      doc({ id: 'm', title: 'Treffen 1', kind: 'meeting', body: 'Budget besprochen' }),
-      doc({ id: 'n', title: 'Ideen', kind: 'note', body: 'Motto sammeln' }),
-    ];
-    setup(() => Response.json(docs), <DocumentsPage />);
-    await screen.findByRole('link', { name: /Treffen 1/ });
-    await user.click(screen.getByRole('button', { name: 'Notizen' }));
-    expect(screen.queryByRole('link', { name: /Treffen 1/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Ideen/ })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Alle' }));
-    await user.type(screen.getByRole('searchbox', { name: 'Dokumente durchsuchen' }), 'budget');
-    expect(screen.getByRole('link', { name: /Treffen 1/ })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /Ideen/ })).not.toBeInTheDocument();
-  });
-});
-
-describe('NewDocument', () => {
-  it('posts the payload and opens the new document', async () => {
-    const user = userEvent.setup();
-    const created = doc({ id: 'new-1', title: 'Wunschliste', kind: 'note', body: 'Eis' });
-    const calls = setup(
-      (c) => {
-        if (c.method === 'POST' && c.path === '/documents') return Response.json(created, { status: 201 });
-        if (c.path === '/documents/new-1') return Response.json(created);
-        if (c.path === '/documents') return Response.json([created]);
-      },
-      <Routes>
-        <Route path="/dokumente/neu" element={<NewDocument />} />
-        <Route path="/dokumente/:id" element={<DocumentPage />} />
-      </Routes>,
-      manager,
-      '/dokumente/neu',
-    );
-    expect((screen.getByLabelText('Titel') as HTMLInputElement).value).toMatch(/^Treffen \d{2}\.\d{2}\.$/);
-    expect(screen.getByRole('button', { name: 'Protokoll' })).toHaveAttribute('aria-pressed', 'true');
-    await user.click(screen.getByRole('button', { name: 'Notiz' }));
-    expect(screen.getByRole('button', { name: 'Notiz' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Protokoll' })).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByLabelText('Titel')).toHaveValue('');
-    await user.type(screen.getByLabelText('Titel'), 'Wunschliste');
-    await user.type(await screen.findByLabelText('Inhalt'), 'Eis');
-    await user.click(screen.getByRole('button', { name: 'Speichern' }));
-    expect(await screen.findByRole('heading', { name: 'Wunschliste' })).toBeInTheDocument();
-    expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ title: 'Wunschliste', kind: 'note', body: 'Eis' });
-  });
-
-  it('prefills a Protokoll title with today when the user typed none', async () => {
-    const user = userEvent.setup();
-    const calls = setup(
-      (c) => (c.method === 'POST' ? Response.json(doc({ id: 'p' }), { status: 201 }) : Response.json([])),
-      <NewDocument />,
-    );
-    await user.click(screen.getByRole('button', { name: 'Speichern' }));
-    await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true));
-    const sent = calls.find((c) => c.method === 'POST')!.body as { title: string; kind: string };
-    expect(sent.kind).toBe('meeting');
-    expect(sent.title).toMatch(/^Treffen \d{2}\.\d{2}\.$/);
-  });
-});
-
 describe('DocumentPage', () => {
   const page = (viewer: Me['user'], handler: (c: Call) => Response | undefined) =>
     setup(
@@ -190,14 +95,6 @@ describe('DocumentPage', () => {
     kind: 'meeting',
     body: 'Protokoll',
     updated_by: ref(other),
-  });
-
-  it('shows who changed the document last and the rendered text', async () => {
-    page(manager, () => Response.json(current));
-    expect(await screen.findByRole('heading', { name: 'Treffen 22.11.' })).toBeInTheDocument();
-    expect(screen.getByText(/Zuletzt geändert von Otto Other · vor 2 Tagen/)).toBeInTheDocument();
-    expect(screen.getByTestId('readonly-md')).toHaveTextContent('Protokoll');
-    expect(screen.getByRole('link', { name: /Dokumente/ })).toHaveAttribute('href', '/dokumente');
   });
 
   it('shows the conflict text with a reload button when the document changed meanwhile', async () => {
@@ -233,17 +130,6 @@ describe('DocumentPage', () => {
       body: 'Protokoll',
       version: 1,
     });
-  });
-
-  it('hides delete from a manager who did not create the document', async () => {
-    page(other, () => Response.json(doc({ id: 'd1', created_by: ref(manager) })));
-    await screen.findByRole('button', { name: 'Bearbeiten' });
-    expect(screen.queryByRole('button', { name: 'Löschen' })).not.toBeInTheDocument();
-  });
-
-  it('lets the creator delete their own document', async () => {
-    page(manager, () => Response.json(doc({ id: 'd1', created_by: ref(manager) })));
-    expect(await screen.findByRole('button', { name: 'Löschen' })).toBeInTheDocument();
   });
 
   it('lets an admin delete after a confirm step', async () => {

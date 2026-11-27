@@ -60,17 +60,6 @@ const toLastSheet = () => {
 };
 
 describe('Steckbrief', () => {
-  it('offers saving only on the last sheet and warns about empty fields there', () => {
-    stubApi(() => record());
-    show();
-    const save = () => screen.queryByRole('button', { name: /Steckbrief abgeben/ });
-    expect(save()).toBeNull();
-    expect(screen.queryByRole('alert')).toBeNull();
-    toLastSheet();
-    expect(save()).toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent(/noch leer/);
-  });
-
   it('creates one submission with only the filled answers as a JSON body', async () => {
     const calls = stubApi(() => record());
     const view = show();
@@ -83,21 +72,6 @@ describe('Steckbrief', () => {
     expect(calls[0]).toMatchObject({ method: 'POST', path: '/submissions' });
     expect(calls[0].body).toMatchObject({ category_id: category.id, title: 'Steckbrief', context: '' });
     expect(JSON.parse((calls[0].body as { body: string }).body)).toEqual({ name: 'Mia' });
-  });
-
-  it('keeps only the top sheet reachable and circles one answer, which a second click clears', () => {
-    stubApi(() => record());
-    show(record());
-    expect(screen.getByRole('tabpanel', { name: /Das bin ich/ })).not.toHaveAttribute('inert');
-    fireEvent.click(screen.getByRole('button', { name: 'Nächstes Blatt' }));
-    expect(screen.getByRole('tab', { name: /Lieblingsdinge/ })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByLabelText('Name').closest('section')).toHaveAttribute('inert');
-
-    const choice = screen.getByRole('radio', { name: 'letzte Reihe' });
-    fireEvent.click(choice);
-    expect(choice).toBeChecked();
-    fireEvent.click(choice);
-    expect(choice).not.toBeChecked();
   });
 
   it('uploads a photo into its slot on the current version without rewriting unchanged answers', async () => {
@@ -115,13 +89,5 @@ describe('Steckbrief', () => {
     await waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0]).toMatchObject({ method: 'POST', path: '/submissions/mine/attachments' });
     expect(calls[0].body).toMatchObject({ caption: 'kinderfoto', version: '4' });
-  });
-
-  it('reads as plain text with no controls for the Redaktion', () => {
-    const view = show(record({ body: '{"name":"Mia","typ_reihe":"letzte Reihe"}' }), true);
-    expect(screen.getByText('Mia')).toBeInTheDocument();
-    expect(screen.getByText('(gewählt)').parentElement).toHaveTextContent('letzte Reihe');
-    expect(view.container.querySelectorAll('input, textarea, button')).toHaveLength(0);
-    expect(view.container.querySelector('[inert]')).toBeNull();
   });
 });

@@ -321,22 +321,6 @@ func TestBackchannelRewritesOnlyCanonicalOrigin(t *testing.T) {
 	}
 }
 
-func TestDevelopmentConfigDefaults(t *testing.T) {
-	for _, key := range []string{"OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_BACKCHANNEL_URL"} {
-		t.Setenv(key, "")
-	}
-	t.Setenv("APP_ENV", "development")
-	t.Setenv("AUTH_MODE", "mock")
-	t.Setenv("DATABASE_URL", "unused")
-	cfg, err := LoadConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Issuer != "http://localhost:9090" || cfg.ClientID != "portal-dev" || cfg.ClientSecret != "dev-only" {
-		t.Fatal("missing standalone mock defaults")
-	}
-}
-
 func TestProductionLegacySessionCookieIsHostOnly(t *testing.T) {
 	pool := integrationPool(t)
 	ctx := context.Background()

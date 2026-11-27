@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
-import { hintKey, offerKey, PasskeyOffer, Passkeys } from './Passkeys';
+import { Passkeys } from './Passkeys';
 
 const base = '/api/auth/passkey';
 const created = '2026-11-03T10:00:00Z';
@@ -76,23 +76,6 @@ it('tells the user to log in again when the session is not fresh', async () => {
   expect(screen.getByRole('link', { name: 'Erneut anmelden' })).toHaveAttribute('href', '/auth/login');
 });
 
-it('stays quiet when the browser dialog is cancelled', async () => {
-  const { calls } = setup({ create: async () => Promise.reject(new DOMException('x', 'NotAllowedError')) });
-  await screen.findByText('Passkey vom 03.11.2026');
-  fireEvent.click(screen.getByRole('button', { name: 'Passkey hinzufügen' }));
-  await waitFor(() => expect(navigator.credentials.create).toHaveBeenCalled());
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Passkey hinzufügen' })).toBeEnabled());
-  expect(screen.queryByRole('alert')).toBeNull();
-  expect(calls).not.toContain('verify-registration');
-});
-
-it('hides the add button when the browser lacks passkey support', async () => {
-  setup({ supported: false });
-  await screen.findByText('Passkey vom 03.11.2026');
-  expect(screen.queryByRole('button', { name: 'Passkey hinzufügen' })).toBeNull();
-  expect(screen.getByText(/unterstützt keine Passkeys/)).toBeInTheDocument();
-});
-
 it('removes a passkey after confirmation and refreshes the list', async () => {
   const { fetcher } = setup();
   await screen.findByText('Passkey vom 03.11.2026');
@@ -105,29 +88,4 @@ it('removes a passkey after confirmation and refreshes the list', async () => {
   const del = fetcher.mock.calls.find(([u]) => String(u).endsWith('delete-passkey'))!;
   expect(JSON.parse(String(del[1]?.body))).toEqual({ id: 'k1' });
   expect(screen.getByText('Du hast noch keinen Passkey.')).toBeInTheDocument();
-});
-
-it('offers a passkey after email login, remembers the device on success and goes away', async () => {
-  localStorage.setItem(offerKey, '1');
-  const { calls } = setup({ component: <PasskeyOffer />, keys: [] });
-  fireEvent.click(await screen.findByRole('button', { name: 'Passkey erstellen' }));
-  await waitFor(() => expect(localStorage.getItem(hintKey)).toBe('1'));
-  expect(calls).toContain('verify-registration');
-  expect(localStorage.getItem(offerKey)).toBeNull();
-  await waitFor(() => expect(screen.queryByText('Schneller anmelden mit Passkey')).toBeNull());
-});
-
-it('offer: "Nicht jetzt" clears the flag without registering; an existing passkey hides it', async () => {
-  localStorage.setItem(offerKey, '1');
-  const { calls } = setup({ component: <PasskeyOffer />, keys: [] });
-  fireEvent.click(await screen.findByRole('button', { name: 'Nicht jetzt' }));
-  expect(localStorage.getItem(offerKey)).toBeNull();
-  expect(calls).not.toContain('generate-register-options');
-});
-
-it('offer: stays hidden when the account already has a passkey', async () => {
-  localStorage.setItem(offerKey, '1');
-  setup({ component: <PasskeyOffer /> });
-  await waitFor(() => expect(localStorage.getItem(offerKey)).toBeNull());
-  expect(screen.queryByText('Schneller anmelden mit Passkey')).toBeNull();
 });

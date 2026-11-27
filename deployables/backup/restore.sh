@@ -27,7 +27,7 @@ if [[ -d "$RESTORE_UPLOAD_DIR" ]] && [[ -n "$(find "$RESTORE_UPLOAD_DIR" -mindep
   exit 2
 fi
 
-work=$(mktemp -d)
+work=$(mktemp -d "${TMPDIR:-/tmp}/restore.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 restic restore "$RESTORE_SNAPSHOT" --target "$work/restored"
 payload=$(find "$work/restored" -type f -name database.dump -print -quit | sed 's|/database.dump$||')

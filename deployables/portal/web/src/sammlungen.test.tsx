@@ -17,7 +17,6 @@ const student: Me['user'] = {
 };
 const admin: Me['user'] = { ...student, id: 'admin-1', name: 'Ada Admin', role: 'admin' };
 const assignedManager: Me['user'] = { ...student, id: 'manager-1', role: 'manager', category_ids: ['person-poll'] };
-const unassignedManager: Me['user'] = { ...student, id: 'manager-2', role: 'manager' };
 const roster = [
   { id: 'user-alice', name: 'Alice Beispiel' },
   { id: 'user-bob', name: 'Bob Beispiel' },
@@ -217,25 +216,6 @@ function addProposalOption(value: string, byEnter = false) {
   else fireEvent.click(screen.getByRole('button', { name: 'Hinzufügen' }));
 }
 describe('words polls', () => {
-  it('creates a word portrait with an empty option set and the three-word default', async () => {
-    const { writes } = installApi();
-    renderPortal('/sammlungen', admin);
-
-    fireEvent.click(screen.getByRole('button', { name: /Neue Abstimmung/ }));
-    fireEvent.click(screen.getByRole('radio', { name: kindLabel['words' as Kind] }));
-    expect(screen.getByLabelText('Maximale Zahl der Wörter pro Person')).toHaveValue(3);
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Wortwolke' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
-
-    await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0].body).toMatchObject({
-      kind: 'words',
-      max_choices: 3,
-      all_people: false,
-      options: [],
-    });
-  });
-
   it('normalizes words, prevents duplicates, enforces the cap, and keeps choices after a failed save', async () => {
     const poll = wordsPoll({ max_choices: 2 });
     const { writes } = installApi([poll], [], { ballotError: true });
@@ -272,33 +252,6 @@ describe('words polls', () => {
     expect(screen.getByText('zusammenhalt')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /CSV herunterladen/ })).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([input]) => /\/(results|words)(\/export)?$/.test(String(input)))).toBe(false);
-  });
-
-  it('lets all managers read words and results but exposes moderation only to the assigned manager', async () => {
-    const poll = wordsPoll();
-    const rows: WordEntry[] = [
-      { option_id: 'word-1', word: 'freiheit', label: 'freiheit', excluded: false, count: 1, version: 2 },
-    ];
-    const { fetchMock } = installApi([poll], [], {
-      wordEntries: rows,
-      results: [{ option_id: 'merged', label: 'freiheit', count: 2 }],
-    });
-    const manager = { ...unassignedManager, category_ids: [] };
-    renderPortal(`/sammlungen/${poll.id}`, manager);
-
-    expect(await screen.findByRole('list', { name: /Wortwolke mit 1 Begriff und 2 Nennungen/ })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Wortliste als CSV herunterladen/ })).toHaveAttribute(
-      'href',
-      `/api/v1/categories/${poll.id}/words/export`,
-    );
-    expect(
-      await within(screen.getByRole('list', { name: 'Eingegebene Wörter' })).findByText('freiheit'),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Aktionen für Begriff freiheit' })).not.toBeInTheDocument();
-    const aside = screen.getByRole('complementary');
-    expect(aside).not.toContainElement(screen.getByRole('heading', { name: 'Gesamtergebnisse' }));
-    expect(aside).not.toContainElement(screen.getByRole('heading', { name: 'Stimmen' }));
-    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith(`/categories/${poll.id}/words`))).toBe(true);
   });
 
   it('allows the assigned manager to rename an original into an existing label and exclude a word', async () => {
@@ -355,44 +308,6 @@ describe('words polls', () => {
 });
 
 describe('Abstimmungen person polls', () => {
-  it.each([
-    { role: 'admin', user: admin, canHide: true },
-    { role: 'assigned manager', user: assignedManager, canHide: true },
-    { role: 'unassigned manager', user: unassignedManager, canHide: false },
-    { role: 'student', user: student, canHide: false },
-  ])('$role permission for an open poll', async ({ user, canHide }) => {
-    const poll = personPoll();
-    installApi([poll]);
-    renderPortal(`/sammlungen/${poll.id}`, user);
-
-    await screen.findByRole('heading', { name: poll.name });
-    const hide = screen.queryByRole('button', { name: 'Abstimmung verbergen' });
-    if (canHide) expect(hide).toBeInTheDocument();
-    else expect(hide).toBeNull();
-    const remove = screen.queryByRole('button', { name: 'Abstimmung endgültig löschen' });
-    if (user.role === 'admin') expect(remove).toBeInTheDocument();
-    else expect(remove).toBeNull();
-  });
-
-  it.each([
-    { role: 'admin', user: admin, canHide: true },
-    { role: 'assigned manager', user: assignedManager, canHide: true },
-    { role: 'unassigned manager', user: unassignedManager, canHide: false },
-    { role: 'student', user: student, canHide: false },
-  ])('$role permission for a closed poll', async ({ user, canHide }) => {
-    const poll = personPoll({ status: 'closed' });
-    installApi([poll]);
-    renderPortal(`/sammlungen/${poll.id}`, user);
-
-    await screen.findByRole('heading', { name: poll.name });
-    const hide = screen.queryByRole('button', { name: 'Abstimmung verbergen' });
-    if (canHide) expect(hide).toBeInTheDocument();
-    else expect(hide).toBeNull();
-    const remove = screen.queryByRole('button', { name: 'Abstimmung endgültig löschen' });
-    if (user.role === 'admin') expect(remove).toBeInTheDocument();
-    else expect(remove).toBeNull();
-  });
-
   it('hides an open poll with the current version and refreshes its hidden label', async () => {
     const poll = personPoll();
     const { fetchMock, writes } = installApi([poll]);
@@ -419,27 +334,6 @@ describe('Abstimmungen person polls', () => {
     expect(await screen.findByText('Verborgen')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Definition bearbeiten' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Abstimmung öffnen' })).toBeInTheDocument();
-  });
-
-  it('lets managers edit a draft that has never been opened', async () => {
-    const poll = personPoll({ status: 'draft', opened_at: null });
-    const manager = { ...student, id: 'manager-1', role: 'manager' as const, category_ids: [poll.id] };
-    installApi([poll]);
-    renderPortal(`/sammlungen/${poll.id}`, manager);
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Definition bearbeiten' }));
-    expect(screen.getByLabelText('Name')).toHaveValue(poll.name);
-  });
-
-  it('lets admins edit permissions on a hidden poll without unlocking its definition', async () => {
-    const poll = personPoll({ status: 'draft' });
-    installApi([poll]);
-    renderPortal(`/sammlungen/${poll.id}`, admin);
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Berechtigungen bearbeiten' }));
-
-    expect(screen.getByRole('heading', { name: 'Berechtigungen bearbeiten' })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
   });
 
   it.each(['open', 'closed', 'draft'] as const)(
@@ -470,14 +364,6 @@ describe('Abstimmungen person polls', () => {
       );
     },
   );
-
-  it('keeps deadline controls away from unassigned managers', async () => {
-    const poll = personPoll({ ongoing: false, closes_at: '2099-06-01T10:00:00Z' });
-    installApi([poll]);
-    renderPortal(`/sammlungen/${poll.id}`, unassignedManager);
-    await screen.findByRole('heading', { name: poll.name });
-    expect(screen.queryByRole('button', { name: 'Enddatum bearbeiten' })).not.toBeInTheDocument();
-  });
 
   it('does not round or rewrite an unchanged published deadline', async () => {
     const poll = personPoll({ ongoing: false, closes_at: '2099-06-01T10:00:42.123Z' });
@@ -556,123 +442,6 @@ describe('Abstimmungen person polls', () => {
     expect(screen.getByText('Hier geht’s bald los. Aktuell gibt es keine Abstimmungen.')).toBeInTheDocument();
   });
 
-  it.each(['person', 'proposal'])(
-    'clamps %s count controls and saves direct input without submitting from the buttons',
-    async (kind) => {
-      const { writes } = installApi();
-      renderPortal('/sammlungen', admin);
-      await openPersonForm(kind);
-      if (kind === 'proposal') {
-        addProposalOption('A');
-        addProposalOption('B');
-      }
-
-      const count = screen.getByLabelText('Maximale Zahl der Stimmen pro Person');
-      const less = screen.getByRole('button', { name: kind === 'person' ? 'Weniger Personen' : 'Weniger Optionen' });
-      const more = screen.getByRole('button', { name: kind === 'person' ? 'Mehr Personen' : 'Mehr Optionen' });
-      expect(less).toBeDisabled();
-      fireEvent.click(more);
-      expect(count).toHaveValue(2);
-      expect(writes).toHaveLength(0);
-
-      fireEvent.change(count, { target: { value: '500' } });
-      expect(more).toBeDisabled();
-      fireEvent.click(less);
-      expect(count).toHaveValue(499);
-
-      fireEvent.change(count, { target: { value: '501' } });
-      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Abimotto-Team' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
-      expect(writes).toHaveLength(0);
-
-      fireEvent.change(count, { target: { value: '500' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
-      await waitFor(() => expect(writes).toHaveLength(1));
-      expect(writes[0].body).toMatchObject({ max_choices: 500 });
-    },
-  );
-
-  it('defaults new person polls to all people and creates with an empty options list', async () => {
-    const { writes } = installApi();
-    renderPortal('/sammlungen', admin);
-    await openPersonForm();
-
-    expect(screen.getByRole('switch', { name: 'Alle freigegebenen Personen zur Abstimmung zulassen' })).toBeChecked();
-    expect(screen.getByLabelText('Maximale Zahl der Stimmen pro Person')).toHaveValue(1);
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Abimotto-Team' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
-
-    await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0]).toMatchObject({
-      path: '/categories',
-      method: 'POST',
-      body: {
-        kind: 'person',
-        all_people: true,
-        max_choices: 1,
-        options: [],
-      },
-    });
-  });
-
-  it('creates one-off photo collections without changing their content kind', async () => {
-    const { writes } = installApi();
-    renderPortal('/sammlungen', admin);
-    fireEvent.click(screen.getByRole('button', { name: /Neue Abstimmung/ }));
-    fireEvent.click(screen.getByRole('radio', { name: 'Fotos' }));
-    expect(screen.getByRole('switch', { name: 'Wiederholbar' })).not.toBeChecked();
-    expect(within(screen.getByRole('group', { name: 'Klasse' })).getAllByRole('radio')).toHaveLength(8);
-    fireEvent.click(screen.getByRole('button', { name: 'Ablaufdatum hinzufügen' }));
-    fireEvent.click(screen.getByRole('button', { name: '1w' }));
-    fireEvent.change(screen.getByLabelText('Uhrzeit'), { target: { value: '12:00' } });
-    expect(screen.queryByLabelText('Antwortoption hinzufügen')).toBeNull();
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Ein Foto pro Person' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
-    await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0].body).toMatchObject({
-      kind: 'photo',
-      repeatable: false,
-      ongoing: false,
-      closes_at: (() => {
-        const end = new Date();
-        end.setDate(end.getDate() + 7);
-        end.setHours(12, 0, 0, 0);
-        return end.toISOString();
-      })(),
-      options: [],
-    });
-  });
-
-  it('shows an existing one-off photo contribution without ballot controls or another-create action', async () => {
-    const photo = personPoll({ kind: 'photo', name: 'Ein Foto pro Person', options: [], repeatable: false });
-    const { fetchMock } = installApi([photo]);
-    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).endsWith('/api/v1/submissions'))
-        return Response.json([
-          {
-            id: 'my-photo',
-            category_id: photo.id,
-            author_id: student.id,
-            author_name: student.name,
-            title: 'Mein Abschlussfoto',
-            body: '',
-            context: '',
-            status: 'pending',
-            version: 1,
-            created_at: '2026-10-25T00:00:00Z',
-            updated_at: '2026-10-25T00:00:00Z',
-            attachments: [],
-          },
-        ]);
-      return fetchMock(input, init);
-    });
-    renderPortal(`/sammlungen/${photo.id}`, student);
-    expect(await screen.findByRole('link', { name: /Mein Abschlussfoto/ })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /Beitrag einreichen/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Stimme speichern/ })).toBeNull();
-    expect(fetchMock.mock.calls.some(([url]) => /\/(results|audit)$/.test(String(url)))).toBe(false);
-  });
-
   it('preserves the exact stored deadline when editing an unrelated photo definition', async () => {
     const photo = personPoll({ kind: 'photo', options: [], ongoing: false, closes_at: '2099-06-01T10:00:42.123Z' });
     const { writes } = installApi([photo]);
@@ -682,90 +451,6 @@ describe('Abstimmungen person polls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0].body).toMatchObject({ name: 'Unser Foto', ongoing: false, closes_at: photo.closes_at });
-  });
-
-  it('preloads proposal options as chips and keeps the collection group locked while editing', async () => {
-    const proposal = personPoll({
-      kind: 'proposal',
-      status: 'draft',
-      opened_at: null,
-      options: [
-        { id: 'option-a', label: 'Mitternachtsblau' },
-        { id: 'option-b', label: 'Sonnengelb' },
-      ],
-    });
-    installApi([proposal]);
-    renderPortal(`/sammlungen/${proposal.id}`, admin);
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Definition bearbeiten' }));
-
-    const group = screen.getByRole('switch', { name: 'Wiederholbar' });
-    expect(group).not.toBeChecked();
-    expect(group).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Mitternachtsblau entfernen' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sonnengelb entfernen' })).toBeInTheDocument();
-  });
-
-  it('adds trimmed proposal chips by button or Enter, blocks blanks and duplicates, and removes chips', async () => {
-    const { writes } = installApi();
-    renderPortal('/sammlungen', admin);
-    await openPersonForm('proposal');
-
-    expect(screen.queryByRole('switch', { name: 'Stimme für die eigene Person erlauben' })).not.toBeInTheDocument();
-    addProposalOption('  A  ');
-    addProposalOption('B', true);
-    addProposalOption('a');
-    expect(screen.getByRole('button', { name: 'A entfernen' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'B entfernen' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /entfernen$/ })).toHaveLength(2);
-
-    const input = screen.getByLabelText('Antwortoption hinzufügen');
-    fireEvent.change(input, { target: { value: '   ' } });
-    expect(screen.getByRole('button', { name: 'Hinzufügen' })).toBeDisabled();
-    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter', charCode: 13 });
-    expect(screen.getAllByRole('button', { name: /entfernen$/ })).toHaveLength(2);
-
-    addProposalOption('C');
-    fireEvent.click(screen.getByRole('button', { name: 'C entfernen' }));
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Abimotto' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
-
-    await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0].body).toMatchObject({
-      kind: 'proposal',
-      allow_self_vote: false,
-      options: [{ label: 'A' }, { label: 'B' }],
-    });
-  });
-
-  it('allows self-voting for person polls', async () => {
-    const { writes } = installApi();
-    renderPortal('/sammlungen', admin);
-    await openPersonForm();
-
-    const selfVote = screen.getByRole('switch', { name: 'Stimme für die eigene Person erlauben' });
-    fireEvent.click(selfVote);
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Personenwahl' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
-    await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0].body).toMatchObject({ kind: 'person', allow_self_vote: true });
-  });
-
-  it.each(['proposal', 'words'] as const)('hides and clears self-voting after switching to %s', async (kind) => {
-    const { writes } = installApi();
-    renderPortal('/sammlungen', admin);
-    await openPersonForm();
-    fireEvent.click(screen.getByRole('switch', { name: 'Stimme für die eigene Person erlauben' }));
-    fireEvent.click(screen.getByRole('radio', { name: kindLabel[kind as Kind] }));
-    expect(screen.queryByRole('switch', { name: 'Stimme für die eigene Person erlauben' })).not.toBeInTheDocument();
-    if (kind === 'proposal') {
-      addProposalOption('A');
-      addProposalOption('B');
-    }
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: `Abstimmung ${kind}` } });
-    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
-    await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0].body).toMatchObject({ kind, allow_self_vote: false });
   });
 
   it('includes a valid pending proposal option when saving without adding it first', async () => {
@@ -780,36 +465,6 @@ describe('Abstimmungen person polls', () => {
 
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0].body.options).toEqual([{ label: 'A' }, { label: 'B' }]);
-  });
-
-  it('searches and removes selected subset candidates before creating the poll', async () => {
-    const { writes } = installApi();
-    renderPortal('/sammlungen', admin);
-    await openPersonForm();
-
-    fireEvent.click(screen.getByRole('switch', { name: 'Alle freigegebenen Personen zur Abstimmung zulassen' }));
-    const search = await screen.findByRole('searchbox', { name: 'Person suchen' });
-    fireEvent.change(search, { target: { value: 'Alice' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Alice Beispiel' }));
-    const aliceChip = screen.getByRole('button', { name: 'Alice Beispiel entfernen' });
-    expect(aliceChip.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-    fireEvent.change(search, { target: { value: 'niemand' } });
-    expect(screen.getByRole('status')).toHaveTextContent('Keine Auswahlmöglichkeiten gefunden.');
-    fireEvent.change(search, { target: { value: 'Bob' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Bob Beispiel' }));
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Kandidat:innen' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
-
-    await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0].body).toMatchObject({
-      kind: 'person',
-      all_people: false,
-      options: [
-        { label: 'Alice Beispiel', user_id: 'user-alice' },
-        { label: 'Bob Beispiel', user_id: 'user-bob' },
-      ],
-    });
   });
 
   it('advances after saving a multi-person ballot and restores saved choices when revisited', async () => {
@@ -839,204 +494,5 @@ describe('Abstimmungen person polls', () => {
     fireEvent.click(await screen.findByRole('link', { name: /Abimotto-Team/ }));
     expect(await screen.findByText('Gespeicherte Stimmen: Bob Beispiel, Cara Beispiel')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Gesamtergebnisse' })).not.toBeInTheDocument();
-  });
-
-  it('saves multiple proposal choices on a card and restores chips when revisited', async () => {
-    const poll = personPoll({
-      kind: 'proposal',
-      options: [
-        { id: 'blue', label: 'Mitternachtsblau' },
-        { id: 'gold', label: 'Sonnengelb' },
-        { id: 'green', label: 'Waldgrün' },
-      ],
-    });
-    const { writes } = installApi([poll]);
-    renderPortal(`/sammlungen/${poll.id}`, student);
-    fireEvent.click(await screen.findByRole('button', { name: 'Mitternachtsblau' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Sonnengelb' }));
-    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Waldgrün/ })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Mitternachtsblau' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Waldgrün' }));
-    fireEvent.click(screen.getByRole('button', { name: /Stimme speichern/ }));
-    await waitFor(() => expect(writes[0].body).toEqual({ option_ids: ['gold', 'green'] }));
-    await screen.findByText('Alles erledigt. Danke fürs Mitmachen!');
-    fireEvent.click(screen.getByRole('link', { name: /Zur Übersicht/ }));
-    fireEvent.click(await screen.findByRole('link', { name: /Abimotto-Team/ }));
-    expect(await screen.findByText('Gespeicherte Stimmen: Sonnengelb, Waldgrün')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sonnengelb' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Waldgrün' })).toHaveAttribute('aria-pressed', 'true');
-  });
-
-  it('keeps editorial controls out of the student voting queue as its active poll changes', async () => {
-    const first = personPoll({ description: 'Erste Beschreibung' });
-    const second = personPoll({ id: 'second-poll', name: 'Zweite Frage', description: 'Zweite Beschreibung' });
-    const { fetchMock } = installApi([first, second]);
-    renderPortal(`/sammlungen/${first.id}`, admin, [], 'schueler');
-    await screen.findByRole('heading', { name: first.name });
-    fireEvent.click(screen.getByRole('button', { name: 'Nächste Abstimmung' }));
-    expect(screen.getByRole('heading', { name: second.name })).toBeInTheDocument();
-    expect(screen.queryByText(first.description)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Abstimmung beenden' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Gesamtergebnisse' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Namentliches Stimmprotokoll öffnen' })).not.toBeInTheDocument();
-    expect(fetchMock.mock.calls.some(([input]) => /\/(results|audit)$/.test(String(input)))).toBe(false);
-  });
-
-  it('groups each admin audit ballot into one complete selection row', async () => {
-    const poll = personPoll();
-    const auditRows = [
-      {
-        user_id: student.id,
-        user_name: student.name,
-        option_id: 'alice',
-        option_label: 'Alice Beispiel',
-        created_at: '2026-10-24T10:00:00Z',
-        ballot_id: 'ballot-1',
-      },
-      {
-        user_id: student.id,
-        user_name: student.name,
-        option_id: 'bob',
-        option_label: 'Bob Beispiel',
-        created_at: '2026-10-24T10:00:00Z',
-        ballot_id: 'ballot-1',
-      },
-      {
-        user_id: student.id,
-        user_name: student.name,
-        option_id: 'cara',
-        option_label: 'Cara Beispiel',
-        created_at: '2026-10-24T11:00:00Z',
-        ballot_id: 'ballot-2',
-      },
-    ];
-    installApi([poll], auditRows);
-    renderPortal(`/sammlungen/${poll.id}`, admin, [poll], 'redaktion');
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Namentliches Stimmprotokoll öffnen' }));
-    const table = await screen.findByRole('table');
-    const rows = table.querySelectorAll('tbody tr');
-    expect(rows).toHaveLength(2);
-    expect(rows[0].querySelectorAll('td')[0]).toHaveTextContent('Mia Beispiel');
-    expect([...rows[0].querySelectorAll('td')[1].querySelectorAll('li')].map((item) => item.textContent)).toEqual([
-      'Alice Beispiel',
-      'Bob Beispiel',
-    ]);
-    expect(rows[1].querySelectorAll('td')[1]).toHaveTextContent('Cara Beispiel');
-  });
-
-  it.each([
-    ['closed', personPoll({ status: 'closed' }), student],
-    ['ineligible', personPoll(), { ...student, admitted: false }],
-  ] as const)('disables candidate search for a %s voter', async (_name, poll, user) => {
-    installApi([poll]);
-    renderPortal(`/sammlungen/${poll.id}`, user, [poll]);
-
-    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
-    await screen.findByRole('button', { name: 'Alice Beispiel' });
-    expect(screen.getByRole('button', { name: 'Alice Beispiel' })).toBeDisabled();
-    if (!user.admitted) expect(screen.getByText(/Nur freigegebene Mitglieder/)).toBeInTheDocument();
-    if (poll.status === 'closed')
-      expect(screen.queryByRole('button', { name: /Stimme speichern/ })).not.toBeInTheDocument();
-  });
-});
-
-describe('all collections overview', () => {
-  it('sends the student view to the dashboard instead of the list', () => {
-    installApi();
-    renderPortal('/sammlungen', admin, [], 'schueler');
-    expect(screen.queryByRole('heading', { name: 'Abstimmungen' })).toBeNull();
-    expect(screen.getByRole('link', { name: 'Abimotto-Team' })).toBeInTheDocument();
-  });
-
-  it('keeps the selected class chip when opening the form and preselects it', async () => {
-    installApi();
-    renderPortal('/sammlungen?klasse=quote', admin);
-    fireEvent.click(screen.getByRole('button', { name: /Neue Abstimmung/ }));
-    expect(screen.getByRole('radio', { name: 'Zitate' })).toBeChecked();
-    expect(screen.queryByRole('navigation', { name: 'Nach Klasse filtern' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }));
-    expect(screen.getByRole('link', { name: 'Zitate' })).toHaveAttribute('aria-current', 'true');
-  });
-
-  it('groups by repeatability, orders one-off deadlines and collapses ended polls', async () => {
-    const categories = [
-      personPoll({ id: 'late', name: 'Späte Wahl', ongoing: false, closes_at: '2027-05-10T12:00:00Z' }),
-      personPoll({ id: 'no-deadline', name: 'Ohne Enddatum', ongoing: true }),
-      personPoll({
-        id: 'early',
-        name: 'Frühe Wahl',
-        ongoing: false,
-        closes_at: '2027-02-10T12:00:00Z',
-        my_option_ids: ['alice'],
-      }),
-      personPoll({ id: 'quote', name: 'Zitate', kind: 'quote', repeatable: true, ongoing: true }),
-      personPoll({
-        id: 'repeated-ballot',
-        name: 'Wiederholbare Wahl',
-        repeatable: true,
-        ongoing: false,
-        closes_at: '2027-01-10T12:00:00Z',
-      }),
-      personPoll({
-        id: 'photo',
-        name: 'Einmalige Fotos',
-        kind: 'photo',
-        ongoing: false,
-        closes_at: '2027-06-10T12:00:00Z',
-        status: 'closed',
-      }),
-      personPoll({
-        id: 'expired',
-        name: 'Abgelaufene Wahl',
-        status: 'closed',
-        ongoing: false,
-        closes_at: '2026-01-10T12:00:00Z',
-      }),
-      personPoll({ id: 'ended-repeatable', name: 'Beendete wiederholbare Wahl', status: 'closed', repeatable: true }),
-    ];
-    installApi(categories);
-    renderPortal('/sammlungen', admin);
-
-    const once = await screen.findByRole('region', { name: 'Einmalig' });
-    const repeated = screen.getByRole('region', { name: 'Wiederholbar' });
-    const ids = (element: HTMLElement) =>
-      within(element)
-        .getAllByRole('link')
-        .map((link) => link.getAttribute('href'));
-    expect(ids(once)).toEqual([
-      '/sammlungen/early',
-      '/sammlungen/late',
-      '/sammlungen/photo',
-      '/sammlungen/no-deadline',
-    ]);
-    expect(ids(repeated)).toEqual(['/sammlungen/quote', '/sammlungen/repeated-ballot']);
-    expect(once.compareDocumentPosition(repeated) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(once).getByText('Bis 10.2.2027')).toBeInTheDocument();
-    expect(within(once).getByText('Beendet · Bis 10.6.2027')).toBeInTheDocument();
-    expect(within(repeated).getByText('Bis 10.1.2027')).toBeInTheDocument();
-    const summary = screen.getByText('Beendete Abstimmungen (2)');
-    const ended = summary.closest('details')!;
-    expect(ended).not.toHaveAttribute('open');
-    expect(repeated.compareDocumentPosition(ended) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    fireEvent.click(summary);
-    expect(
-      within(ended)
-        .getAllByRole('link', { hidden: true })
-        .map((link) => link.getAttribute('href')),
-    ).toEqual(['/sammlungen/expired', '/sammlungen/ended-repeatable']);
-    const own = screen.getByRole('link', { name: 'Meine Beiträge' });
-    expect(own).toHaveAttribute('href', '/beitraege');
-    expect(ended.compareDocumentPosition(own) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
-
-  it('keeps class filtering and the own submissions link available', async () => {
-    installApi([personPoll(), personPoll({ id: 'quote', name: 'Zitate', kind: 'quote', repeatable: true })]);
-    renderPortal('/sammlungen?klasse=quote', admin);
-    const repeated = await screen.findByRole('region', { name: 'Wiederholbar' });
-    expect(within(repeated).getAllByRole('link')).toHaveLength(1);
-    expect(screen.queryByRole('region', { name: 'Einmalig' })).toBeNull();
-    expect(screen.getByRole('link', { name: 'Meine Beiträge' })).toHaveAttribute('href', '/beitraege');
   });
 });

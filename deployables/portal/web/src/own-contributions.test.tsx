@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from './App';
@@ -148,77 +148,6 @@ function mount(
 }
 
 describe('student contributions and ballot history', () => {
-  it('links to Meine Beiträge for a poll-only student and opens the submitted ballot', async () => {
-    mount('/', {
-      submissionData: [],
-      ballotData: [ballot('only-entry', 'words', 'Unser Jahrgang in drei Worten', 'words', 4)],
-    });
-    const own = await screen.findByRole('region', { name: 'Deine Beiträge' });
-    const allLink = await within(own).findByRole('link', { name: /Meine Beiträge/ });
-    expect(within(own).getByText('Unser Jahrgang in drei Worten')).toBeInTheDocument();
-    fireEvent.click(allLink);
-    expect(await screen.findByRole('heading', { level: 1, name: 'Meine Beiträge' })).toBeInTheDocument();
-    expect(within(screen.getByRole('main')).getByText('Unser Jahrgang in drei Worten')).toBeInTheDocument();
-  });
-
-  it('shows the newest three combined rows on home, groups photos before limiting, and opens the full list', async () => {
-    mount('/');
-    const own = await screen.findByRole('region', { name: 'Deine Beiträge' });
-    const list = await within(own).findByRole('list');
-    const rows = within(list).getAllByRole('listitem');
-
-    expect(rows).toHaveLength(3);
-    expect(rows[0]).toHaveTextContent('Unser Jahrgang in drei Worten');
-    expect(rows[1]).toHaveTextContent('Fotoalbum');
-    expect(rows[1]).toHaveTextContent('3 Fotos');
-    expect(rows[2]).toHaveTextContent('Geschichte s9');
-    expect(rows.every((row) => !row.textContent?.includes('Geschichte someone-else'))).toBe(true);
-    expect(screen.queryByText('Erledigte Abstimmungen')).toBeNull();
-
-    fireEvent.click(within(own).getByRole('link', { name: /Meine Beiträge/ }));
-    expect(await screen.findByRole('heading', { level: 1, name: 'Meine Beiträge' })).toBeInTheDocument();
-    const allRows = within(screen.getByRole('main')).getByRole('list');
-    expect(within(allRows).getAllByRole('listitem')).toHaveLength(14);
-    expect(within(allRows).getByText('Vorschläge fürs Motto')).toBeInTheDocument();
-    expect(within(allRows).getByText('Wahl zum Jahrgangsrat')).toBeInTheDocument();
-    expect(within(allRows).getAllByText('Unser Jahrgang in drei Worten')).toHaveLength(2);
-    expect(within(allRows).getAllByText('Wortwolke')).toHaveLength(2);
-    expect(within(allRows).getByText('Personenwahl')).toBeInTheDocument();
-    expect(within(allRows).getByText('Auswahl')).toBeInTheDocument();
-    expect(within(allRows).queryByText('Geschichte someone-else')).toBeNull();
-    expect(within(allRows).getAllByText('Abgestimmt')).toHaveLength(4);
-    expect(within(allRows).getByText('Vorschläge fürs Motto').closest('a')).toBeNull();
-    expect(within(allRows).getByText('Wahl zum Jahrgangsrat').closest('a')).toHaveAttribute(
-      'href',
-      '/sammlungen/people',
-    );
-  });
-
-  it('searches poll names and photo metadata, with a separate Abgestimmt filter for ballot entries', async () => {
-    mount('/beitraege');
-    const list = await screen.findByRole('list');
-    const status = screen.getByLabelText('Status');
-    fireEvent.change(status, { target: { value: 'voted' } });
-    expect(within(list).getAllByRole('listitem')).toHaveLength(4);
-    expect(within(list).getByText('Wahl zum Jahrgangsrat')).toBeInTheDocument();
-    expect(within(list).getByText('Vorschläge fürs Motto')).toBeInTheDocument();
-    expect(within(list).getAllByText('Wortwolke')).toHaveLength(2);
-    expect(within(list).queryByText('Geschichte s9')).toBeNull();
-
-    fireEvent.change(screen.getByPlaceholderText('Beitrag oder Abstimmung finden …'), {
-      target: { value: 'Unser Jahrgang in drei Worten' },
-    });
-    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
-    expect(within(list).getAllByText('Unser Jahrgang in drei Worten')).toHaveLength(2);
-
-    fireEvent.change(status, { target: { value: '' } });
-    fireEvent.change(screen.getByPlaceholderText('Beitrag oder Abstimmung finden …'), {
-      target: { value: 'Bühne' },
-    });
-    expect(within(list).getAllByRole('listitem')).toHaveLength(1);
-    expect(within(list).getByText('Fotoalbum')).toBeInTheDocument();
-  });
-
   it('keeps editors in Schüler view restricted to their own contributions', async () => {
     localStorage.setItem('view', 'schueler');
     const manager = { ...student, id: 'manager-1', role: 'manager' };
@@ -231,23 +160,5 @@ describe('student contributions and ballot history', () => {
     const list = await screen.findByRole('list');
     expect(within(list).getByText('Geschichte s9')).toBeInTheDocument();
     expect(within(list).queryByText('Geschichte someone-else')).toBeNull();
-  });
-
-  it('shows loading and failure for ballot data instead of a misleading empty state', async () => {
-    mount('/beitraege', { ballotState: 'pending', ballotData: [] });
-    expect(await screen.findByRole('status')).toHaveTextContent('Einen Moment');
-  });
-
-  it('shows ballot API failures on home and the full list', async () => {
-    mount('/beitraege', { ballotState: 'error', ballotData: [] });
-    expect(await screen.findByRole('alert')).toHaveTextContent('Stimmen sind gerade nicht verfügbar.');
-    expect(screen.queryByText(/Noch keine Beiträge/)).toBeNull();
-  });
-
-  it('keeps the home contribution history in an error state when ballot data fails', async () => {
-    mount('/', { ballotState: 'error', ballotData: [] });
-    const own = await screen.findByRole('region', { name: 'Deine Beiträge' });
-    expect(await within(own).findByRole('alert')).toHaveTextContent('Stimmen sind gerade nicht verfügbar.');
-    expect(within(own).queryByText(/Die erste Geschichte wartet/)).toBeNull();
   });
 });

@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
-tmp=$(mktemp -d)
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/backup-test.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 mkdir "$tmp/bin"
 cat > "$tmp/bin/restic" <<'SH'
@@ -86,7 +86,8 @@ if ! bash "$root/deployables/backup/restore.sh" >/dev/null 2>&1; then
   echo 'Restore unexpectedly failed for an empty database' >&2
   exit 1
 fi
-if ! diff -u <(printf 'restic\npsql-check\npg_restore\npsql-reset\n') "$CALL_LOG"; then
+printf 'restic\npsql-check\npg_restore\npsql-reset\n' > "$tmp/expected-calls"
+if ! diff -u "$tmp/expected-calls" "$CALL_LOG"; then
   echo 'Restore revocation/reset SQL did not run after pg_restore' >&2
   exit 1
 fi

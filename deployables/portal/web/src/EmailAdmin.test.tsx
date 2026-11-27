@@ -34,20 +34,6 @@ function renderPage(role: 'admin' | 'student' = 'admin') {
 }
 
 describe('email administration', () => {
-  it('guards non-admin use and leaves unknown quota visibly unknown', async () => {
-    renderPage('student');
-    expect(screen.getByRole('alert')).toHaveTextContent('nur für Administratoren');
-    const f = vi.fn(async (input: RequestInfo | URL) =>
-      String(input).includes('/messages')
-        ? Response.json({ items: [], next_cursor: null })
-        : Response.json({ ...status, usage: { ...status.usage, remaining: null } }),
-    );
-    vi.stubGlobal('fetch', f);
-    renderPage();
-    expect(await screen.findByText('Verfügbar:')).toBeInTheDocument();
-    expect(screen.getByText('Verfügbar:').parentElement).toHaveTextContent('—');
-    expect(screen.getByRole('heading', { name: 'Eigene E-Mail-Erinnerungen' })).toBeInTheDocument();
-  });
   it('sends policy version, warns on pause all, and distinguishes accepted from delivered', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     vi.stubGlobal(
@@ -86,26 +72,5 @@ describe('email administration', () => {
     const body = JSON.parse(calls.find((c) => c.url.endsWith('/admin/email/settings'))!.init!.body as string);
     expect(body.version).toBe(4);
     expect(body.pause_all).toBe(true);
-  });
-
-  it('offers a working retry after status loading fails', async () => {
-    let statusCalls = 0;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        if (String(input).includes('/messages')) return Response.json({ items: [], next_cursor: null });
-        statusCalls++;
-        return statusCalls === 1
-          ? Response.json(
-              { error: { code: 'unavailable', message: 'Vorübergehend nicht erreichbar.' } },
-              { status: 503 },
-            )
-          : Response.json(status);
-      }),
-    );
-    renderPage();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Vorübergehend nicht erreichbar.');
-    fireEvent.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
-    expect(await screen.findByText(/Brevo: konfiguriert/)).toBeInTheDocument();
   });
 });

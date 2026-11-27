@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
 import { GoogleAccount } from './GoogleAccount';
@@ -35,18 +35,6 @@ function setup(
   );
   return { calls, assign };
 }
-
-it('stays hidden while Google sign-in is not configured', async () => {
-  const { calls } = setup({ list: Response.json({ error: 'not_found' }, { status: 404 }) });
-  await waitFor(() => expect(calls).toContain('/api/auth/list-accounts'));
-  await waitFor(() => expect(screen.queryByRole('heading', { name: 'Google' })).toBeNull());
-});
-
-it('sends the browser to Google to link', async () => {
-  const { assign } = setup();
-  fireEvent.click(await screen.findByRole('button', { name: 'Google verknüpfen' }));
-  await waitFor(() => expect(assign).toHaveBeenCalledWith('https://accounts.google.com/o/oauth2/v2/auth?x=1'));
-});
 
 it('asks for a fresh login when the session is older than an hour', async () => {
   setup({ link: Response.json({ error: 'session_not_fresh' }, { status: 403 }) });

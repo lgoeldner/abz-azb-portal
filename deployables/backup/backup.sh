@@ -19,7 +19,7 @@ write_failure() {
 }
 
 backup_once() {
-  local work=/tmp/portal-backup manifest_time tmp schema_version
+  local work=${TMPDIR:-/tmp}/portal-backup manifest_time tmp schema_version
   mkdir -p "$(dirname "$status_file")" || return 1
   exec 9>"${status_file}.lock"
   if ! flock -n 9; then

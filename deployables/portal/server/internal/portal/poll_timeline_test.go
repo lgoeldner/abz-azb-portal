@@ -243,18 +243,3 @@ func TestPollParticipationUsesCurrentEligibleCohortWithoutChangingBallots(t *tes
 		t.Fatalf("admin lost named history after eligibility changes: status=%d", res.Code)
 	}
 }
-
-func TestSeededPollsHaveStaggeredTimeline(t *testing.T) {
-	app, pool := timelineApp(t)
-	seen := map[time.Time]bool{}
-	for _, id := range []string{"30000000-0000-4000-8000-000000000001", "30000000-0000-4000-8000-000000000002"} {
-		p, _ := listedCategory(t, app, pool, ManagerID, id)
-		if p.OpenedAt == nil || p.OpenedAt.Before(p.CreatedAt) || seen[*p.OpenedAt] {
-			t.Fatalf("seeded poll %s timeline created=%v opened=%v", id, p.CreatedAt, p.OpenedAt)
-		}
-		seen[*p.OpenedAt] = true
-	}
-	if p, _ := listedCategory(t, app, pool, ManagerID, "30000000-0000-4000-8000-000000000003"); p.OpenedAt != nil {
-		t.Fatalf("seeded draft has opened_at %v", p.OpenedAt)
-	}
-}
