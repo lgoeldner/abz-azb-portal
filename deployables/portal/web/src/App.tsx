@@ -502,7 +502,7 @@ function Dock() {
       {/* Decorative; dropped on narrow phones so account pill, menu button and mode pill fit in one row. */}
       <Avatar
         user={user}
-        className={`size-12 border-[3px] border-white text-sm ring-1 ring-black/10 [grid-area:avatar] max-[360px]:hidden ${editor ? 'max-[398px]:hidden' : ''}`}
+        className={`size-12 border-[3px] border-white text-lg ring-1 ring-black/10 [grid-area:avatar] max-[360px]:hidden ${editor ? 'max-[398px]:hidden' : ''}`}
       />
       <strong className="line-clamp-2 min-w-0 break-words px-1 text-[15px] font-semibold leading-tight [grid-area:name] max-[651px]:sr-only">
         {user.name}
