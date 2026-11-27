@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { kindLabel, type Kind } from './ui';
@@ -42,6 +42,15 @@ const sammlung = (id: string, name: string, kind: string, extra: Record<string, 
   ...extra,
 });
 const category = sammlung('memory', 'Erinnerungen', 'memory', { description: 'Was bleibt' });
+// Stands in for the browser back button.
+function Back() {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => navigate(-1)}>
+      Zurück (Test)
+    </button>
+  );
+}
 
 it('starts provider login without fetching identities from the portal', async () => {
   const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
@@ -330,7 +339,9 @@ describe('verwaltung', () => {
     ['guest', guest],
   ])('offers the account settings page to every role (%s)', async (_role, me) => {
     mount('/', me);
-    const link = await within(await screen.findByRole('complementary')).findByRole('link', { name: 'Einstellungen' });
+    const link = await within(await screen.findByRole('region', { name: 'Konto' })).findByRole('link', {
+      name: 'Einstellungen',
+    });
     expect(link).toHaveAttribute('href', '/einstellungen');
     fireEvent.click(link);
     expect(await screen.findByRole('heading', { level: 1, name: 'Einstellungen' })).toBeInTheDocument();
@@ -349,33 +360,26 @@ describe('verwaltung', () => {
     localStorage.setItem('view', 'schueler');
     mount(`/verwaltung/${page}`);
 
-    const aside = await screen.findByRole('complementary');
+    const account = await screen.findByRole('region', { name: 'Konto' });
     expect(await screen.findByRole('heading', { level: 1 })).toBeInTheDocument();
     expect(document.querySelector('[data-workspace="redaktion"]')).toBeInTheDocument();
-    expect(within(aside).getByRole('button', { name: 'Redaktion' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(account).getByRole('button', { name: 'Redaktion' })).toHaveAttribute('aria-pressed', 'true');
     expect(localStorage.getItem('view')).toBe('redaktion');
   });
 
-  it('shows the collapsible Verwaltung group only to admins and remembers it', async () => {
+  it('links every Verwaltung page from the admin Redaktion home', async () => {
     localStorage.clear();
     mount('/');
-    const toggle = await screen.findByRole('button', { name: 'Verwaltung' });
-    expect(document.querySelector('aside a[href="/verwaltung/sammlungen"]')).toBeNull();
-    expect(within(screen.getByRole('complementary')).getByRole('link', { name: 'Alle Abstimmungen' })).toHaveAttribute(
-      'href',
-      '/sammlungen',
+    const people = await screen.findByRole('region', { name: 'Personen' });
+    await within(people).findByRole('link', { name: /Aktivitätsprotokoll/ });
+    const hrefs = within(people)
+      .getAllByRole('link')
+      .map((a) => a.getAttribute('href'));
+    expect(hrefs).toEqual(
+      expect.arrayContaining(['/verwaltung/personen', '/verwaltung/email', '/verwaltung/protokoll']),
     );
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    const aside = screen.getByRole('complementary');
-    expect(within(aside).getByRole('link', { name: 'Aktivitätsprotokoll' })).toHaveAttribute(
-      'href',
-      '/verwaltung/protokoll',
-    );
-    fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(within(aside).queryByRole('link', { name: 'Personen' })).toBeNull();
-    expect(localStorage.getItem('verwaltung')).toBe('zu');
-    localStorage.clear();
+    expect(screen.getByRole('link', { name: 'Alle Beiträge' })).toHaveAttribute('href', '/redaktion/beitraege');
+    expect(document.querySelector('a[href="/verwaltung/sammlungen"]')).toBeNull();
   });
 
   it('filters people with the quick filter chips', async () => {
@@ -569,7 +573,9 @@ describe('verwaltung', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Abstimmung bearbeiten' }));
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Sam Redaktion' }));
     expect(screen.getByRole('checkbox', { name: 'Sam Redaktion' })).toBeChecked();
-    fireEvent.click(within(screen.getByRole('complementary')).getByRole('link', { name: /Fotos/ }));
+    fireEvent.click(screen.getByRole('link', { name: '← Abstimmungen' }));
+    const photoLinks = await within(screen.getByRole('main')).findAllByRole('link', { name: /Fotos/ });
+    fireEvent.click(photoLinks.find((a) => a.getAttribute('href') === '/sammlungen/photos')!);
     fireEvent.click(await screen.findByRole('button', { name: 'Abstimmung bearbeiten' }));
     await waitFor(() => expect(screen.getByLabelText('Name')).toHaveValue('Fotos'));
     expect(screen.getByRole('checkbox', { name: 'Sam Redaktion' })).not.toBeChecked();
@@ -686,13 +692,14 @@ describe('navigation by view', () => {
       <QueryClientProvider client={client}>
         <MemoryRouter>
           <App />
+          <Back />
         </MemoryRouter>
       </QueryClientProvider>,
     );
     return urls;
   }
 
-  it('shows ballots first, keeps repeatable collections available, and keeps finished ballots accessible', async () => {
+  it('shows ballots first and keeps repeatable collections available', async () => {
     const urls = mount(user, {
       polls: [
         poll('p-open', 'Abimotto', { opened_at: iso(3) }),
@@ -707,39 +714,6 @@ describe('navigation by view', () => {
         submission('s3', 'memory', 'someone-else'),
       ],
     });
-    const aside = await screen.findByRole('complementary');
-    const open = await within(aside).findByRole('list', { name: 'Offen' });
-    const links = within(open).getAllByRole('link');
-    expect(links.map((l) => l.textContent)).toEqual([
-      expect.stringContaining('Lehrerzitat'),
-      expect.stringContaining('Abimotto'),
-    ]);
-    expect(links[0]).toHaveAttribute('href', '/sammlungen/p-newer');
-
-    const submissions = within(aside).getByRole('group', { name: 'Beiträge' });
-    const memories = within(submissions).getByRole('link', { name: /Erinnerungen/ });
-    expect(memories).toHaveAttribute('href', '/sammlungen/memory');
-    expect(memories).toHaveTextContent('2 eigene Einreichungen');
-    const category = within(submissions).getByRole('link', { name: /Zitate/ });
-    expect(category).toHaveAttribute('href', '/sammlungen/quotes');
-    expect(within(submissions).queryByRole('link', { name: /Abimotto/ })).toBeNull();
-    expect(category).toHaveTextContent('Noch nichts eingereicht');
-    expect(within(aside).getByRole('link', { name: /Zitate/ })).toHaveTextContent('Noch nichts eingereicht');
-    expect(open.compareDocumentPosition(category) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-    const voted = within(aside).getByRole('link', { name: /Mottowoche/ });
-    const closed = within(aside).getByRole('link', { name: /Altlast/ });
-    expect(voted.closest('details')).not.toBeNull();
-    expect(closed.closest('details')).not.toBeNull();
-    expect(open).not.toContainElement(voted);
-    expect(
-      within(aside)
-        .getByRole('link', { name: /Abimotto/ })
-        .closest('details'),
-    ).toBeNull();
-    expect(within(aside).queryByText('Geheimer Entwurf')).toBeNull();
-    expect(within(aside).getByText(/Erledigt \(2\)/)).toBeInTheDocument();
-
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Hey Mia. 4 Abstimmungen warten.');
     const main = screen.getByRole('main');
     const voting = within(main).getByRole('region', { name: 'Jetzt dran' });
@@ -755,6 +729,7 @@ describe('navigation by view', () => {
     fireEvent.click(within(voting).getByRole('button', { name: 'Nächste Abstimmung' }));
     expect(within(voting).getByRole('heading', { name: 'Abimotto' })).toBeInTheDocument();
     expect(within(voting).getByRole('button', { name: 'Nächste Abstimmung' })).toBeDisabled();
+    expect(within(main).queryByText('Geheimer Entwurf')).toBeNull();
 
     expect(screen.queryByRole('button', { name: 'Schüler' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Redaktion' })).toBeNull();
@@ -763,7 +738,7 @@ describe('navigation by view', () => {
   });
 
   it.each(['pending', 'accepted', 'rejected', 'withdrawn'])(
-    'keeps repeatable collections available in the sidebar and home section after submission (%s)',
+    'keeps repeatable collections available in the home section after submission (%s)',
     async (status) => {
       mount(user, {
         polls: [],
@@ -772,19 +747,18 @@ describe('navigation by view', () => {
       await screen.findByRole('heading', { name: 'Zitate' });
       const main = screen.getByRole('main');
       expect(within(main).getByRole('region', { name: 'Wiederholbar' })).toBeInTheDocument();
-      const memoryLink = within(screen.getByRole('complementary')).getByRole('group', { name: 'Beiträge' });
-      expect(within(memoryLink).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('1 eigene Einreichung');
       const repeatable = within(main).getByRole('region', { name: 'Wiederholbar' });
       expect(within(repeatable).getByRole('link', { name: /Erinnerungen/ })).toHaveAttribute(
         'href',
         '/sammlungen/memory',
       );
+      expect(within(repeatable).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('1 eigene Einreichung');
       expect(within(main).getByText('Beitrag own')).toBeInTheDocument();
-      expect(within(screen.getByRole('complementary')).queryByRole('link', { name: 'Alle Abstimmungen' })).toBeNull();
+      expect(screen.queryByRole('link', { name: 'Alle Abstimmungen' })).toBeNull();
     },
   );
 
-  it('keeps repeatable quote and photo collections and one-off photo collections linked after own submissions', async () => {
+  it('keeps repeatable quote and photo collections linked on home after own submissions', async () => {
     const repeatablePhoto = sammlung('photo-repeat', 'Fotowünsche', 'photo', { repeatable: true });
     const oneOffPhoto = sammlung('photo-once', 'Einmalfoto', 'photo', { repeatable: false });
     mount(user, {
@@ -797,14 +771,13 @@ describe('navigation by view', () => {
       ],
     });
 
-    const nav = within(await screen.findByRole('group', { name: 'Beiträge' }));
-    await nav.findByRole('link', { name: /Zitate/ });
+    const nav = within(await screen.findByRole('region', { name: 'Wiederholbar' }));
+    expect(await nav.findByRole('link', { name: /Zitate/ })).toHaveTextContent('1 eigene Einreichung');
     expect(nav.getByRole('link', { name: /Zitate/ })).toHaveAttribute('href', '/sammlungen/quotes');
     expect(nav.getByRole('link', { name: /Zitate/ })).toHaveTextContent('1 eigene Einreichung');
     expect(nav.getByRole('link', { name: /Fotowünsche/ })).toHaveAttribute('href', '/sammlungen/photo-repeat');
     expect(nav.getByRole('link', { name: /Fotowünsche/ })).toHaveTextContent('1 eigene Einreichung');
-    expect(nav.getByRole('link', { name: /Einmalfoto/ })).toHaveAttribute('href', '/sammlungen/photo-once');
-    expect(nav.getByRole('link', { name: /Einmalfoto/ })).toHaveTextContent('1 eigene Einreichung');
+    expect(nav.queryByRole('link', { name: /Einmalfoto/ })).toBeNull();
     expect(nav.getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('Noch nichts eingereicht');
   });
 
@@ -879,14 +852,7 @@ describe('navigation by view', () => {
       ],
       submissions: [],
     });
-    const aside = await screen.findByRole('complementary');
-    const voted = await within(aside).findByRole('link', { name: /Mehrfachwahl/ });
-    expect(voted.closest('details')).not.toBeNull();
-    expect(
-      within(aside)
-        .getByRole('link', { name: /Wortwolke/ })
-        .closest('details'),
-    ).not.toBeNull();
+    await screen.findByRole('heading', { level: 1, name: /Gerade ist alles erledigt|warten|wartet/ });
     const main = screen.getByRole('main');
     expect(within(main).queryByRole('heading', { name: 'Mehrfachwahl' })).toBeNull();
     expect(within(main).queryByRole('heading', { name: 'Wortwolke' })).toBeNull();
@@ -904,9 +870,6 @@ describe('navigation by view', () => {
       submissions: [],
     });
 
-    const aside = await screen.findByRole('complementary');
-    expect(await within(aside).findByRole('link', { name: /Motto erneut wählen/ })).toBeInTheDocument();
-    expect(within(aside).getByText('Erledigt (0)')).toBeInTheDocument();
     const ballots = await screen.findByRole('region', { name: 'Abstimmungen, die auf dich warten' });
     expect(await within(ballots).findByRole('button', { name: 'Erneut abstimmen' })).toBeEnabled();
   });
@@ -928,11 +891,9 @@ describe('navigation by view', () => {
         submission('s4', 'quotes', 'd'),
       ],
     });
-    const aside = await screen.findByRole('complementary');
-    const editorSwitch = await within(aside).findByRole('button', { name: 'Redaktion' });
-    expect(editorSwitch).toHaveAttribute('aria-pressed', 'true');
-    expect(within(aside).getByRole('button', { name: 'Schüler' })).toHaveAttribute('aria-pressed', 'false');
-    expect(within(aside).queryByRole('button', { name: 'Verwaltung' }) !== null).toBe(role === 'admin');
+    const account = await screen.findByRole('region', { name: 'Konto' });
+    expect(await within(account).findByRole('button', { name: 'Redaktion' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(account).getByRole('button', { name: 'Schüler' })).toHaveAttribute('aria-pressed', 'false');
 
     const main = screen.getByRole('main');
     expect(await within(main).findByRole('heading', { level: 1, name: 'Redaktion' })).toBeInTheDocument();
@@ -944,13 +905,6 @@ describe('navigation by view', () => {
       expect(tiles.getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent(/3\s*Beiträge/);
       expect(tiles.getByRole('link', { name: /Zitate/ })).toHaveTextContent(/0\s*Beiträge/);
     }
-    if (role === 'admin') expect(within(aside).getByRole('link', { name: /Abimotto/ })).toHaveTextContent('34 Stimmen');
-    else expect(within(aside).queryByRole('link', { name: /Abimotto/ })).toBeNull();
-    expect(within(aside).getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('3 Beiträge');
-    expect(
-      within(within(aside).getByRole('group', { name: 'Beiträge' })).getByRole('link', { name: /Erinnerungen/ }),
-    ).toHaveAttribute('href', '/sammlungen/memory');
-    expect(within(aside).getByRole('link', { name: 'Neue Abstimmung' })).toHaveAttribute('href', '/sammlungen?neu');
 
     // Phone switch: Esc and outside taps close it, the offered option switches back and forth.
     const fab = screen.getByRole('button', { name: 'Ansicht: Redaktion' });
@@ -969,14 +923,32 @@ describe('navigation by view', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Zu Redaktion wechseln' }));
     expect(await within(main).findByRole('heading', { level: 1, name: 'Redaktion' })).toBeInTheDocument();
 
-    fireEvent.click(within(aside).getByRole('button', { name: 'Schüler' }));
+    fireEvent.click(within(account).getByRole('button', { name: 'Schüler' }));
     expect(await screen.findByRole('heading', { level: 1, name: /^Hey / })).toHaveTextContent(
       `Hey ${name.split(' ')[0]}.`,
     );
-    expect(within(aside).getByRole('button', { name: 'Schüler' })).toHaveAttribute('aria-pressed', 'true');
-    expect(within(aside).getByRole('list', { name: 'Offen' })).toBeInTheDocument();
-    expect(within(aside).queryByRole('link', { name: 'Neue Abstimmung' })).toBeNull();
-    expect(within(aside).queryByRole('button', { name: 'Verwaltung' })).toBeNull();
+    expect(within(account).getByRole('button', { name: 'Schüler' })).toHaveAttribute('aria-pressed', 'true');
+    expect(document.querySelector('[data-workspace="schueler"]')).toBeInTheDocument();
+    expect(within(main).queryByRole('region', { name: 'Personen' })).toBeNull();
+
+    // Back returns to the Redaktion home and its view.
+    fireEvent.click(screen.getByRole('button', { name: 'Zurück (Test)' }));
+    expect(await within(main).findByRole('heading', { level: 1, name: 'Redaktion' })).toBeInTheDocument();
+    expect(within(account).getByRole('button', { name: 'Redaktion' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('restores the view of a shared page on back navigation', async () => {
+    const who = { id: 'manager-1', name: 'Sam Redaktion', role: 'manager', admitted: true, cohort_member: false };
+    mount({ ...who, category_ids: ['memory'] }, { polls: [], submissions: [] });
+    const assigned = await screen.findByRole('region', { name: 'Meine Abstimmungen' });
+    fireEvent.click(within(assigned).getByRole('link', { name: 'Alle' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole('region', { name: 'Konto' })).getByRole('button', { name: 'Schüler' }));
+    expect(await screen.findByRole('heading', { level: 1, name: /^Hey / })).toBeInTheDocument();
+    // /sammlungen redirects the Schüler view home, so this only holds if back restores the Redaktion view.
+    fireEvent.click(screen.getByRole('button', { name: 'Zurück (Test)' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeInTheDocument();
+    expect(document.querySelector('[data-workspace="redaktion"]')).toBeInTheDocument();
   });
 });
 
@@ -1286,13 +1258,13 @@ describe('editor home', () => {
     const docs = screen.getByRole('heading', { name: 'Dokumente' });
     expect(tasks.compareDocumentPosition(docs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('region', { name: 'Abstimmungen' })).toBeNull();
-    expect(screen.getByRole('link', { name: 'Tickets' })).toHaveAttribute('href', '/tickets');
-    expect(screen.getByRole('link', { name: 'Dokumente' })).toHaveAttribute('href', '/dokumente');
+    await waitFor(() => expect(document.querySelector('main a[href="/tickets"]')).not.toBeNull());
+    expect(document.querySelector('main a[href="/dokumente"]')).not.toBeNull();
     cleanup();
     const fetchMock = mountEditor();
     await screen.findByRole('region', { name: 'Abstimmungen' });
     expect(screen.queryByRole('heading', { name: 'Meine Aufgaben' })).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Tickets' })).toBeNull();
+    expect(document.querySelector('a[href="/tickets"]')).toBeNull();
     expect(fetchMock.mock.calls.map(([input]) => String(input))).not.toContainEqual(
       expect.stringMatching(/tickets|documents|areas/),
     );
@@ -1339,15 +1311,6 @@ describe('editor home', () => {
     expect(fetchMock.mock.calls.some(([path]) => String(path).includes('/admin/'))).toBe(false);
   });
 
-  it('lists only writable Abstimmungen in the sidebar', async () => {
-    mountEditor();
-    const nav = within(await screen.findByRole('complementary'));
-    expect(await nav.findByRole('link', { name: /Laufende Wahl/ })).toHaveAttribute('href', '/sammlungen/open');
-    expect(nav.getByRole('link', { name: /Erinnerungen/ })).toHaveAttribute('href', '/sammlungen/memory');
-    expect(nav.queryByText('Fremde Wahl')).toBeNull();
-    expect(nav.queryByText('Fremde Erinnerungen')).toBeNull();
-  });
-
   it('shows assignment empty states while keeping all readable collections accessible', async () => {
     mountEditor([]);
     const assigned = await screen.findByRole('region', { name: 'Meine Abstimmungen' });
@@ -1361,10 +1324,8 @@ describe('editor home', () => {
     expect(within(collected).queryByRole('list')).toBeNull();
     const tiles = screen.getByRole('region', { name: 'Abstimmungen' });
     for (const tile of within(tiles).getAllByRole('listitem')) expect(tile).toHaveTextContent('0 Abstimmungen');
-    expect(within(screen.getByRole('complementary')).getByRole('link', { name: 'Alle Abstimmungen' })).toHaveAttribute(
-      'href',
-      '/sammlungen',
-    );
+    expect(within(assigned).getByRole('link', { name: 'Alle' })).toHaveAttribute('href', '/sammlungen');
+    expect(screen.getByRole('link', { name: 'Alle Beiträge' })).toHaveAttribute('href', '/redaktion/beitraege');
   });
 
   it.each(['categories', 'submissions'] as const)(
@@ -1556,7 +1517,7 @@ describe('sammlungen', () => {
   it('renders the submission flow for a repeatable Abstimmung', async () => {
     mount('/sammlungen/memory');
     expect(await screen.findByRole('heading', { level: 1, name: 'Erinnerungen' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Beitrag einreichen/ })).toHaveAttribute(
+    expect(await screen.findByRole('link', { name: /Beitrag einreichen/ })).toHaveAttribute(
       'href',
       '/beitraege/neu?kategorie=memory',
     );
@@ -1583,9 +1544,10 @@ describe('sammlungen', () => {
 
   it('keeps Redaktion active when following a collection from a direct editorial link', async () => {
     mount('/redaktion', { ...manager, category_ids: ['memory'] }, all, 'schueler');
-    await screen.findByRole('heading', { level: 1, name: 'Beiträge' });
-    const aside = screen.getByRole('complementary', { name: 'Seitenleiste' });
-    fireEvent.click(await within(aside).findByRole('link', { name: /Erinnerungen/ }));
+    const tiles = await screen.findByRole('region', { name: 'Abstimmungen' });
+    fireEvent.click(await within(tiles).findByRole('link', { name: /Erinnerungen/ }));
+    const memoryLinks = await within(screen.getByRole('main')).findAllByRole('link', { name: /^Erinnerungen/ });
+    fireEvent.click(memoryLinks.find((a) => a.getAttribute('href') === '/sammlungen/memory')!);
     expect(await screen.findByRole('heading', { name: 'Gesammelte Beiträge' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Beitrag einreichen/ })).toBeNull();
   });
@@ -1735,7 +1697,7 @@ describe('sammlungen', () => {
   });
 
   it('offers only submission Abstimmungen on the editorial review page', async () => {
-    mount('/redaktion', manager);
+    mount('/redaktion/beitraege', manager);
     const select = (await screen.findAllByLabelText('Abstimmung'))[0];
     await waitFor(() => expect(within(select).getAllByRole('option').length).toBeGreaterThan(1));
     expect(

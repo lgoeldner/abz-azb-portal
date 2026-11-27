@@ -1,27 +1,4 @@
-import { Dialog } from '@base-ui/react/dialog';
-import {
-  ArrowRight,
-  ChevronDown,
-  ChevronUp,
-  ClipboardList,
-  FileText,
-  Files,
-  GraduationCap,
-  Hourglass,
-  House,
-  Library,
-  LogOut,
-  PanelLeft,
-  PenLine,
-  Plus,
-  ScrollText,
-  Settings,
-  SquareKanban,
-  UserCheck,
-  Users,
-  Vote,
-  type LucideIcon,
-} from 'lucide-react';
+import { ArrowRight, FileText, Hourglass, LogOut, Plus, Settings, UserCheck, Users, Vote } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -60,7 +37,6 @@ import {
   kindLabel,
   newestOpened,
   notice,
-  plural,
   projectsEnabled,
   since,
   useAction,
@@ -128,7 +104,7 @@ export function App() {
     <Session.Provider value={me.data}>
       <Routes>
         <Route element={<Layout />}>
-          <Route index element={<Overview />} />
+          <Route index element={<StudentHome />} />
           <Route path="einstellungen" element={<AccountSettings />} />
           <Route path="beitraege" element={<Contributions />} />
           <Route path="beitraege/neu" element={<NewContribution />} />
@@ -139,6 +115,14 @@ export function App() {
           <Route path="abstimmungen/:id" element={<RedirectToSammlung />} />
           <Route
             path="redaktion"
+            element={
+              <RoleGuard>
+                <EditorialHome />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="redaktion/beitraege"
             element={
               <RoleGuard>
                 <Editorial />
@@ -263,8 +247,6 @@ function RedirectToSammlung() {
 const time = (value: string | null | undefined) => (value ? new Date(value).getTime() : 0);
 const statusOrder = { open: 0, draft: 1, closed: 2 } as const;
 
-// The sidebar switch and the home page must agree on the view, so Layout owns the single hook instance.
-
 function Mark({ className = 'size-8' }: { className?: string }) {
   return (
     <svg aria-hidden="true" viewBox="0 0 40 40" className={`flex-none ${className}`}>
@@ -307,7 +289,7 @@ function Logout({ compact = false }: { compact?: boolean }) {
         type="button"
         className={
           compact
-            ? 'grid size-12 flex-none place-items-center rounded-full transition-[translate,border-color,box-shadow] duration-100 border-2 border-transparent bg-red-100 text-red-700 shadow-sm hover:border-red-700 hover:-translate-y-1 hover:bg-red-600 hover:text-white hover:shadow-[0_4px_0_var(--color-red-700)] active:translate-y-0.5 active:shadow-none disabled:opacity-50'
+            ? `${roundButton} bg-red-100 text-red-700 [grid-area:logout] hover:border-red-700 hover:bg-red-600 hover:text-white hover:shadow-[0_4px_0_var(--color-red-700)] disabled:opacity-50`
             : btn.text
         }
         aria-label={compact ? 'Abmelden' : undefined}
@@ -375,81 +357,64 @@ function Login() {
   );
 }
 
-// ---------- layout + sidebar ----------
-const navItem =
-  'flex min-h-10 items-center justify-between gap-3 rounded-full px-3.5 py-1.5 text-[15px] transition-transform active:scale-[.98] max-[651px]:min-h-11';
-const groupLabel = 'px-3.5 text-sm font-bold text-ink';
-// 48px ring (the size of the settings/logout buttons) around a 38px avatar; 88px wide as the closed pill with the panel icon.
-const menuPill = 'flex h-12 items-center overflow-hidden rounded-full bg-white p-[5px] ease-out active:scale-95';
+// ---------- layout + floating controls ----------
+// Floating controls share one geometry so the corners stay concentric: 48px items, padding = gap = 6px,
+// outer radius = 24px item radius + 6px = 30px.
+const roundButton =
+  'grid size-12 flex-none place-items-center rounded-full border-2 border-transparent shadow-sm transition-[translate,border-color,box-shadow] duration-100 hover:-translate-y-1 active:translate-y-0.5 active:shadow-none';
+const floatBottom = 'bottom-[max(1rem,env(safe-area-inset-bottom))]';
 
 function Layout() {
   const { user } = useSession();
-  const preference = useView();
-  const [menu, setMenu] = useState(false);
-  const [root, setRoot] = useState<HTMLElement | null>(null); // portal target keeps the workspace theme variables
+  // History entry key → the view it was shown in, so back/forward also restores the mode on shared pages.
+  // ponytail: in memory only; after a reload, older entries fall back to the stored preference.
+  const [viewByEntry] = useState(() => new Map<string, View>());
+  const [preferredView, setView] = useView();
   const location = useLocation();
-  const [preferredView, setView] = preference;
   const editorialRoute =
     (editorial(user) && ['/redaktion', '/tickets', '/dokumente'].some((p) => location.pathname.startsWith(p))) ||
     (user.role === 'admin' && location.pathname.startsWith('/verwaltung/'));
-  // Normalize on route entry; pending navigation must not overwrite an explicit mode switch.
+  // Each home owns its view; other pages keep the view of the history entry, else the preference.
+  // Read during render: child redirects (e.g. Sammlungen for students) run their effects before ours.
+  const view: View =
+    location.pathname === '/'
+      ? 'schueler'
+      : editorialRoute
+        ? 'redaktion'
+        : (viewByEntry.get(location.key) ?? preferredView);
+  // Editors opening the site fresh land in Redaktion: decided once at mount and only for the initial entry,
+  // so back never bounces and switching to Schüler on / does not redirect.
+  const [freshEditor] = useState(() => editorial(user) && preferredView === 'redaktion');
+  const landing = freshEditor && location.key === 'default' && location.pathname === '/';
   useEffect(() => {
-    if (editorialRoute) setView('redaktion');
-  }, [editorialRoute, setView]);
-  const view: [View, (view: View) => void] = [editorialRoute ? 'redaktion' : preferredView, setView];
+    if (landing) return;
+    if (!viewByEntry.has(location.key)) viewByEntry.set(location.key, view);
+    setView(view);
+  }, [landing, location.key, view, setView, viewByEntry]);
+  if (landing) return <Navigate to="/redaktion" replace />;
   return (
-    <WorkspaceView.Provider value={view}>
-      <div data-workspace={view[0]} ref={setRoot} className="group/shell">
+    <WorkspaceView.Provider value={[view, setView]}>
+      <div data-workspace={view}>
         <a
           className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-full focus:bg-white focus:px-3 focus:py-2 focus:text-sm"
           href="#inhalt"
         >
           Zum Inhalt
         </a>
-        {/* ponytail: below 651px the sidebar is a full-screen Base UI dialog (focus trap, Esc, scroll lock) opened by the floating avatar pill;
-            no resize listener, so a phone rotated past 651px while open keeps the dialog until closed. */}
-        <Dialog.Root open={menu} onOpenChange={setMenu}>
-          <Dialog.Trigger
-            aria-label="Menü öffnen"
-            // Hidden until the dialog unmounts, so this pill never shows through the one morphing inside it.
-            className={`${menuPill} fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-40 w-[88px] shadow-lg transition-transform group-has-[aside[role=dialog]]/shell:opacity-0 min-[651px]:hidden`}
-          >
-            <MenuFace />
-          </Dialog.Trigger>
-          <Dialog.Portal container={root}>
-            {/* Shell stays put and click-through; only the inner panel slides, so the pill stays on top of it
-                and shrinks into the ring around the avatar.
-                Base UI waits only for animations on the popup itself, so the shell runs a near-invisible opacity
-                transition of the same 300ms to stay mounted while the panel slides out. */}
-            <Dialog.Popup
-              aria-label="Seitenleiste"
-              render={<aside />}
-              className="group pointer-events-none fixed inset-0 z-50 transition-opacity duration-300 data-[ending-style]:opacity-[.99] min-[651px]:hidden"
-            >
-              <div className="pointer-events-auto flex h-full flex-col bg-chrome transition-transform duration-300 ease-out group-data-[ending-style]:-translate-x-full group-data-[starting-style]:-translate-x-full">
-                <SidebarBody close={() => setMenu(false)} mobile />
-              </div>
-              <Dialog.Close
-                aria-label="Menü schließen"
-                className={`${menuPill} pointer-events-auto absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 w-12 transition-[width,scale,box-shadow] duration-300 group-data-[ending-style]:w-[88px] group-data-[ending-style]:shadow-lg group-data-[starting-style]:w-[88px] group-data-[starting-style]:shadow-lg`}
-              >
-                <MenuFace iconClass="opacity-0 transition-opacity duration-300 group-data-[ending-style]:opacity-100 group-data-[starting-style]:opacity-100" />
-              </Dialog.Close>
-            </Dialog.Popup>
-          </Dialog.Portal>
-        </Dialog.Root>
-        <aside
-          aria-label="Seitenleiste"
-          className="fixed inset-y-0 left-0 z-40 flex w-[300px] flex-col overflow-y-auto bg-chrome max-[651px]:hidden"
-        >
-          <SidebarBody close={() => setMenu(false)} />
-        </aside>
+        <Dock />
         {editorial(user) && <ModeFab />}
-        <div className="flex min-h-screen flex-col bg-paper max-[651px]:pb-20 min-[651px]:pl-[300px]">
+        <div className="flex min-h-screen flex-col bg-paper pb-24 min-[651px]:pb-36">
           <main
             id="inhalt"
-            className={`mx-auto w-full flex-1 px-4 py-8 sm:px-8 sm:py-10 ${location.pathname === '/tickets' ? 'max-w-[96rem]' : 'max-w-5xl'}`}
+            className={`mx-auto w-full flex-1 px-4 py-6 sm:px-8 sm:py-8 ${location.pathname === '/tickets' ? 'max-w-[96rem]' : 'max-w-5xl'}`}
           >
+            <Link
+              to={view === 'redaktion' ? '/redaktion' : '/'}
+              aria-label="AbiZeitBetrug Startseite"
+              className="mb-8 inline-flex rounded-full"
+            >
+              <Brand />
+            </Link>
             {localStorage.getItem(offerKey) && <PasskeyOffer />}
             <Outlet />
             {import.meta.env.DEV && (
@@ -458,7 +423,7 @@ function Layout() {
                   label="Sitzung"
                   data={{
                     role: user.role,
-                    view: view[0],
+                    view,
                     admitted: user.admitted,
                     cohort: user.cohort_member,
                     grants: user.category_ids.length,
@@ -478,70 +443,41 @@ function Layout() {
   );
 }
 
-function MenuFace({ iconClass = '' }: { iconClass?: string }) {
+// Account controls, rendered once and restyled by breakpoint: a bottom-left pill on phones
+// (avatar, settings, logout), a floating card on wider screens (mode switch and logout above, avatar, name, settings below).
+function Dock() {
   const { user } = useSession();
-  return (
-    <>
-      <Avatar user={user} className="size-[38px] text-sm" />
-      <PanelLeft aria-hidden="true" className={`mx-2.5 size-5 flex-none ${iconClass}`} />
-    </>
-  );
-}
-
-// Shared by the desktop aside and the full-screen mobile dialog. The footer stays one row so it takes little scroll space.
-function SidebarBody({ close, mobile = false }: { close: () => void; mobile?: boolean }) {
-  const { user } = useSession();
-  const [view] = useWorkspaceView();
   const location = useLocation();
-  const icon =
-    'grid size-12 flex-none place-items-center rounded-full transition-[translate,border-color,box-shadow] duration-100 border-2 border-transparent bg-white shadow-sm hover:border-ink hover:-translate-y-1 hover:bg-gray-600 hover:text-white hover:shadow-[0_4px_0_var(--color-ink)] active:translate-y-0.5 active:shadow-none';
+  const editor = editorial(user);
   return (
-    <>
-      <Link
-        to="/"
-        className="flex-none rounded-full px-5 pb-4 pt-5"
-        aria-label="AbiZeitBetrug Startseite"
-        onClick={close}
-      >
-        <Brand />
-      </Link>
-      <nav
-        aria-label="Hauptnavigation"
-        className="flex min-h-24 flex-1 flex-col gap-6 overflow-y-auto px-3 py-2"
-        onClick={(e) => {
-          if ((e.target as Element).closest('a')) close();
-        }}
-      >
-        <NavItem to="/" icon={House}>
-          Überblick
-        </NavItem>
-        {view === 'redaktion' && editorial(user) ? <EditorNav /> : <StudentNav />}
-      </nav>
-      {user.role === 'admin' && view === 'redaktion' && <AdminNav onNavigate={close} />}
-      <div className="flex flex-none flex-col gap-2 bg-pill px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
-        {editorial(user) && <ViewSwitch onSwitch={close} />}
-        <div className="flex items-center gap-3">
-          {mobile ? (
-            <span className="size-12 flex-none" />
-          ) : (
-            <Avatar user={user} className="size-12 border-[5px] border-white text-sm" />
-          )}
-          <strong className="min-w-0 flex-1 line-clamp-2 break-words text-[15px] font-semibold leading-tight">
-            {user.name}
-          </strong>
-          <Link
-            to="/einstellungen"
-            aria-label="Einstellungen"
-            aria-current={location.pathname === '/einstellungen' ? 'page' : undefined}
-            className={icon}
-            onClick={close}
-          >
-            <Settings aria-hidden="true" className="size-6" />
-          </Link>
-          <Logout compact />
+    <section
+      aria-label="Konto"
+      className={`fixed ${floatBottom} left-4 z-40 flex items-center gap-1.5 rounded-[30px] bg-white p-1.5 shadow-lg min-[651px]:bottom-6 min-[651px]:left-6 min-[651px]:grid min-[651px]:w-[320px] ${
+        editor
+          ? "min-[651px]:grid-cols-[auto_minmax(0,1fr)_auto] min-[651px]:[grid-template-areas:'switch_switch_logout'_'avatar_name_settings']"
+          : "min-[651px]:grid-cols-[auto_minmax(0,1fr)_auto_auto] min-[651px]:[grid-template-areas:'avatar_name_settings_logout']"
+      }`}
+    >
+      {editor && (
+        <div className="[grid-area:switch] max-[651px]:hidden">
+          <ViewSwitch />
         </div>
-      </div>
-    </>
+      )}
+      {/* Decorative; dropped below 360px so the account and mode pills fit side by side on 320px phones. */}
+      <Avatar user={user} className="size-12 text-sm [grid-area:avatar] max-[360px]:hidden" />
+      <strong className="line-clamp-2 min-w-0 break-words px-1 text-[15px] font-semibold leading-tight [grid-area:name] max-[651px]:sr-only">
+        {user.name}
+      </strong>
+      <Link
+        to="/einstellungen"
+        aria-label="Einstellungen"
+        aria-current={location.pathname === '/einstellungen' ? 'page' : undefined}
+        className={`${roundButton} bg-pill [grid-area:settings] hover:border-ink hover:bg-gray-600 hover:text-white hover:shadow-[0_4px_0_var(--color-ink)]`}
+      >
+        <Settings aria-hidden="true" className="size-6" />
+      </Link>
+      <Logout compact />
+    </section>
   );
 }
 
@@ -550,35 +486,20 @@ function useSwitchView() {
   const navigate = useNavigate();
   return (next: View) => {
     setView(next);
-    navigate('/');
+    navigate(next === 'redaktion' ? '/redaktion' : '/');
   };
 }
 
-// Fixed badge colors per mode, so the option previews the workspace it leads to.
+// Fixed colors per mode, so the selected pill previews the workspace it stands for.
 const modes = {
-  schueler: { label: 'Schüler', Icon: GraduationCap, badge: 'bg-[#15181f] text-[#c8f23c]' },
-  redaktion: { label: 'Redaktion', Icon: PenLine, badge: 'bg-[#1d5fbf] text-white' },
+  schueler: { label: 'Schüler', active: 'bg-[#15181f] text-[#c8f23c]' },
+  redaktion: { label: 'Redaktion', active: 'bg-[#1d5fbf] text-white' },
 };
-const modeRow = 'flex h-[38px] w-full items-center gap-2.5 rounded-full pr-3 text-left active:scale-95';
+const motion = 'duration-200 ease-out motion-reduce:transition-none';
+// Text pill, 48px tall and as wide as the longer label, so the whole pill is the tap target.
+const modePill = 'flex h-12 w-full items-center justify-center rounded-full px-5 text-lg font-bold active:scale-95';
 
-function ModeFace({ mode, caption }: { mode: View; caption: string }) {
-  const { label, Icon, badge } = modes[mode];
-  return (
-    <>
-      <span
-        className={`grid size-[38px] flex-none place-items-center rounded-full ${badge} transition-[rotate,scale] duration-500 ease-[cubic-bezier(.34,1.56,.64,1)] starting:-rotate-90 starting:scale-50`}
-      >
-        <Icon aria-hidden="true" className="size-5" />
-      </span>
-      <span className="min-w-20 flex-1 transition-[opacity,translate] delay-100 duration-300 ease-out starting:translate-y-2 starting:opacity-0">
-        <span className="block text-[11px] leading-3 text-[#5d6270]">{caption}</span>
-        <span className="block text-sm font-bold leading-4">{label}</span>
-      </span>
-    </>
-  );
-}
-
-// Mobile mode switch: a pill naming the current mode that grows upward to offer the other one.
+// Phone mode switch: a pill naming the current mode that grows upward to offer the other one.
 function ModeFab() {
   const [view] = useWorkspaceView();
   const switchView = useSwitchView();
@@ -605,28 +526,28 @@ function ModeFab() {
   }, [open]);
   return (
     <div
-      className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-40 rounded-3xl bg-white p-[5px] text-[#15181f] shadow-lg transition-opacity group-has-[aside[role=dialog]]/shell:opacity-0 min-[651px]:hidden"
+      className={`fixed ${floatBottom} right-4 z-40 grid rounded-[30px] bg-white p-1.5 text-[#15181f] shadow-lg min-[651px]:hidden`}
       onBlur={(e) => {
         if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget)) setOpen(false);
       }}
     >
       <div
         inert={!open}
-        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr] opacity-0'}`}
+        className={`grid transition-[grid-template-rows,opacity] ${motion} ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr] opacity-0'}`}
       >
         <div className="min-h-0 overflow-hidden">
           <button
             key={other}
             type="button"
             aria-label={`Zu ${modes[other].label} wechseln`}
-            className={`${modeRow} mb-1.5 transition-[translate,scale] duration-500 ease-[cubic-bezier(.34,1.56,.64,1)] hover:bg-[#15181f]/5 focus-visible:-outline-offset-2 ${open ? '' : 'translate-y-6 scale-75'}`}
+            className={`${modePill} mb-1.5 transition-[translate,scale] ${motion} hover:bg-[#15181f]/5 focus-visible:-outline-offset-2 ${open ? '' : 'translate-y-3'}`}
             onClick={() => {
               setOpen(false);
               trigger.current?.focus();
               switchView(other);
             }}
           >
-            <ModeFace mode={other} caption="Wechseln zu" />
+            {modes[other].label}
           </button>
         </div>
       </div>
@@ -635,363 +556,46 @@ function ModeFab() {
         type="button"
         aria-label={`Ansicht: ${modes[view].label}`}
         aria-expanded={open}
-        className={`${modeRow} transition-transform`}
+        className={`${modePill} ${modes[view].active} transition-[scale,background-color,color] ${motion}`}
         onClick={() => setOpen(!open)}
       >
-        <ModeFace key={view} mode={view} caption="Ansicht" />
-        <ChevronUp
-          aria-hidden="true"
-          className={`size-4 flex-none transition-[rotate] duration-300 ${open ? 'rotate-180' : ''}`}
-        />
+        <span key={view} className={`transition-opacity ${motion} starting:opacity-0`}>
+          {modes[view].label}
+        </span>
       </button>
     </div>
   );
 }
 
-function ViewSwitch({ onSwitch }: { onSwitch: () => void }) {
+// Wider-screen mode switch; 48px track with 4px padding, so the 40px segments stay concentric.
+function ViewSwitch() {
   const [view] = useWorkspaceView();
   const switchView = useSwitchView();
-  const choose = (next: View) => {
-    onSwitch();
-    switchView(next);
-  };
-  const seg = (active: boolean) =>
-    `min-h-10 flex-1 rounded-full px-3 text-sm transition-transform active:scale-95 ${active ? 'bg-ink font-bold text-pop' : 'font-semibold text-ink hover:bg-white/60'}`;
+  const seg = (mode: View) =>
+    `min-h-10 flex-1 rounded-full px-3 text-[17px] font-bold transition-[scale,background-color,color] ${motion} active:scale-95 ${view === mode ? modes[mode].active : 'text-ink hover:bg-white/60'}`;
   return (
-    <div className="flex gap-0.5 rounded-full bg-white/70 p-1">
-      <button
-        type="button"
-        className={seg(view === 'schueler')}
-        aria-pressed={view === 'schueler'}
-        onClick={() => choose('schueler')}
-      >
-        Schüler
-      </button>
-      <button
-        type="button"
-        className={seg(view === 'redaktion')}
-        aria-pressed={view === 'redaktion'}
-        onClick={() => choose('redaktion')}
-      >
-        Redaktion
-      </button>
+    <div className="flex gap-0.5 rounded-full bg-pill p-1">
+      {(['schueler', 'redaktion'] as const).map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          className={seg(mode)}
+          aria-pressed={view === mode}
+          onClick={() => switchView(mode)}
+        >
+          {modes[mode].label}
+        </button>
+      ))}
     </div>
   );
 }
 
-function NavItem({ to, icon: Icon, children }: { to: string; icon?: LucideIcon; children: ReactNode }) {
-  const location = useLocation();
-  const active = location.pathname + location.search === to;
-  return (
-    <Link
-      to={to}
-      aria-current={active ? 'page' : undefined}
-      className={`${navItem} ${active ? 'bg-ink font-bold text-pop' : 'hover:bg-pill'}`}
-    >
-      <span className="flex items-center gap-2.5">
-        {Icon && <Icon aria-hidden="true" className="size-[18px] shrink-0" />}
-        {children}
-      </span>
-    </Link>
-  );
-}
-// Pinned between the scrolling nav and the account block; open state is a per-browser preference.
-function AdminNav({ onNavigate }: { onNavigate: () => void }) {
-  const projects = projectsEnabled(useSession());
-  const [open, setOpen] = useState(() => {
-    try {
-      return localStorage.getItem('verwaltung') !== 'zu';
-    } catch {
-      return true;
-    }
-  });
-  const toggle = () => {
-    setOpen(!open);
-    try {
-      localStorage.setItem('verwaltung', open ? 'zu' : 'offen');
-    } catch {
-      /* private mode */
-    }
-  };
-  return (
-    <div
-      className="flex flex-none flex-col gap-1 border-t border-line px-3 py-2"
-      onClick={(e) => {
-        if ((e.target as Element).closest('a')) onNavigate();
-      }}
-    >
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls="nav-verwaltung"
-        className={`${navItem} w-full font-bold hover:bg-pill`}
-        onClick={toggle}
-      >
-        <span className="flex items-center gap-2.5">
-          <Settings aria-hidden="true" className="size-[18px] shrink-0" />
-          Verwaltung
-        </span>
-        <ChevronDown
-          aria-hidden="true"
-          className={`size-4 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`}
-        />
-      </button>
-      {open && (
-        <div id="nav-verwaltung" className="flex flex-col gap-1">
-          <NavItem to="/verwaltung/personen" icon={Users}>
-            Personen
-          </NavItem>
-          <NavItem to="/verwaltung/protokoll" icon={ScrollText}>
-            Aktivitätsprotokoll
-          </NavItem>
-          {projects && (
-            <NavItem to="/verwaltung/bereiche" icon={SquareKanban}>
-              Bereiche
-            </NavItem>
-          )}
-          <NavItem to="/verwaltung/email" icon={Settings}>
-            E-Mail
-          </NavItem>
-        </div>
-      )}
-    </div>
-  );
-}
-function NavRow({
-  to,
-  icon,
-  title,
-  sub,
-  end,
-}: {
-  to: string;
-  icon?: LucideIcon;
-  title: string;
-  sub?: string;
-  end?: string;
-}) {
-  const location = useLocation();
-  const active = location.pathname + location.search === to;
-  return (
-    <Link
-      to={to}
-      aria-current={active ? 'page' : undefined}
-      className={`${navItem} ${active ? 'bg-ink text-white' : 'hover:bg-pill'}`}
-    >
-      <span className="flex min-w-0 items-start gap-2.5">
-        {icon && <KindIcon icon={icon} className={`mt-[3px] size-4 ${active ? 'text-pop' : 'text-muted'}`} />}
-        <span className="min-w-0">
-          <span className={`block truncate ${active ? 'font-bold text-pop' : ''}`}>{title}</span>
-          {sub && (
-            <small className={`block truncate text-[13px] ${active ? 'text-white/80' : 'text-muted'}`}>{sub}</small>
-          )}
-        </span>
-      </span>
-      {end && (
-        <span className={`flex-none text-[13px] tabular-nums ${active ? 'text-white/80' : 'text-muted'}`}>{end}</span>
-      )}
-    </Link>
-  );
-}
-function NavGroup({ id, label, children }: { id: string; label: string; children: ReactNode }) {
-  return (
-    <div role="group" aria-labelledby={id} className="flex flex-col gap-1">
-      <p id={id} className={groupLabel}>
-        {label}
-      </p>
-      {children}
-    </div>
-  );
-}
-const quiet = 'px-3.5 text-[13px] text-muted';
 const hasVoted = (c: Category) => Boolean(c.my_words?.length || c.my_option_ids?.length || c.my_option_id);
 const participationColor = (percent: number) => {
   const from = [209, 213, 219];
   const to = [22, 101, 52];
   return `rgb(${from.map((value, index) => Math.round(value + ((to[index] - value) * percent) / 100)).join(', ')})`;
 };
-
-function StudentNav() {
-  const { user } = useSession();
-  const categories = useData<Category[]>('/categories');
-  const submissions = useData<Submission[]>('/submissions');
-  const ballots = (categories.data ?? []).filter((c) => isBallot(c.kind));
-  const todo = ballots.filter((c) => c.status === 'open' && (!hasVoted(c) || c.repeatable)).sort(newestOpened);
-  const done = ballots
-    .filter((c) => c.status === 'closed' || (c.status === 'open' && hasVoted(c) && !c.repeatable))
-    .sort(newestOpened);
-  const own = (submissions.data ?? []).filter((s) => s.author_id === user.id);
-  return (
-    <>
-      <NavGroup id="nav-offen" label="Offen">
-        {categories.isPending ? (
-          <p className={quiet}>Einen Moment …</p>
-        ) : categories.error ? (
-          <p className={quiet}>Abstimmungen nicht erreichbar.</p>
-        ) : todo.length === 0 ? (
-          <p className={quiet}>Gerade ist nichts offen.</p>
-        ) : (
-          <ol aria-labelledby="nav-offen" className="ml-3 flex flex-col border-l-2 border-pill">
-            {todo.map((c) => (
-              <li key={c.id} className="relative pl-3">
-                <span
-                  aria-hidden="true"
-                  className="absolute left-0 top-[17px] size-2 -translate-x-1/2 rounded-full bg-accent"
-                />
-                <NavRow to={`/sammlungen/${c.id}`} title={c.name} sub={since(c.opened_at)} />
-              </li>
-            ))}
-          </ol>
-        )}
-      </NavGroup>
-      <NavGroup id="nav-student-beitraege" label="Beiträge">
-        {categories.isPending || submissions.isPending ? (
-          <p className={quiet}>Einen Moment …</p>
-        ) : categories.error ? null : submissions.error ? (
-          <p className={quiet}>Beiträge nicht erreichbar.</p>
-        ) : (
-          categories.data
-            ?.filter((c) => c.status === 'open' && isSubmissionCollection(c.kind))
-            .map((c) => {
-              const ownCount = own.filter((s) => s.category_id === c.id).length;
-              return (
-                <NavRow
-                  key={c.id}
-                  to={`/sammlungen/${c.id}`}
-                  icon={kindIcon[c.kind]}
-                  title={c.name}
-                  sub={
-                    ownCount === 0
-                      ? 'Noch nichts eingereicht'
-                      : `${ownCount} eigene ${ownCount === 1 ? 'Einreichung' : 'Einreichungen'}`
-                  }
-                />
-              );
-            })
-        )}
-      </NavGroup>
-      <div className="flex flex-col gap-1">
-        <details className="group">
-          <summary
-            className={`${navItem} cursor-pointer list-none text-muted hover:bg-pill [&::-webkit-details-marker]:hidden`}
-          >
-            Erledigt ({done.length})
-            <span aria-hidden="true" className="text-xs group-open:rotate-90">
-              ›
-            </span>
-          </summary>
-          <div className="mt-1 flex flex-col gap-1">
-            {done.length === 0 ? (
-              <p className={quiet}>Noch nichts erledigt.</p>
-            ) : (
-              done.map((c) => (
-                <NavRow
-                  key={c.id}
-                  to={`/sammlungen/${c.id}`}
-                  title={c.name}
-                  sub={hasVoted(c) ? 'abgestimmt' : 'beendet'}
-                />
-              ))
-            )}
-          </div>
-        </details>
-        <NavItem to="/beitraege" icon={FileText}>
-          Meine Beiträge
-        </NavItem>
-      </div>
-    </>
-  );
-}
-
-function EditorNav() {
-  const session = useSession();
-  const { user } = session;
-  const categories = useData<Category[]>('/categories');
-  const submissions = useData<Submission[]>('/submissions');
-  const groups: [Category['status'], string, string][] = [
-    ['open', 'Offen', 'nav-sammlung-offen'],
-    ['draft', 'Entwürfe', 'nav-sammlung-entwuerfe'],
-    ['closed', 'Beendet', 'nav-sammlung-beendet'],
-  ];
-  // Sidebar lists only assigned categories; "Alle Abstimmungen"/"Alle Beiträge" stay the way to the rest.
-  const writable = (categories.data ?? []).filter((c) => canEdit(user, c.id));
-  const ballots = writable.filter((c) => isBallot(c.kind));
-  return (
-    <>
-      {projectsEnabled(session) && (
-        <>
-          <NavItem to="/tickets" icon={SquareKanban}>
-            Tickets
-          </NavItem>
-          <NavItem to="/dokumente" icon={Files}>
-            Dokumente
-          </NavItem>
-        </>
-      )}
-      <NavGroup id="nav-sammlungen" label="Abstimmungen">
-        {categories.isPending ? (
-          <p className={quiet}>Einen Moment …</p>
-        ) : categories.error ? (
-          <p className={quiet}>Abstimmungen nicht erreichbar.</p>
-        ) : ballots.length === 0 ? (
-          <p className={quiet}>Keine Wahl zugewiesen.</p>
-        ) : (
-          groups.map(([status, label, id]) => {
-            const items = ballots.filter((c) => c.status === status).sort(newestOpened);
-            return (
-              items.length > 0 && (
-                <div key={status} role="group" aria-labelledby={id} className="mt-1 flex flex-col gap-1">
-                  <p id={id} className={`${quiet} flex items-center gap-1.5`}>
-                    {status === 'open' && <span aria-hidden="true" className="size-1.5 rounded-full bg-accent" />}
-                    {label}
-                  </p>
-                  {items.map((c) => (
-                    <NavRow
-                      key={c.id}
-                      to={`/sammlungen/${c.id}`}
-                      icon={kindIcon[c.kind]}
-                      title={c.name}
-                      end={plural(c.ballot_count ?? 0, 'Stimme', 'Stimmen')}
-                    />
-                  ))}
-                </div>
-              )
-            );
-          })
-        )}
-        <NavItem to="/sammlungen?neu" icon={Plus}>
-          Neue Abstimmung
-        </NavItem>
-        <NavItem to="/sammlungen" icon={Library}>
-          Alle Abstimmungen
-        </NavItem>
-      </NavGroup>
-      <NavGroup id="nav-editor-beitraege" label="Beiträge">
-        {categories.isPending ? (
-          <p className={quiet}>Einen Moment …</p>
-        ) : categories.error ? null : (
-          writable
-            .filter((c) => isSubmissionCollection(c.kind))
-            .map((c) => {
-              const mine = (submissions.data ?? []).filter((s) => s.category_id === c.id);
-              return (
-                <NavRow
-                  key={c.id}
-                  to={`/sammlungen/${c.id}`}
-                  icon={kindIcon[c.kind]}
-                  title={c.name}
-                  sub={plural(mine.length, 'Beitrag', 'Beiträge')}
-                />
-              );
-            })
-        )}
-        <NavItem to="/redaktion" icon={ClipboardList}>
-          Alle Beiträge
-        </NavItem>
-      </NavGroup>
-    </>
-  );
-}
 
 // projects: the route belongs to the PROJECT_MANAGEMENT tools and disappears with the flag.
 function RoleGuard({
@@ -1006,21 +610,16 @@ function RoleGuard({
   const session = useSession();
   const { user } = session;
   const allowed = (admin ? user.role === 'admin' : editorial(user)) && (!projects || projectsEnabled(session));
-  return allowed ? children : <Navigate to="/" replace />;
+  return allowed ? children : <Navigate to={editorial(user) ? '/redaktion' : '/'} replace />;
 }
 
 // ---------- home ----------
-function Overview() {
-  const { user } = useSession();
-  const [view] = useWorkspaceView();
-  return view === 'redaktion' && editorial(user) ? <EditorialHome /> : <StudentHome />;
-}
 
 function StudentHome() {
   const { user } = useSession();
   const [, setView] = useWorkspaceView();
   const navigate = useNavigate();
-  // Editorial routes render nothing for the student view, so switch the view first.
+  // /sammlungen redirects students home, so switch the view first.
   const toRedaktion = (to: string) => {
     setView('redaktion');
     navigate(to);
@@ -1054,7 +653,7 @@ function StudentHome() {
         title={title}
         action={
           editorial(user) && (
-            <button type="button" className={btn.redaktion} onClick={() => toRedaktion('/')}>
+            <button type="button" className={btn.redaktion} onClick={() => toRedaktion('/redaktion')}>
               Zum Redaktionsbereich <Arrow />
             </button>
           )
@@ -1342,7 +941,14 @@ function EditorialHome() {
   );
   return (
     <>
-      <PageHead title="Redaktion">
+      <PageHead
+        title="Redaktion"
+        action={
+          <Link to="/redaktion/beitraege" className={btn.text}>
+            Alle Beiträge <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
+          </Link>
+        }
+      >
         {isAdmin
           ? 'Zugänge und Abstimmungen im Überblick.'
           : projects
@@ -1480,6 +1086,14 @@ function EditorialHome() {
               <Link to="/verwaltung/email" className={`${btn.text} mt-3 self-start`}>
                 E-Mail-Versand verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
               </Link>
+              <Link to="/verwaltung/protokoll" className={`${btn.text} mt-3 self-start`}>
+                Aktivitätsprotokoll <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
+              </Link>
+              {projects && (
+                <Link to="/verwaltung/bereiche" className={`${btn.text} mt-3 self-start`}>
+                  Bereiche verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
+                </Link>
+              )}
               <DevDebug
                 label="Personen"
                 data={{

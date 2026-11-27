@@ -739,7 +739,7 @@ export function ContributionDetail() {
     <>
       <Link
         className="mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink"
-        to={isRedaktion ? `/sammlungen/${s.category_id}` : own ? '/beitraege' : '/redaktion'}
+        to={isRedaktion ? `/sammlungen/${s.category_id}` : own ? '/beitraege' : '/redaktion/beitraege'}
       >
         ← {isRedaktion ? 'Zur Abstimmung' : own ? 'Meine Beiträge' : 'Redaktion'}
       </Link>
