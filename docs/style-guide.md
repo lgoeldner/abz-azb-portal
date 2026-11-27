@@ -15,6 +15,7 @@ The look is interactive, inviting and paper-like: flat surfaces, clear tap targe
 
 ## Depth
 
-- No drop shadows. Separate surfaces with background tone, a 1px line or spacing.
-  Exception: the few floating pills over page content (Dock, ModeFab, and similar fixed controls) may use one shadow, and their buttons the hard hover lift.
+- No soft (blurred) drop shadows. Separate surfaces with background tone, a 1px line or spacing.
+  Exception: the floating containers over page content (Dock, ModeFab, the Redaktionsmenü trigger and popup) carry one soft shadow.
+- Solid offset shadows without blur (the hover lift on buttons, e.g. `hover:shadow-[0_4px_0_var(--color-ink)]`) are part of the paper look and allowed anywhere.
 - No blur: no `backdrop-filter`, `backdrop-blur-*`, `filter: blur()` or soft glows. Overlays use a flat translucent scrim.

@@ -382,7 +382,7 @@ function Login() {
 // Floating controls share one geometry so the corners stay concentric: 48px items, padding = gap = 6px,
 // outer radius = 24px item radius + 6px = 30px.
 const roundButton =
-  'grid size-12 flex-none place-items-center rounded-full border-2 border-transparent shadow-sm transition-[translate,border-color,box-shadow] duration-100 hover:-translate-y-1 active:translate-y-0.5 active:shadow-none';
+  'grid size-12 flex-none place-items-center rounded-full border border-black/10 transition-[translate,border-color,box-shadow] duration-100 hover:-translate-y-1 active:translate-y-0.5 active:shadow-none';
 const floatBottom = 'bottom-[max(1rem,env(safe-area-inset-bottom))]';
 
 function Layout() {
