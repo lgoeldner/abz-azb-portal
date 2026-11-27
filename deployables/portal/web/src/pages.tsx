@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRef, useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   api,
@@ -59,6 +59,86 @@ function photoValidationError(files: File[], alreadyAttached = 0) {
   return '';
 }
 const submittable = (c: Category) => isSubmissionCollection(c.kind);
+
+// One look for quotes: the paper with large marks and the attribution below it,
+// whether the quote is being written, read or edited.
+function QuotePaper({ children }: { children: ReactNode }) {
+  return (
+    <span className="quote-paper">
+      <span className="quote-mark quote-mark-open" aria-hidden="true">
+        „
+      </span>
+      {children}
+      <span className="quote-mark quote-mark-close" aria-hidden="true">
+        “
+      </span>
+    </span>
+  );
+}
+
+type QuoteDraft = { title: string; body: string };
+
+// Uncontrolled (FormData) without draft, controlled with it.
+function QuoteFields({ draft, onChange }: { draft?: QuoteDraft; onChange?: (patch: Partial<QuoteDraft>) => void }) {
+  return (
+    <>
+      <label className={`${label} quote-writing-label`}>
+        Dein Zitat
+        <QuotePaper>
+          <textarea
+            className="quote-textarea"
+            name="body"
+            rows={4}
+            placeholder="Dieser eine Satz …"
+            maxLength={20000}
+            autoFocus={!!draft}
+            value={draft?.body}
+            onChange={onChange && ((e) => onChange({ body: e.target.value }))}
+          />
+        </QuotePaper>
+      </label>
+      <label className={`${label} quote-attribution-label`}>
+        Zitat von
+        <input
+          className="quote-attribution"
+          name="title"
+          placeholder="Name oder Quelle"
+          maxLength={200}
+          required
+          value={draft?.title}
+          onChange={onChange && ((e) => onChange({ title: e.target.value }))}
+        />
+      </label>
+    </>
+  );
+}
+
+function QuoteCitation({ s, caption, onEdit }: { s: Submission; caption: string; onEdit?: () => void }) {
+  const content = (
+    <>
+      <span className={`${label} quote-writing-label`}>
+        <span className="flex items-baseline justify-between gap-3">
+          {caption}
+          {onEdit && <span className="text-sm font-semibold text-muted">Bearbeiten ✎</span>}
+        </span>
+        <QuotePaper>
+          <span className="quote-text">{s.body || 'Kein Text hinzugefügt.'}</span>
+        </QuotePaper>
+      </span>
+      <span className={`${label} quote-attribution-label`}>
+        Zitat von
+        <cite className="quote-attribution quote-attribution-read">{s.title}</cite>
+      </span>
+    </>
+  );
+  return onEdit ? (
+    <button type="button" className="quote-fields quote-citation-edit" onClick={onEdit}>
+      {content}
+    </button>
+  ) : (
+    <div className="quote-fields">{content}</div>
+  );
+}
 export function Contributions() {
   const { user } = useSession();
   const categories = useData<Category[]>('/categories');
@@ -270,36 +350,7 @@ export function NewContribution() {
                 disabled={action.busy || !!saved}
               >
                 {isQuote ? (
-                  <>
-                    <label className={`${label} quote-writing-label`}>
-                      Dein Zitat
-                      <span className="quote-paper">
-                        <span className="quote-mark quote-mark-open" aria-hidden="true">
-                          „
-                        </span>
-                        <textarea
-                          className="quote-textarea"
-                          name="body"
-                          rows={4}
-                          placeholder="Dieser eine Satz …"
-                          maxLength={20000}
-                        />
-                        <span className="quote-mark quote-mark-close" aria-hidden="true">
-                          “
-                        </span>
-                      </span>
-                    </label>
-                    <label className={`${label} quote-attribution-label`}>
-                      Zitat von
-                      <input
-                        className="quote-attribution"
-                        name="title"
-                        placeholder="Name oder Quelle"
-                        maxLength={200}
-                        required
-                      />
-                    </label>
-                  </>
+                  <QuoteFields />
                 ) : (
                   <>
                     <label className={label}>
@@ -528,6 +579,24 @@ export function ContributionDetail() {
   const categoryKind = category?.kind;
   const isPhoto = categoryKind === 'photo';
   const isSteckbrief = categoryKind === 'steckbrief';
+  const isQuote = categoryKind === 'quote';
+  const conflict = action.error instanceof ApiError && action.error.status === 409;
+  const collectionField = (
+    <label className={label}>
+      Sammlung
+      <select
+        className={field}
+        value={draft.category_id}
+        onChange={(e) => setDraft({ ...draft, category_id: e.target.value })}
+      >
+        {categoryChoices.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
   const beginEdit = () => {
     setDraft({
       title: s.title,
@@ -691,7 +760,7 @@ export function ContributionDetail() {
         }}
       />
       {action.feedback}
-      {action.error instanceof ApiError && action.error.status === 409 && editing && (
+      {conflict && editing && (
         <div className={`${notice} space-y-3`}>
           <button
             className={btn.secondary}
@@ -709,42 +778,43 @@ export function ContributionDetail() {
         <div className="min-w-0 space-y-6">
           {isSteckbrief && <Steckbrief key={s.id} category={category!} submission={s} readOnly={!editable} />}
           {editing && editable && !isPhoto ? (
-            <form className={`${panel} space-y-5`} onSubmit={save}>
+            <form className={`${panel} space-y-5 ${isQuote ? 'quote-submission-form' : ''}`} onSubmit={save}>
+              {isQuote ? (
+                <div className="quote-fields">
+                  <QuoteFields draft={draft} onChange={(patch) => setDraft({ ...draft, ...patch })} />
+                </div>
+              ) : (
+                <>
+                  <label className={label}>
+                    Titel
+                    <input
+                      className={field}
+                      value={draft.title}
+                      maxLength={200}
+                      required
+                      onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                    />
+                  </label>
+                  {collectionField}
+                  <label className={label}>
+                    Dein Beitrag
+                    <textarea
+                      className={field}
+                      rows={8}
+                      value={draft.body}
+                      onChange={(e) => setDraft({ ...draft, body: e.target.value })}
+                    />
+                  </label>
+                </>
+              )}
               <label className={label}>
-                Titel
-                <input
-                  className={field}
-                  value={draft.title}
-                  maxLength={200}
-                  required
-                  onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-                />
-              </label>
-              <label className={label}>
-                Sammlung
-                <select
-                  className={field}
-                  value={draft.category_id}
-                  onChange={(e) => setDraft({ ...draft, category_id: e.target.value })}
-                >
-                  {categoryChoices.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={label}>
-                Dein Beitrag
-                <textarea
-                  className={field}
-                  rows={8}
-                  value={draft.body}
-                  onChange={(e) => setDraft({ ...draft, body: e.target.value })}
-                />
-              </label>
-              <label className={label}>
-                Kontext
+                {isQuote ? (
+                  <>
+                    Kontext & Hinweise <small className="font-normal text-muted">optional</small>
+                  </>
+                ) : (
+                  'Kontext'
+                )}
                 <textarea
                   className={field}
                   rows={3}
@@ -752,6 +822,8 @@ export function ContributionDetail() {
                   onChange={(e) => setDraft({ ...draft, context: e.target.value })}
                 />
               </label>
+              {/* ponytail: the quote composer has no picker; show it only when moving is possible */}
+              {isQuote && categoryChoices.length > 1 && collectionField}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <button type="button" className={btn.secondary} onClick={() => setEditing(false)}>
                   Abbrechen
@@ -762,7 +834,22 @@ export function ContributionDetail() {
               </div>
             </form>
           ) : null}
-          {!isSteckbrief && (!isPhoto || s.body || s.context) && (
+          {isQuote && (!(editing && editable) || conflict) && (
+            <article className={`${panel} quote-submission-form space-y-5`}>
+              <QuoteCitation
+                s={s}
+                caption={editing && editable ? 'Aktueller Stand' : isRedaktion ? 'Zitat' : 'Dein Zitat'}
+                onEdit={editable && !editing ? beginEdit : undefined}
+              />
+              {s.context && (
+                <div className="border-t border-line pt-4">
+                  <h3 className="text-sm font-semibold text-muted">Kontext & Hinweise</h3>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-[15px]">{s.context}</p>
+                </div>
+              )}
+            </article>
+          )}
+          {!isSteckbrief && !isQuote && (!isPhoto || s.body || s.context) && (
             <article className={panel}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className={heading}>

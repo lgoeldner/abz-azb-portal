@@ -184,18 +184,42 @@ body:has([data-workspace='redaktion']) {
   border-radius: 12px;
   background: white;
 }
-.quote-textarea {
+.quote-textarea,
+.quote-text {
   display: block;
   width: 100%;
   min-height: 18rem;
-  resize: vertical;
-  border: 0;
-  border-radius: inherit;
-  background: transparent;
   padding: 3.25rem 3.75rem;
   color: var(--color-ink);
   font: 500 clamp(2rem, 4vw, 2.5rem) / 1.35 var(--font-sans);
   letter-spacing: -0.035em;
+}
+.quote-textarea {
+  resize: vertical;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+}
+.quote-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.quote-citation-edit {
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  cursor: text;
+}
+.quote-citation-edit:hover .quote-paper {
+  border-color: var(--color-ink);
+}
+.quote-citation-edit:focus-visible {
+  outline: 3px solid var(--color-ink);
+  outline-offset: 4px;
 }
 .quote-textarea::placeholder {
   color: var(--color-muted);
@@ -236,6 +260,11 @@ body:has([data-workspace='redaktion']) {
   color: var(--color-ink);
   font: 600 1.2rem / 1.4 var(--font-sans);
 }
+.quote-attribution-read {
+  display: block;
+  font-style: normal;
+}
+.quote-attribution-read,
 .quote-attribution:not(:placeholder-shown):not(:focus) {
   border-color: transparent;
   background: transparent;
@@ -259,7 +288,8 @@ body:has([data-workspace='redaktion']) {
   .quote-submission-form {
     padding: 1rem;
   }
-  .quote-textarea {
+  .quote-textarea,
+  .quote-text {
     min-height: 16rem;
     padding: 3.4rem 1.15rem;
     font-size: clamp(1.625rem, 7vw, 1.875rem);

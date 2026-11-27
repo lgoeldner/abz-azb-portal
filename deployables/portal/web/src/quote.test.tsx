@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Category, Me, Submission } from './api';
-import { NewContribution } from './pages';
+import { ContributionDetail, NewContribution } from './pages';
 import { Session, WorkspaceView, type View } from './ui';
 
 const student: Me['user'] = {
@@ -240,5 +240,71 @@ describe('quote contribution form', () => {
     await screen.findByText('Beitrag gespeichert');
     expect(calls).toContain('/submissions:POST');
     expect(calls.some((call) => call.endsWith('/attachments:POST'))).toBe(false);
+  });
+});
+
+describe('quote detail', () => {
+  it('shows the quote as a citation and edits it in place with the composer fields', async () => {
+    let current: Submission = {
+      id: 'q1',
+      category_id: 'quotes',
+      author_id: student.id,
+      author_name: student.name,
+      title: 'Herr Kurz',
+      body: 'Das kommt nicht dran.',
+      context: '',
+      status: 'pending',
+      version: 3,
+      created_at: '2026-10-20T10:00:00Z',
+      updated_at: '2026-10-20T10:00:00Z',
+      attachments: [],
+    };
+    const patches: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = new URL(String(input), window.location.origin).pathname.replace('/api/v1', '');
+        if (path === '/categories') return Response.json([category('quotes', 'quote', 'Zitate')]);
+        if (path === '/submissions/q1' && init?.method === 'PATCH') {
+          const payload = JSON.parse(String(init.body)) as Record<string, unknown>;
+          patches.push(payload);
+          current = { ...current, ...(payload as Partial<Submission>), version: current.version + 1 };
+          return Response.json(current);
+        }
+        if (path === '/submissions/q1') return Response.json(current);
+        if (path === '/submissions') return Response.json([current]);
+        return Response.json([]);
+      }),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <Session.Provider value={{ user: student, consent_required: false, csrf_token: 'csrf' }}>
+          <WorkspaceView.Provider value={['schueler', vi.fn()]}>
+            <MemoryRouter initialEntries={['/beitraege/q1']}>
+              <Routes>
+                <Route path="/beitraege/:id" element={<ContributionDetail />} />
+              </Routes>
+            </MemoryRouter>
+          </WorkspaceView.Provider>
+        </Session.Provider>
+      </QueryClientProvider>,
+    );
+
+    const citation = await screen.findByRole('button', { name: /Bearbeiten.*Das kommt nicht dran/ });
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    fireEvent.click(citation);
+
+    const quote = screen.getByLabelText(/Dein Zitat/);
+    expect(quote).toHaveValue('Das kommt nicht dran.');
+    expect(screen.getByPlaceholderText('Name oder Quelle')).toHaveValue('Herr Kurz');
+    expect(screen.queryByLabelText('Sammlung')).not.toBeInTheDocument();
+    fireEvent.change(quote, { target: { value: 'Das kommt bestimmt dran.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Änderungen speichern' }));
+
+    expect(await screen.findByRole('button', { name: /Das kommt bestimmt dran/ })).toBeInTheDocument();
+    expect(patches).toEqual([
+      { version: 3, title: 'Herr Kurz', body: 'Das kommt bestimmt dran.', context: '', category_id: 'quotes' },
+    ]);
   });
 });
