@@ -205,7 +205,7 @@ function renderPortal(
 }
 
 async function openPersonForm(kind = 'person') {
-  fireEvent.click(screen.getByRole('button', { name: /Neue Sammlung/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Neue Abstimmung/ }));
   fireEvent.click(screen.getByRole('radio', { name: kindLabel[kind as Kind] }));
   expect(screen.getByLabelText('Maximale Zahl der Stimmen pro Person')).toHaveValue(1);
 }
@@ -221,11 +221,11 @@ describe('words polls', () => {
     const { writes } = installApi();
     renderPortal('/sammlungen', admin);
 
-    fireEvent.click(screen.getByRole('button', { name: /Neue Sammlung/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Neue Abstimmung/ }));
     fireEvent.click(screen.getByRole('radio', { name: kindLabel['words' as Kind] }));
     expect(screen.getByLabelText('Maximale Zahl der Wörter pro Person')).toHaveValue(3);
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Wortwolke' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
 
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0].body).toMatchObject({
@@ -310,9 +310,9 @@ describe('words polls', () => {
     const manager = { ...assignedManager, category_ids: [poll.id] };
     const { writes } = installApi([poll], [], { wordEntries: rows });
     renderPortal(`/sammlungen/${poll.id}`, manager);
-    await screen.findByRole('heading', { name: 'Sammlung verwalten' });
+    await screen.findByRole('heading', { name: 'Abstimmung verwalten' });
     const aside = screen.getByRole('complementary');
-    expect(aside).toContainElement(screen.getByRole('heading', { name: 'Sammlung verwalten' }));
+    expect(aside).toContainElement(screen.getByRole('heading', { name: 'Abstimmung verwalten' }));
     expect(aside).not.toContainElement(screen.getByRole('heading', { name: 'Gesamtergebnisse' }));
     await screen.findByRole('button', { name: 'Aktionen für Begriff freiheit' });
     const firstTrigger = screen.getByRole('button', { name: 'Aktionen für Begriff freiheit' });
@@ -354,7 +354,7 @@ describe('words polls', () => {
   });
 });
 
-describe('Sammlungen person polls', () => {
+describe('Abstimmungen person polls', () => {
   it.each([
     { role: 'admin', user: admin, canHide: true },
     { role: 'assigned manager', user: assignedManager, canHide: true },
@@ -366,10 +366,10 @@ describe('Sammlungen person polls', () => {
     renderPortal(`/sammlungen/${poll.id}`, user);
 
     await screen.findByRole('heading', { name: poll.name });
-    const hide = screen.queryByRole('button', { name: 'Sammlung verbergen' });
+    const hide = screen.queryByRole('button', { name: 'Abstimmung verbergen' });
     if (canHide) expect(hide).toBeInTheDocument();
     else expect(hide).toBeNull();
-    const remove = screen.queryByRole('button', { name: 'Sammlung endgültig löschen' });
+    const remove = screen.queryByRole('button', { name: 'Abstimmung endgültig löschen' });
     if (user.role === 'admin') expect(remove).toBeInTheDocument();
     else expect(remove).toBeNull();
   });
@@ -385,10 +385,10 @@ describe('Sammlungen person polls', () => {
     renderPortal(`/sammlungen/${poll.id}`, user);
 
     await screen.findByRole('heading', { name: poll.name });
-    const hide = screen.queryByRole('button', { name: 'Sammlung verbergen' });
+    const hide = screen.queryByRole('button', { name: 'Abstimmung verbergen' });
     if (canHide) expect(hide).toBeInTheDocument();
     else expect(hide).toBeNull();
-    const remove = screen.queryByRole('button', { name: 'Sammlung endgültig löschen' });
+    const remove = screen.queryByRole('button', { name: 'Abstimmung endgültig löschen' });
     if (user.role === 'admin') expect(remove).toBeInTheDocument();
     else expect(remove).toBeNull();
   });
@@ -399,7 +399,7 @@ describe('Sammlungen person polls', () => {
     const manager = { ...student, id: 'manager-1', role: 'manager' as const, category_ids: [poll.id] };
     renderPortal(`/sammlungen/${poll.id}`, manager);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung verbergen' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Abstimmung verbergen' }));
 
     await screen.findByText('Verborgen');
     expect(writes).toContainEqual({
@@ -418,7 +418,7 @@ describe('Sammlungen person polls', () => {
 
     expect(await screen.findByText('Verborgen')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Definition bearbeiten' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sammlung öffnen' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Abstimmung öffnen' })).toBeInTheDocument();
   });
 
   it('lets managers edit a draft that has never been opened', async () => {
@@ -453,7 +453,7 @@ describe('Sammlungen person polls', () => {
       expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
       expect(screen.queryByLabelText('Klasse')).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: '1w' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
 
       const end = new Date();
       const original = new Date(poll.closes_at!);
@@ -484,8 +484,8 @@ describe('Sammlungen person polls', () => {
     const { writes } = installApi([poll]);
     renderPortal(`/sammlungen/${poll.id}`, assignedManager);
     fireEvent.click(await screen.findByRole('button', { name: 'Enddatum bearbeiten' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Sammlung speichern' })).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Abstimmung speichern' })).not.toBeInTheDocument());
     expect(writes).toEqual([]);
   });
 
@@ -511,10 +511,10 @@ describe('Sammlungen person polls', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Enddatum bearbeiten' }));
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Redaktion Test' }));
     fireEvent.click(screen.getByRole('button', { name: '1w' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     await screen.findByText('Berechtigung fehlgeschlagen.');
     fireEvent.click(screen.getByRole('button', { name: '1d' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     await waitFor(() => expect(permissionAttempts).toBe(2));
     expect(writes).toHaveLength(2);
     expect(writes[1].body).toEqual({ version: poll.version + 1, closes_at: original.toISOString() });
@@ -529,7 +529,7 @@ describe('Sammlungen person polls', () => {
     );
     renderPortal(`/sammlungen/${poll.id}`, admin);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung endgültig löschen' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Abstimmung endgültig löschen' }));
 
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Stimmprotokoll'));
     expect(writes).toEqual([]);
@@ -545,15 +545,15 @@ describe('Sammlungen person polls', () => {
     );
     renderPortal(`/sammlungen/${poll.id}`, admin);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung endgültig löschen' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Abstimmung endgültig löschen' }));
 
-    await screen.findByRole('heading', { name: 'Sammlungen' });
+    await screen.findByRole('heading', { name: 'Abstimmungen' });
     expect(writes).toContainEqual({
       path: `/categories/${poll.id}`,
       method: 'DELETE',
       body: { version: poll.version },
     });
-    expect(screen.getByText('Hier geht’s bald los. Aktuell gibt es keine Sammlungen.')).toBeInTheDocument();
+    expect(screen.getByText('Hier geht’s bald los. Aktuell gibt es keine Abstimmungen.')).toBeInTheDocument();
   });
 
   it.each(['person', 'proposal'])(
@@ -582,11 +582,11 @@ describe('Sammlungen person polls', () => {
 
       fireEvent.change(count, { target: { value: '501' } });
       fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Abimotto-Team' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
       expect(writes).toHaveLength(0);
 
       fireEvent.change(count, { target: { value: '500' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
       await waitFor(() => expect(writes).toHaveLength(1));
       expect(writes[0].body).toMatchObject({ max_choices: 500 });
     },
@@ -600,7 +600,7 @@ describe('Sammlungen person polls', () => {
     expect(screen.getByRole('switch', { name: 'Alle freigegebenen Personen zur Abstimmung zulassen' })).toBeChecked();
     expect(screen.getByLabelText('Maximale Zahl der Stimmen pro Person')).toHaveValue(1);
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Abimotto-Team' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
 
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]).toMatchObject({
@@ -618,7 +618,7 @@ describe('Sammlungen person polls', () => {
   it('creates one-off photo collections without changing their content kind', async () => {
     const { writes } = installApi();
     renderPortal('/sammlungen', admin);
-    fireEvent.click(screen.getByRole('button', { name: /Neue Sammlung/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Neue Abstimmung/ }));
     fireEvent.click(screen.getByRole('radio', { name: 'Fotos' }));
     expect(screen.getByRole('switch', { name: 'Wiederholbar' })).not.toBeChecked();
     expect(within(screen.getByRole('group', { name: 'Klasse' })).getAllByRole('radio')).toHaveLength(8);
@@ -627,7 +627,7 @@ describe('Sammlungen person polls', () => {
     fireEvent.change(screen.getByLabelText('Uhrzeit'), { target: { value: '12:00' } });
     expect(screen.queryByLabelText('Antwortoption hinzufügen')).toBeNull();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Ein Foto pro Person' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0].body).toMatchObject({
       kind: 'photo',
@@ -677,9 +677,9 @@ describe('Sammlungen person polls', () => {
     const photo = personPoll({ kind: 'photo', options: [], ongoing: false, closes_at: '2099-06-01T10:00:42.123Z' });
     const { writes } = installApi([photo]);
     renderPortal(`/sammlungen/${photo.id}`, admin);
-    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung bearbeiten' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Abstimmung bearbeiten' }));
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Unser Foto' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0].body).toMatchObject({ name: 'Unser Foto', ongoing: false, closes_at: photo.closes_at });
   });
@@ -728,7 +728,7 @@ describe('Sammlungen person polls', () => {
     addProposalOption('C');
     fireEvent.click(screen.getByRole('button', { name: 'C entfernen' }));
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Abimotto' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
 
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0].body).toMatchObject({
@@ -746,7 +746,7 @@ describe('Sammlungen person polls', () => {
     const selfVote = screen.getByRole('switch', { name: 'Stimme für die eigene Person erlauben' });
     fireEvent.click(selfVote);
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Personenwahl' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0].body).toMatchObject({ kind: 'person', allow_self_vote: true });
   });
@@ -762,8 +762,8 @@ describe('Sammlungen person polls', () => {
       addProposalOption('A');
       addProposalOption('B');
     }
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: `Sammlung ${kind}` } });
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: `Abstimmung ${kind}` } });
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0].body).toMatchObject({ kind, allow_self_vote: false });
   });
@@ -776,7 +776,7 @@ describe('Sammlungen person polls', () => {
     addProposalOption('A');
     fireEvent.change(screen.getByLabelText('Antwortoption hinzufügen'), { target: { value: ' B ' } });
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Abimotto' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
 
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0].body.options).toEqual([{ label: 'A' }, { label: 'B' }]);
@@ -799,7 +799,7 @@ describe('Sammlungen person polls', () => {
     fireEvent.change(search, { target: { value: 'Bob' } });
     fireEvent.click(screen.getByRole('button', { name: 'Bob Beispiel' }));
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Kandidat:innen' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
 
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0].body).toMatchObject({
@@ -874,10 +874,10 @@ describe('Sammlungen person polls', () => {
     const { fetchMock } = installApi([first, second]);
     renderPortal(`/sammlungen/${first.id}`, admin, [], 'schueler');
     await screen.findByRole('heading', { name: first.name });
-    fireEvent.click(screen.getByRole('button', { name: 'Nächste Sammlung' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nächste Abstimmung' }));
     expect(screen.getByRole('heading', { name: second.name })).toBeInTheDocument();
     expect(screen.queryByText(first.description)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Sammlung beenden' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Abstimmung beenden' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Gesamtergebnisse' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Namentliches Stimmprotokoll öffnen' })).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([input]) => /\/(results|audit)$/.test(String(input)))).toBe(false);
@@ -946,14 +946,14 @@ describe('all collections overview', () => {
   it('sends the student view to the dashboard instead of the list', () => {
     installApi();
     renderPortal('/sammlungen', admin, [], 'schueler');
-    expect(screen.queryByRole('heading', { name: 'Sammlungen' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Abstimmungen' })).toBeNull();
     expect(screen.getByRole('link', { name: 'Abimotto-Team' })).toBeInTheDocument();
   });
 
   it('keeps the selected class chip when opening the form and preselects it', async () => {
     installApi();
     renderPortal('/sammlungen?klasse=quote', admin);
-    fireEvent.click(screen.getByRole('button', { name: /Neue Sammlung/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Neue Abstimmung/ }));
     expect(screen.getByRole('radio', { name: 'Zitate' })).toBeChecked();
     expect(screen.queryByRole('navigation', { name: 'Nach Klasse filtern' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }));

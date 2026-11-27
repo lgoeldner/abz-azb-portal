@@ -19,7 +19,7 @@ async function signInAs(page: Page, role: 'Jahrgang' | 'Redaktion' | 'Administra
   await expect(page.getByRole('main').getByRole('heading', { level: 1 })).toBeVisible();
 }
 
-// Students reach single-answer Sammlungen from the sidebar: open ones under "Offen", answered or finished ones under "Erledigt".
+// Students reach single-answer Abstimmungen from the sidebar: open ones under "Offen", answered or finished ones under "Erledigt".
 async function openFirstPoll(page: Page) {
   const aside = page.getByRole('complementary', { name: 'Seitenleiste' });
   const open = aside.getByRole('list', { name: 'Offen' }).getByRole('link');
@@ -53,14 +53,14 @@ test('student signs in, submits a contribution, and can reach a ballot', async (
 
 test('student casts a ballot in the seeded open poll', async ({ page }) => {
   await signInAs(page, 'Jahrgang');
-  await page.goto('/sammlungen/30000000-0000-4000-8000-000000000001'); // seeded open proposal Sammlung
+  await page.goto('/sammlungen/30000000-0000-4000-8000-000000000001'); // seeded open proposal Abstimmung
   const option = page
     .getByRole('main')
     .locator('ul')
     .filter({ has: page.locator('button[aria-pressed]') })
     .locator('button[aria-pressed="false"]:not(:disabled)')
     .first();
-  await expect(option, 'the seeded Sammlung has an eligible option').toBeVisible();
+  await expect(option, 'the seeded Abstimmung has an eligible option').toBeVisible();
   await option.click();
   await page.getByRole('button', { name: /Stimme speichern|Stimme ändern/ }).click();
   await expect(page.getByText('Deine Stimme wurde gespeichert.')).toBeVisible();
@@ -95,11 +95,11 @@ test('editor reads and annotates an original, exports without approval, and sees
   await expect(page.getByRole('button', { name: /^Bearbeiten/ })).toHaveCount(0);
   await expect(page.locator('input[type=file]')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /annehmen|Ablehnen|Prüfung öffnen/ })).toHaveCount(0);
-  await page.getByLabel('Anmerkung').fill('Nach der Sammlung im Team besprechen.');
+  await page.getByLabel('Anmerkung').fill('Nach der Abstimmung im Team besprechen.');
   await page.getByRole('button', { name: 'Anmerkung speichern' }).click();
-  await expect(page.getByText('Nach der Sammlung im Team besprechen.')).toBeVisible();
+  await expect(page.getByText('Nach der Abstimmung im Team besprechen.')).toBeVisible();
   await page.getByRole('complementary', { name: 'Seitenleiste' }).getByRole('link', { name: 'Alle Beiträge' }).click();
-  await page.getByRole('combobox', { name: 'Sammlung' }).last().selectOption('10000000-0000-4000-8000-000000000001'); // export picker, seeded "Ideen"
+  await page.getByRole('combobox', { name: 'Abstimmung' }).last().selectOption('10000000-0000-4000-8000-000000000001'); // export picker, seeded "Ideen"
   await expect(page.getByRole('link', { name: /ZIP herunterladen/ })).toHaveAttribute('href', /status=all/);
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('link', { name: /ZIP herunterladen/ }).click();
@@ -129,23 +129,23 @@ test('admin opens access management and activity log on mobile', async ({ page }
   await expect(page.getByRole('heading', { name: 'Letzte Aktivitäten' })).toBeVisible();
 });
 
-test('old bookmarks under /abstimmungen land on the Sammlungen pages', async ({ page }) => {
+test('old bookmarks under /abstimmungen land on the Abstimmungen pages', async ({ page }) => {
   await signInAs(page, 'Administration');
   await page.goto('/abstimmungen/30000000-0000-4000-8000-000000000001');
   await expect(page).toHaveURL(/\/sammlungen\/30000000-0000-4000-8000-000000000001$/);
   await page.goto('/abstimmungen');
   await expect(page).toHaveURL(/\/sammlungen$/);
-  await expect(page.getByRole('heading', { level: 1, name: 'Sammlungen' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeVisible();
   await expect(page.getByRole('heading', { level: 2, name: 'Wiederholbar' })).toBeVisible();
 });
 
 test('admin dashboard shows one widget per class and links to the filtered list', async ({ page }) => {
   await signInAs(page, 'Administration');
-  const widgets = page.getByRole('region', { name: 'Sammlungen', exact: true });
+  const widgets = page.getByRole('region', { name: 'Abstimmungen', exact: true });
   await expect(widgets.getByRole('listitem')).toHaveCount(7);
-  for (const label of ['Ideen', 'Zitate', 'Erinnerungen', 'Fotos', 'Personenwahl', 'Vorschlagswahl', 'Wortwolke'])
+  for (const label of ['Ideen', 'Zitate', 'Erinnerungen', 'Fotos', 'Personenwahl', 'Auswahl', 'Wortwolke'])
     await expect(widgets.getByRole('link', { name: new RegExp(`^${label}`) })).toBeVisible();
-  await widgets.getByRole('link', { name: /^Vorschlagswahl/ }).click();
+  await widgets.getByRole('link', { name: /^Auswahl/ }).click();
   await expect(page).toHaveURL(/\/sammlungen\?klasse=proposal$/);
-  await expect(page.getByRole('link', { name: 'Vorschlagswahl', exact: true })).toHaveAttribute('aria-current', 'true');
+  await expect(page.getByRole('link', { name: 'Auswahl', exact: true })).toHaveAttribute('aria-current', 'true');
 });

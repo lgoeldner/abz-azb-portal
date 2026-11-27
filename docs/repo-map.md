@@ -192,7 +192,7 @@ page /abstimmungen[/:id], /verwaltung/sammlungen, /verwaltung/rubriken, /admin :
 ## Domain rules
 
 test `deployables/portal/web/e2e/words.spec.ts` :: live word creation/cap, lowercase chips, student privacy, distinct merged counts, chip context menus for rename/exclude/restore, read-only manager CSV and responsive cloud [words, e2e, permissions]
-rule Sammlung = categories row; kind selects contribution or ballot content; independent repeatable permits one or many contributions/ballot entries per person; ongoing means manual close, otherwise required closes_at automatically closes; all kinds support draft/open/closed and hiding preserves data; name <= 100 and description <= 500 characters [sammlung, kind, repeatable, ongoing, deadline, lifecycle]
+rule Sammlung (UI label: Abstimmung; kind proposal is labelled Auswahl) = categories row; kind selects contribution or ballot content; independent repeatable permits one or many contributions/ballot entries per person; ongoing means manual close, otherwise required closes_at automatically closes; all kinds support draft/open/closed and hiding preserves data; name <= 100 and description <= 500 characters [sammlung, kind, repeatable, ongoing, deadline, lifecycle]
 rule Managers create all eight kinds with atomic creator grants, read all submissions and manage/annotate assigned categories; admins manage all categories and assign grants; only authors mutate pending originals and only admins see named ballots [permissions]
 rule Default dev login uses existing users.id UUIDs; legacy OIDC protocol fixtures derive subject=UUIDv5(display_slug) [login, fixtures]
 rule Integration tests: TEST_DATABASE_URL to a disposable DB only; never the dev `portal` DB [test, database]

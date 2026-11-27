@@ -161,7 +161,7 @@ export function Badge({ status, label }: { status: keyof typeof statusLabels; la
     </span>
   );
 }
-// One class (kind) per Sammlung: one icon and one label for all eight, shown wherever the class is named.
+// One class (kind) per Abstimmung: one icon and one label for all eight, shown wherever the class is named.
 export type Kind = Category['kind'];
 export const kindIcon: Record<Kind, LucideIcon> = {
   idea: Lightbulb,
@@ -180,14 +180,14 @@ export const kindLabel: Record<Kind, string> = {
   photo: 'Fotos',
   steckbrief: 'Steckbrief',
   person: 'Personenwahl',
-  proposal: 'Vorschlagswahl',
+  proposal: 'Auswahl',
   words: 'Wortwolke',
 };
 export const submissionKinds: Kind[] = ['idea', 'quote', 'memory', 'photo', 'steckbrief'];
 export const ballotKinds: Kind[] = ['person', 'proposal', 'words'];
 export const isSubmissionCollection = (kind: Kind) => submissionKinds.includes(kind);
 export const isBallot = (kind: Kind) => ballotKinds.includes(kind);
-// Keep these aliases while Sammlungen defaults migrate to the kind-based helpers.
+// Keep these aliases while Abstimmungen defaults migrate to the kind-based helpers.
 export const repeatableKinds = submissionKinds;
 export const singleKinds = ballotKinds;
 export const allKinds: Kind[] = [...submissionKinds, ...ballotKinds];

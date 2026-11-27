@@ -169,7 +169,7 @@ describe('submission collections independent of repeatability', () => {
 
     const title = await screen.findByLabelText('Titel');
     expect(screen.getByRole('heading', { name: `Beitrag für „${selected.name}“` })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Sammlung')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Abstimmung')).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     fireEvent.change(title, { target: { value: 'Unser Ausflug' } });
     fireEvent.submit(title.closest('form')!);
@@ -190,7 +190,7 @@ describe('submission collections independent of repeatability', () => {
     renderPortal(`/beitraege/${submission.id}`, student, 'schueler');
 
     fireEvent.click(await screen.findByRole('button', { name: /Bearbeiten/ }));
-    const select = await screen.findByLabelText('Sammlung');
+    const select = await screen.findByLabelText('Abstimmung');
     expect(Array.from((select as HTMLSelectElement).options).map((option) => option.textContent)).toEqual([
       'Erinnerungen',
       'Ideen',
@@ -206,7 +206,7 @@ describe('submission collections independent of repeatability', () => {
     renderPortal(`/beitraege/${textSubmission.id}`, student, 'schueler');
 
     fireEvent.click(await screen.findByRole('button', { name: /Bearbeiten/ }));
-    const select = await screen.findByLabelText('Sammlung');
+    const select = await screen.findByLabelText('Abstimmung');
     expect(Array.from((select as HTMLSelectElement).options).map((option) => option.textContent)).toEqual([
       'Erinnerungen',
       'Ideen',
@@ -268,7 +268,7 @@ describe('Redaktion contribution reading', () => {
       `/redaktion/beitraege/${submission.id}`,
     );
 
-    fireEvent.change(screen.getAllByLabelText('Sammlung')[0], { target: { value: category.id } });
+    fireEvent.change(screen.getAllByLabelText('Abstimmung')[0], { target: { value: category.id } });
     expect(await screen.findByRole('link', { name: /ZIP herunterladen/ })).toHaveAttribute(
       'href',
       `/api/v1/categories/${category.id}/export?status=all`,
@@ -334,7 +334,7 @@ describe('Redaktion contribution reading', () => {
     expect(screen.queryByPlaceholderText('Optionale Anmerkung zu diesem Beitrag')).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText('Was soll korrigiert werden?')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Bearbeiten/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Zur Sammlung/ })).toHaveAttribute('href', `/sammlungen/${category.id}`);
+    expect(screen.getByRole('link', { name: /Zur Abstimmung/ })).toHaveAttribute('href', `/sammlungen/${category.id}`);
   });
 
   it('keeps the student author edit and withdrawal actions while removing editorial status actions', async () => {

@@ -388,7 +388,7 @@ func TestMigration004TurnsPollsIntoCategoriesKeepingBallots(t *testing.T) {
 		o1, o2, d1, d2         = "60000000-0000-4000-8000-000000000001", "60000000-0000-4000-8000-000000000002", "60000000-0000-4000-8000-000000000003", "60000000-0000-4000-8000-000000000004"
 	)
 	for _, q := range []string{
-		"INSERT INTO categories(id,name,description,kind) VALUES('" + cat + "','Ideen','Ideen-Sammlung','idea')",
+		"INSERT INTO categories(id,name,description,kind) VALUES('" + cat + "','Ideen','Ideen-Abstimmung','idea')",
 		"INSERT INTO users(id,subject,name,role,admitted,cohort_member,category_ids) VALUES('" + mgr + "','m','Mgr','manager',true,true,'{" + cat + "}'),('" + other + "','o','Other','manager',true,true,'{}'),('" + ann + "','a','Ann','student',true,true,'{}'),('" + bob + "','b','Bob','student',true,true,'{}')",
 		"INSERT INTO submissions(id,category_id,author_id,title,idempotency_key,request_hash) VALUES('70000000-0000-4000-8000-000000000001','" + cat + "','" + ann + "','Idee','k-12345678','h')",
 		"INSERT INTO polls(id,category_id,title,description,kind,status,allow_self_vote,version,created_at,opened_at) VALUES('" + poll + "','" + cat + "','Motto','Beschreibung','proposal','open',true,4,now()-interval '10 days',now()-interval '7 days'),('" + draft + "','" + cat + "','Cover','','proposal','draft',false,1,now()-interval '2 days',NULL)",

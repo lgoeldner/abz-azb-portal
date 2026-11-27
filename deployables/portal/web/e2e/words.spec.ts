@@ -38,7 +38,7 @@ test('word portrait chips, private cloud, reversible moderation and CSV at deskt
   const created = page.waitForResponse(
     (response) => response.url().endsWith('/api/v1/categories') && response.request().method() === 'POST',
   );
-  await page.getByRole('button', { name: 'Sammlung speichern', exact: true }).click();
+  await page.getByRole('button', { name: 'Abstimmung speichern', exact: true }).click();
   const poll = await (await created).json();
   expect(poll.max_choices).toBe(2);
   expect(poll.options).toEqual([]);

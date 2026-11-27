@@ -90,7 +90,7 @@ func (a *App) listWords(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if c.Kind != "words" {
-		return bad("Diese Sammlung hat keine Wortabstimmung.")
+		return bad("Diese Abstimmung ist keine Wortwolke.")
 	}
 	items, err := wordEntries(r.Context(), a.DB, c.ID)
 	if err != nil {
@@ -126,7 +126,7 @@ func (a *App) moderateWord(w http.ResponseWriter, r *http.Request) error {
 		return forbidden()
 	}
 	if c.Kind != "words" {
-		return bad("Diese Sammlung hat keine Wortabstimmung.")
+		return bad("Diese Abstimmung ist keine Wortwolke.")
 	}
 	optionID := r.PathValue("optionID")
 	if !validID(optionID) {
@@ -189,7 +189,7 @@ func (a *App) exportWords(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if c.Kind != "words" {
-		return bad("Diese Sammlung hat keine Wortabstimmung.")
+		return bad("Diese Abstimmung ist keine Wortwolke.")
 	}
 	results, err := wordResults(r.Context(), a.DB, c.ID)
 	if err != nil {

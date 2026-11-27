@@ -110,20 +110,20 @@ export function Sammlungen() {
           to={klasse ? `/sammlungen?klasse=${klasse}` : '/sammlungen'}
           replace
         >
-          ← Sammlungen
+          ← Abstimmungen
         </Link>
-        <PageHead title="Neue Sammlung" />
+        <PageHead title="Neue Abstimmung" />
         <SammlungForm initialKind={klasse} onSaved={() => setCreating(false)} />
       </>
     );
   return (
     <>
       <PageHead
-        title="Sammlungen"
+        title="Abstimmungen"
         action={
           editorial(user) && (
             <button className={btn.primary} onClick={() => setCreating(true)}>
-              Neue Sammlung <Plus aria-hidden="true" className="size-4 shrink-0" />
+              Neue Abstimmung <Plus aria-hidden="true" className="size-4 shrink-0" />
             </button>
           )
         }
@@ -154,8 +154,8 @@ export function Sammlungen() {
       ) : shown.length === 0 ? (
         <Empty>
           {klasse
-            ? 'In dieser Klasse gibt es noch keine Sammlungen.'
-            : 'Hier geht’s bald los. Aktuell gibt es keine Sammlungen.'}
+            ? 'In dieser Klasse gibt es noch keine Abstimmungen.'
+            : 'Hier geht’s bald los. Aktuell gibt es keine Abstimmungen.'}
         </Empty>
       ) : (
         <div className="space-y-10">
@@ -215,7 +215,7 @@ function CollectionBadge({ collection: c }: { collection: Category }) {
 
 function Cards({ items }: { items: Category[] }) {
   return (
-    <ul className="collection-ledger divide-y divide-line rounded-ui bg-white" aria-label="Sammlungen">
+    <ul className="collection-ledger divide-y divide-line rounded-ui bg-white" aria-label="Abstimmungen">
       {items.map((c) => (
         <li key={c.id}>
           <Link
@@ -240,7 +240,7 @@ function Cards({ items }: { items: Category[] }) {
 }
 
 // ---------- create / edit ----------
-// Editors pick any class; an existing Sammlung may change class within its group.
+// Editors pick any class; an existing Abstimmung may change class within its group.
 function localDeadline(value?: string | null) {
   if (!value) return '';
   const end = new Date(value);
@@ -333,7 +333,7 @@ export function SammlungForm({
         throw new Error('Bitte mindestens zwei Kandidat:innen auswählen.');
       if (!definitionLocked && single && (!Number.isInteger(maxChoices) || maxChoices < 1 || maxChoices > 500))
         throw new Error('Die Zahl der auswählbaren Optionen muss zwischen 1 und 500 liegen.');
-      // A retry after a failed follow-up step must update the Sammlung saved by the first attempt, not create another.
+      // A retry after a failed follow-up step must update the Abstimmung saved by the first attempt, not create another.
       const target = current.current;
       const deadlineChanged = !ongoing && closesAt !== localDeadline(target?.closes_at);
       if (!ongoing && (!target || deadlineChanged) && (!closesAt || new Date(closesAt).getTime() <= Date.now()))
@@ -382,12 +382,14 @@ export function SammlungForm({
         }
       }
       onSaved();
-    }, 'Sammlung gespeichert.');
+    }, 'Abstimmung gespeichert.');
   }
   return (
     <form className={`${panel} mb-10 space-y-5`} onSubmit={save}>
       {sammlung && (
-        <h2 className={heading}>{definitionLocked && ongoing ? 'Berechtigungen bearbeiten' : 'Sammlung bearbeiten'}</h2>
+        <h2 className={heading}>
+          {definitionLocked && ongoing ? 'Berechtigungen bearbeiten' : 'Abstimmung bearbeiten'}
+        </h2>
       )}
       {definitionLocked ? (
         <p className="text-sm text-muted">
@@ -634,8 +636,8 @@ export function SammlungForm({
         <fieldset className="min-w-0 space-y-3" disabled={action.busy}>
           <legend className={label}>Wer darf bearbeiten</legend>
           <p className="text-sm text-muted">
-            Die Administration darf alle Sammlungen bearbeiten. Redaktionsmitglieder bearbeiten eigene und zugewiesene
-            Sammlungen und lesen alle Beiträge.
+            Die Administration darf alle Abstimmungen bearbeiten. Redaktionsmitglieder bearbeiten eigene und zugewiesene
+            Abstimmungen und lesen alle Beiträge.
           </p>
           {users.isPending ? (
             <Loading />
@@ -658,7 +660,7 @@ export function SammlungForm({
           Abbrechen
         </button>
         <button className={btn.primary} disabled={action.busy}>
-          {definitionLocked && ongoing ? 'Berechtigungen speichern' : 'Sammlung speichern'}
+          {definitionLocked && ongoing ? 'Berechtigungen speichern' : 'Abstimmung speichern'}
         </button>
       </div>
     </form>
@@ -687,7 +689,7 @@ function BackLink() {
       className="mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink"
       to={view === 'redaktion' ? '/sammlungen' : '/'}
     >
-      ← {view === 'redaktion' ? 'Sammlungen' : 'Übersicht'}
+      ← {view === 'redaktion' ? 'Abstimmungen' : 'Übersicht'}
     </Link>
   );
 }
@@ -718,7 +720,7 @@ function CollectionReader({ sammlung }: { sammlung: Category }) {
   const setStatus = (status: Category['status']) =>
     action.run(
       () => api(`/categories/${sammlung.id}/status`, json('POST', { version: sammlung.version, status })),
-      'Sammlungsstatus gespeichert.',
+      'Abstimmungsstatus gespeichert.',
     );
   const submissions = useData<Submission[]>(`/submissions?category_id=${sammlung.id}`);
   const items = (submissions.data ?? []).filter((s) =>
@@ -740,24 +742,24 @@ function CollectionReader({ sammlung }: { sammlung: Category }) {
               <>
                 {sammlung.status === 'draft' && (
                   <button className={btn.primary} disabled={action.busy} onClick={() => setStatus('open')}>
-                    Sammlung öffnen
+                    Abstimmung öffnen
                   </button>
                 )}
                 {sammlung.status === 'open' && (
                   <button className={btn.secondary} disabled={action.busy} onClick={() => setStatus('closed')}>
-                    Sammlung schließen
+                    Abstimmung schließen
                   </button>
                 )}
                 {sammlung.status !== 'draft' && (
                   <button className={btn.secondary} disabled={action.busy} onClick={() => setStatus('draft')}>
-                    Sammlung verbergen
+                    Abstimmung verbergen
                   </button>
                 )}
               </>
             )}
             {canEdit(user, sammlung.id) && (
               <button className={btn.secondary} onClick={() => setEditing(!editing)}>
-                {editing ? 'Formular schließen' : 'Sammlung bearbeiten'}
+                {editing ? 'Formular schließen' : 'Abstimmung bearbeiten'}
               </button>
             )}
             <a className={btn.secondary} href={`/api/v1/categories/${sammlung.id}/export?status=all`}>
@@ -768,7 +770,7 @@ function CollectionReader({ sammlung }: { sammlung: Category }) {
       >
         <ClassLine sammlung={sammlung} />
       </PageHead>
-      <DevDebug label="Sammlung" data={debugData(sammlung)} />
+      <DevDebug label="Abstimmung" data={debugData(sammlung)} />
       {action.feedback}
       {editing && canEdit(user, sammlung.id) && (
         <SammlungForm key={sammlung.id} sammlung={sammlung} onSaved={() => setEditing(false)} />
@@ -860,7 +862,7 @@ function StudentCollection({ sammlung }: { sammlung: Category }) {
       <PageHead title={sammlung.name}>
         <ClassLine sammlung={sammlung} />
       </PageHead>
-      <DevDebug label="Sammlung" data={debugData(sammlung)} />
+      <DevDebug label="Abstimmung" data={debugData(sammlung)} />
       <div>
         <section className={`${photoCollection ? '' : panel} min-w-0 space-y-5`}>
           <h2 className={heading}>
@@ -895,7 +897,7 @@ function StudentCollection({ sammlung }: { sammlung: Category }) {
               </Link>
             )}
           {sammlung.status === 'closed' && (
-            <p className={notice}>Diese Sammlung ist beendet. Deine bisherigen Beiträge bleiben hier sichtbar.</p>
+            <p className={notice}>Diese Abstimmung ist beendet. Deine bisherigen Beiträge bleiben hier sichtbar.</p>
           )}
           <h3 className="pt-2 text-sm font-bold">{photoCollection ? 'Deine Fotos' : 'Deine Beiträge hier'}</h3>
           {submissions.isPending ? (
@@ -1050,14 +1052,14 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
   const deletePoll = () => {
     if (
       !window.confirm(
-        'Diese Sammlung sowie alle Stimmen und das Stimmprotokoll werden gelöscht. Möchtest du fortfahren?',
+        'Diese Abstimmung sowie alle Stimmen und das Stimmprotokoll werden gelöscht. Möchtest du fortfahren?',
       )
     )
       return;
     action.run(async () => {
       await api<void>(`/categories/${id}`, json('DELETE', { version: poll.version }));
       navigate('/sammlungen');
-    }, 'Sammlung gelöscht.');
+    }, 'Abstimmung gelöscht.');
   };
   return (
     <>
@@ -1070,7 +1072,7 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
       >
         {!redaktion && poll.status === 'open' ? 'Deine Stimme entscheidet mit.' : <ClassLine sammlung={poll} />}
       </PageHead>
-      <DevDebug label="Sammlung" data={debugData(poll)} />
+      <DevDebug label="Abstimmung" data={debugData(poll)} />
       {action.feedback}
       {editing && writable ? (
         <SammlungForm sammlung={poll} onSaved={() => setEditing(false)} />
@@ -1144,10 +1146,10 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
                       ? 'Wen wählst du?'
                       : 'Welche Option wählst du?'
                     : poll.status === 'closed'
-                      ? 'Diese Sammlung ist beendet.'
+                      ? 'Diese Abstimmung ist beendet.'
                       : poll.opened_at
-                        ? 'Diese Sammlung ist verborgen.'
-                        : 'Diese Sammlung ist ein Entwurf.'}
+                        ? 'Diese Abstimmung ist verborgen.'
+                        : 'Diese Abstimmung ist ein Entwurf.'}
               </h2>
               {redaktion ? (
                 <ul className="divide-y divide-line" aria-label="Auswahlmöglichkeiten">
@@ -1167,7 +1169,7 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
             <aside className="min-w-0 space-y-6">
               {writable && (
                 <section className={panel}>
-                  <h3 className={heading}>Sammlung verwalten</h3>
+                  <h3 className={heading}>Abstimmung verwalten</h3>
                   <div className="mt-4 flex flex-col gap-3">
                     {poll.status === 'draft' && (
                       <>
@@ -1179,9 +1181,9 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
                         <button
                           className={btn.primary}
                           disabled={action.busy}
-                          onClick={() => setStatus('open', 'Sammlung geöffnet.')}
+                          onClick={() => setStatus('open', 'Abstimmung geöffnet.')}
                         >
-                          Sammlung öffnen
+                          Abstimmung öffnen
                         </button>
                         <p className="text-sm text-muted">
                           Die Definition kann nach dem Öffnen nicht mehr geändert werden.
@@ -1197,23 +1199,23 @@ function Ballot({ sammlung: poll, categories }: { sammlung: Category; categories
                       <button
                         className={btn.secondary}
                         disabled={action.busy}
-                        onClick={() => setStatus('closed', 'Sammlung beendet.')}
+                        onClick={() => setStatus('closed', 'Abstimmung beendet.')}
                       >
-                        Sammlung beenden
+                        Abstimmung beenden
                       </button>
                     )}
                     {poll.status !== 'draft' && (
                       <button
                         className={btn.secondary}
                         disabled={action.busy}
-                        onClick={() => setStatus('draft', 'Sammlung verborgen.')}
+                        onClick={() => setStatus('draft', 'Abstimmung verborgen.')}
                       >
-                        Sammlung verbergen
+                        Abstimmung verbergen
                       </button>
                     )}
                     {user.role === 'admin' && (
                       <button className={btn.danger} disabled={action.busy} onClick={deletePoll}>
-                        Sammlung endgültig löschen
+                        Abstimmung endgültig löschen
                       </button>
                     )}
                   </div>

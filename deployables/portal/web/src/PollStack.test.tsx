@@ -78,32 +78,32 @@ describe('PollStack', () => {
     expect(screen.getByRole('button', { name: /Stimme speichern/ })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Zusammen' }));
     expect(screen.getByRole('button', { name: /Stimme speichern/ })).toBeEnabled();
-    expect(screen.getByText('Sammlung 1 von 3: Abimotto-Abstimmung')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Nächste Sammlung' }));
+    expect(screen.getByText('Abstimmung 1 von 3: Abimotto-Abstimmung')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Nächste Abstimmung' }));
     expect(screen.getByRole('link', { name: /Beitragen/ })).toHaveAttribute('href', '/beitraege/neu?kategorie=ideen');
-    expect(screen.getByText('Sammlung 2 von 3: Ideensammlung')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Nächste Sammlung' }));
+    expect(screen.getByText('Abstimmung 2 von 3: Ideensammlung')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Nächste Abstimmung' }));
     expect(screen.getByRole('heading', { name: 'Fotowünsche' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Beitragen/ })).toHaveAttribute('href', '/beitraege/neu?kategorie=photo');
     expect(screen.queryByRole('button', { name: /Stimme speichern/ })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Nächste Sammlung' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Vorherige Sammlung' }));
+    expect(screen.getByRole('button', { name: 'Nächste Abstimmung' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Vorherige Abstimmung' }));
     expect(screen.getByRole('heading', { name: 'Ideensammlung' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Vorherige Sammlung' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Vorherige Abstimmung' }));
     expect(screen.getByRole('button', { name: 'Zusammen' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('handles empty and one-item lists with bounded controls', () => {
     const { rerender } = renderStack([]);
-    expect(screen.getByText('Keine Sammlungen verfügbar')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Vorherige Sammlung' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Nächste Sammlung' })).toBeDisabled();
+    expect(screen.getByText('Keine Abstimmungen verfügbar')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Vorherige Abstimmung' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Nächste Abstimmung' })).toBeDisabled();
     expect(screen.queryByRole('link', { name: /Zur Übersicht/ })).toBeNull();
 
     rerender(<PollStack items={[category()]} />);
     expect(screen.getByText('1 / 1')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Vorherige Sammlung' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Nächste Sammlung' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Vorherige Abstimmung' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Nächste Abstimmung' })).toBeDisabled();
   });
 
   it('chooses a valid neighboring item when the active item is removed', () => {
@@ -111,10 +111,10 @@ describe('PollStack', () => {
     const middle = category({ id: 'middle', name: 'Mittlere' });
     const last = category({ id: 'last', name: 'Letzte' });
     const { rerender } = renderStack([first, middle, last]);
-    fireEvent.click(screen.getByRole('button', { name: 'Nächste Sammlung' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nächste Abstimmung' }));
     rerender(<PollStack items={[first, last]} />);
     expect(screen.getByRole('heading', { name: 'Letzte' })).toBeInTheDocument();
-    expect(screen.getByText('Sammlung 2 von 2: Letzte')).toBeInTheDocument();
+    expect(screen.getByText('Abstimmung 2 von 2: Letzte')).toBeInTheDocument();
   });
 
   it('preserves the active item when the list is reordered', () => {
@@ -122,10 +122,10 @@ describe('PollStack', () => {
     const second = category({ id: 'second', name: 'Zweite' });
     const third = category({ id: 'third', name: 'Dritte' });
     const { rerender } = renderStack([first, second, third]);
-    fireEvent.click(screen.getByRole('button', { name: 'Nächste Sammlung' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nächste Abstimmung' }));
     rerender(<PollStack items={[third, first, second]} />);
     expect(screen.getByRole('heading', { name: 'Zweite' })).toBeInTheDocument();
-    expect(screen.getByText('Sammlung 3 von 3: Zweite')).toBeInTheDocument();
+    expect(screen.getByText('Abstimmung 3 von 3: Zweite')).toBeInTheDocument();
   });
   it('submits directly on the card and advances only after the vote succeeds', async () => {
     let resolveVote!: (response: Response) => void;
@@ -149,8 +149,8 @@ describe('PollStack', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Zusammen' }));
     fireEvent.click(screen.getByRole('button', { name: /Stimme speichern/ }));
     expect(screen.getByRole('heading', { name: 'Abimotto' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Nächste Sammlung' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Nächste Sammlung' }));
+    expect(screen.getByRole('button', { name: 'Nächste Abstimmung' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Nächste Abstimmung' }));
     expect(screen.getByRole('heading', { name: 'Abimotto' })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/categories/poll-1/ballot',
@@ -159,7 +159,7 @@ describe('PollStack', () => {
     resolveVote(Response.json({ option_ids: ['option-1'], option_id: 'option-1' }));
     await waitFor(() => expect(invalidate).toHaveBeenCalled());
     expect(screen.getByRole('heading', { name: 'Abimotto' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Nächste Sammlung' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Nächste Abstimmung' })).toBeDisabled();
     rerender(<PollStack items={[next]} />);
     expect(screen.getByRole('heading', { name: 'Nächste Frage' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Zusammen' })).toBeDisabled();
@@ -194,8 +194,8 @@ describe('PollStack', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Stimme speichern' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Bitte erneut versuchen.');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Nächste Sammlung' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Vorherige Sammlung' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nächste Abstimmung' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Vorherige Abstimmung' }));
     expect(screen.getByRole('button', { name: 'Zusammen' })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'Stimme speichern' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));

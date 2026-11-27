@@ -174,7 +174,7 @@ describe('student contributions and ballot history', () => {
     expect(rows[2]).toHaveTextContent('Geschichte s9');
     expect(rows[5]).toHaveTextContent('Unser Jahrgang in drei Worten');
     expect(rows.every((row) => !row.textContent?.includes('Geschichte someone-else'))).toBe(true);
-    expect(screen.queryByText('Erledigte Sammlungen')).toBeNull();
+    expect(screen.queryByText('Erledigte Abstimmungen')).toBeNull();
 
     fireEvent.click(within(own).getByRole('link', { name: /Alle ansehen/ }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Meine Beiträge' })).toBeInTheDocument();
@@ -185,7 +185,7 @@ describe('student contributions and ballot history', () => {
     expect(within(allRows).getAllByText('Unser Jahrgang in drei Worten')).toHaveLength(2);
     expect(within(allRows).getAllByText('Wortwolke')).toHaveLength(2);
     expect(within(allRows).getByText('Personenwahl')).toBeInTheDocument();
-    expect(within(allRows).getByText('Vorschlagswahl')).toBeInTheDocument();
+    expect(within(allRows).getByText('Auswahl')).toBeInTheDocument();
     expect(within(allRows).queryByText('Geschichte someone-else')).toBeNull();
     expect(within(allRows).getAllByText('Abgestimmt')).toHaveLength(4);
     expect(within(allRows).getByText('Vorschläge fürs Motto').closest('a')).toBeNull();
@@ -206,14 +206,14 @@ describe('student contributions and ballot history', () => {
     expect(within(list).getAllByText('Wortwolke')).toHaveLength(2);
     expect(within(list).queryByText('Geschichte s9')).toBeNull();
 
-    fireEvent.change(screen.getByPlaceholderText('Beitrag oder Sammlung finden …'), {
+    fireEvent.change(screen.getByPlaceholderText('Beitrag oder Abstimmung finden …'), {
       target: { value: 'Unser Jahrgang in drei Worten' },
     });
     expect(within(list).getAllByRole('listitem')).toHaveLength(2);
     expect(within(list).getAllByText('Unser Jahrgang in drei Worten')).toHaveLength(2);
 
     fireEvent.change(status, { target: { value: '' } });
-    fireEvent.change(screen.getByPlaceholderText('Beitrag oder Sammlung finden …'), {
+    fireEvent.change(screen.getByPlaceholderText('Beitrag oder Abstimmung finden …'), {
       target: { value: 'Bühne' },
     });
     expect(within(list).getAllByRole('listitem')).toHaveLength(1);

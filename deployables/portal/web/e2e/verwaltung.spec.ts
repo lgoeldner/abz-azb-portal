@@ -53,8 +53,8 @@ test('collection administration redirects to the shared workspace and adds admin
   await expect(page).toHaveURL(/\/sammlungen$/);
   const aside = page.getByRole('complementary');
   await expect(aside.locator('a[href="/verwaltung/sammlungen"]')).toHaveCount(0);
-  await expect(aside.getByRole('link', { name: 'Alle Sammlungen' })).toBeVisible();
-  await page.getByRole('button', { name: 'Neue Sammlung' }).click();
+  await expect(aside.getByRole('link', { name: 'Alle Abstimmungen' })).toBeVisible();
+  await page.getByRole('button', { name: 'Neue Abstimmung' }).click();
   await expect(page.getByRole('group', { name: 'Wer darf bearbeiten' })).toBeVisible();
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
@@ -90,7 +90,7 @@ test('Redaktion creates every collection kind in the shared form without admin r
     'Fotos',
     'Steckbrief',
     'Personenwahl',
-    'Vorschlagswahl',
+    'Auswahl',
     'Wortwolke',
   ]);
   const repeatable = page.getByRole('switch', { name: 'Wiederholbar', exact: true });
@@ -102,8 +102,8 @@ test('Redaktion creates every collection kind in the shared form without admin r
   await page.getByRole('button', { name: '1w' }).click();
   await expect(page.getByRole('group', { name: 'Wer darf bearbeiten' })).toHaveCount(0);
   await page.getByLabel('Name', { exact: true }).fill('Ein Foto pro Person');
-  await page.getByRole('button', { name: 'Sammlung speichern' }).click();
-  await expect(page.getByText('Sammlung gespeichert.')).toBeVisible();
+  await page.getByRole('button', { name: 'Abstimmung speichern' }).click();
+  await expect(page.getByText('Abstimmung gespeichert.')).toBeVisible();
   expect(writes).toHaveLength(1);
   expect(writes[0]).toMatchObject({ kind: 'photo', repeatable: false, ongoing: false, options: [] });
   expect(new Date(String(writes[0].closes_at)).getTime()).toBeGreaterThan(Date.now());
@@ -125,7 +125,7 @@ test('Verwaltung follows the selected workspace and keeps its editorial accent o
 
   for (const [path, heading] of [
     ['/verwaltung/personen', 'Personen'],
-    ['/verwaltung/sammlungen', 'Sammlungen'],
+    ['/verwaltung/sammlungen', 'Abstimmungen'],
     ['/verwaltung/protokoll', 'Aktivitätsprotokoll'],
   ]) {
     await page.goto(path);

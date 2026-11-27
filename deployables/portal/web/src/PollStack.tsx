@@ -35,16 +35,16 @@ export function PollStack({ items: available, initialId }: { items: Category[]; 
   }
 
   return (
-    <section className="poll-stack" aria-label="Sammlungen, die auf dich warten">
+    <section className="poll-stack" aria-label="Abstimmungen, die auf dich warten">
       <div className="poll-stack__controls">
         <span className="poll-stack__count" aria-hidden="true">
           {items.length ? `${index + 1} / ${items.length}` : '0 / 0'}
         </span>
-        <nav className="poll-stack__arrows" aria-label="Sammlungen durchblättern">
+        <nav className="poll-stack__arrows" aria-label="Abstimmungen durchblättern">
           <button
             type="button"
             className="poll-stack__arrow"
-            aria-label="Vorherige Sammlung"
+            aria-label="Vorherige Abstimmung"
             disabled={saving || !item || index === 0}
             onClick={() => move('previous')}
           >
@@ -53,7 +53,7 @@ export function PollStack({ items: available, initialId }: { items: Category[]; 
           <button
             type="button"
             className="poll-stack__arrow"
-            aria-label="Nächste Sammlung"
+            aria-label="Nächste Abstimmung"
             disabled={saving || !item || index === items.length - 1}
             onClick={() => move('next')}
           >
@@ -80,7 +80,7 @@ export function PollStack({ items: available, initialId }: { items: Category[]; 
             {isSubmissionCollection(item.kind) ? (
               <div className="poll-stack__bottomline">
                 <span className="poll-stack__meta">
-                  {item.status === 'open' ? 'Noch nichts eingereicht' : 'Diese Sammlung ist beendet'}
+                  {item.status === 'open' ? 'Noch nichts eingereicht' : 'Diese Abstimmung ist beendet'}
                 </span>
                 {item.status === 'open' && (
                   <Link className={btn.primary} to={`/beitraege/neu?kategorie=${item.id}`}>
@@ -122,7 +122,7 @@ export function PollStack({ items: available, initialId }: { items: Category[]; 
         )}
       </div>
       <p className="sr-only" aria-live="polite" aria-atomic="true">
-        {item ? `Sammlung ${index + 1} von ${items.length}: ${item.name}` : 'Keine Sammlungen verfügbar'}
+        {item ? `Abstimmung ${index + 1} von ${items.length}: ${item.name}` : 'Keine Abstimmungen verfügbar'}
       </p>
     </section>
   );

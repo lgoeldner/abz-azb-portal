@@ -356,7 +356,7 @@ function Login() {
         <div className="w-full max-w-md rounded-ui bg-white p-6 sm:p-8">
           <h2 className="text-3xl font-extrabold tracking-tight">Schön, dass du da bist.</h2>
           <p className="mt-3 text-[15px] text-muted">
-            Melde dich an, um Erinnerungen einzureichen und bei unseren Sammlungen mitzumachen.
+            Melde dich an, um Erinnerungen einzureichen und bei unseren Abstimmungen mitzumachen.
           </p>
           <a className={`${btn.primary} mt-6 w-full`} href="/auth/login">
             Anmelden <Arrow />
@@ -720,7 +720,7 @@ function StudentNav() {
         {categories.isPending ? (
           <p className={quiet}>Einen Moment …</p>
         ) : categories.error ? (
-          <p className={quiet}>Sammlungen nicht erreichbar.</p>
+          <p className={quiet}>Abstimmungen nicht erreichbar.</p>
         ) : todo.length === 0 ? (
           <p className={quiet}>Gerade ist nichts offen.</p>
         ) : (
@@ -806,7 +806,7 @@ function EditorNav() {
     ['draft', 'Entwürfe', 'nav-sammlung-entwuerfe'],
     ['closed', 'Beendet', 'nav-sammlung-beendet'],
   ];
-  // Sidebar lists only assigned categories; "Alle Sammlungen"/"Alle Beiträge" stay the way to the rest.
+  // Sidebar lists only assigned categories; "Alle Abstimmungen"/"Alle Beiträge" stay the way to the rest.
   const writable = (categories.data ?? []).filter((c) => canEdit(user, c.id));
   const ballots = writable.filter((c) => isBallot(c.kind));
   return (
@@ -821,11 +821,11 @@ function EditorNav() {
           </NavItem>
         </>
       )}
-      <NavGroup id="nav-sammlungen" label="Sammlungen">
+      <NavGroup id="nav-sammlungen" label="Abstimmungen">
         {categories.isPending ? (
           <p className={quiet}>Einen Moment …</p>
         ) : categories.error ? (
-          <p className={quiet}>Sammlungen nicht erreichbar.</p>
+          <p className={quiet}>Abstimmungen nicht erreichbar.</p>
         ) : ballots.length === 0 ? (
           <p className={quiet}>Keine Wahl zugewiesen.</p>
         ) : (
@@ -853,10 +853,10 @@ function EditorNav() {
           })
         )}
         <NavItem to="/sammlungen?neu" icon={Plus}>
-          Neue Sammlung
+          Neue Abstimmung
         </NavItem>
         <NavItem to="/sammlungen" icon={Library}>
-          Alle Sammlungen
+          Alle Abstimmungen
         </NavItem>
       </NavGroup>
       <NavGroup id="nav-editor-beitraege" label="Beiträge">
@@ -936,7 +936,7 @@ function StudentHome() {
     categories.data && submissions.data
       ? waiting.length === 0
         ? `Hey ${first}. Gerade ist alles erledigt.`
-        : `Hey ${first}. ${waiting.length === 1 ? '1 Sammlung wartet' : `${waiting.length} Sammlungen warten`}.`
+        : `Hey ${first}. ${waiting.length === 1 ? '1 Abstimmung wartet' : `${waiting.length} Abstimmungen warten`}.`
       : `Hey ${first}.`;
   return (
     <>
@@ -975,7 +975,7 @@ function StudentHome() {
           ) : categories.error ? (
             <Failure error={categories.error} retry={() => categories.refetch()} />
           ) : repeatableContributions.length === 0 ? (
-            <Empty>Gerade gibt es keine offenen wiederholbaren Sammlungen.</Empty>
+            <Empty>Gerade gibt es keine offenen wiederholbaren Abstimmungen.</Empty>
           ) : (
             <ul className="grid gap-4 sm:grid-cols-2">
               {repeatableContributions.map((collection) => {
@@ -1006,7 +1006,7 @@ function StudentHome() {
                               : `${ownCount} eigene ${ownCount === 1 ? 'Einreichung' : 'Einreichungen'}`}
                         </span>
                         <span className="inline-flex items-center gap-1 font-bold">
-                          Sammlung öffnen <Arrow />
+                          Abstimmung öffnen <Arrow />
                         </span>
                       </span>
                     </Link>
@@ -1076,7 +1076,7 @@ function StudentHome() {
           ) : own.length || ownBallots.length ? (
             <SubmissionList items={own} categories={categories.data ?? []} ballots={ownBallots} limit={10} />
           ) : (
-            <Empty>Die erste Geschichte wartet auf dich. Such dir oben eine Sammlung aus.</Empty>
+            <Empty>Die erste Geschichte wartet auf dich. Such dir oben eine Abstimmung aus.</Empty>
           )}
         </div>
       </section>
@@ -1147,10 +1147,10 @@ function EditorialHome() {
     <>
       <PageHead title="Redaktion">
         {isAdmin
-          ? 'Zugänge und Sammlungen im Überblick.'
+          ? 'Zugänge und Abstimmungen im Überblick.'
           : projects
             ? undefined
-            : 'Überblick über Rubriken und Beiträge aus den Sammlungen, die dir zugewiesen sind.'}
+            : 'Überblick über Rubriken und Beiträge aus den Abstimmungen, die dir zugewiesen sind.'}
       </PageHead>
       {projects && (
         <>
@@ -1166,7 +1166,7 @@ function EditorialHome() {
         <section aria-labelledby="home-sammlungen" className="mb-10">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <h2 id="home-sammlungen" className={heading}>
-              Sammlungen
+              Abstimmungen
             </h2>
           </div>
           {(isAdmin ? state(categories) : managerCategoriesState) ?? (
@@ -1188,7 +1188,9 @@ function EditorialHome() {
                       </span>
                       <span className="mt-5 flex items-baseline gap-2">
                         <strong className={figure}>{categories.isPending ? '–' : mine.length}</strong>{' '}
-                        <span className="text-[13px] text-muted">{mine.length === 1 ? 'Sammlung' : 'Sammlungen'}</span>
+                        <span className="text-[13px] text-muted">
+                          {mine.length === 1 ? 'Abstimmung' : 'Abstimmungen'}
+                        </span>
                       </span>
                       {submissionsKind ? (
                         <span className="mt-4 text-[13px] text-muted">
@@ -1302,7 +1304,7 @@ function EditorialHome() {
                   ? '–'
                   : writableSubmissions.length}
               </strong>
-              <span className="mt-1.5 block text-[13px] text-muted">In deinen zugewiesenen Sammlungen</span>
+              <span className="mt-1.5 block text-[13px] text-muted">In deinen zugewiesenen Abstimmungen</span>
             </p>
             {categories.isPending || submissions.isPending ? (
               <div className="mt-4">
@@ -1320,7 +1322,7 @@ function EditorialHome() {
               </div>
             ) : recentSubmissions.length === 0 ? (
               <div className="mt-4">
-                <Empty>In deinen zugewiesenen Sammlungen gibt es noch keine Beiträge.</Empty>
+                <Empty>In deinen zugewiesenen Abstimmungen gibt es noch keine Beiträge.</Empty>
               </div>
             ) : (
               <ul className="mt-3 divide-y divide-line">
@@ -1349,7 +1351,7 @@ function EditorialHome() {
           <div className="flex items-baseline justify-between gap-4">
             <h2 id="home-neueste" className={`${heading} flex items-center gap-2`}>
               <Vote aria-hidden="true" className="size-[18px] shrink-0" />
-              {isAdmin ? 'Neueste Sammlungen' : 'Deine Sammlungen'}
+              {isAdmin ? 'Neueste Abstimmungen' : 'Deine Abstimmungen'}
             </h2>
             <Link to="/sammlungen" className={btn.text}>
               Alle <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
@@ -1359,11 +1361,11 @@ function EditorialHome() {
             (latest.length === 0 ? (
               <div className="mt-4">
                 {isAdmin ? (
-                  <Empty>Noch keine Sammlung.</Empty>
+                  <Empty>Noch keine Abstimmung.</Empty>
                 ) : (
                   <Empty>
-                    Dir sind noch keine Wahl-Sammlungen zugewiesen.{' '}
-                    <Link to="/sammlungen?neu">Neue Sammlung anlegen →</Link>
+                    Dir sind noch keine Abstimmungen zugewiesen.{' '}
+                    <Link to="/sammlungen?neu">Neue Abstimmung anlegen →</Link>
                   </Empty>
                 )}
               </div>
@@ -1436,7 +1438,7 @@ function EditorialHome() {
                         )}
                       </Link>
                       <DevDebug
-                        label="Sammlung"
+                        label="Abstimmung"
                         data={{
                           id: c.id,
                           status: c.status,

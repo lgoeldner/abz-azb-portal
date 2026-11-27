@@ -193,7 +193,7 @@ describe('photo contributions', () => {
       </Routes>,
     );
     const input = await screen.findByLabelText(/Mindestens ein Foto/);
-    expect(screen.queryByLabelText('Sammlung')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Abstimmung')).not.toBeInTheDocument();
     fireEvent.change(input, { target: { files: [firstFile, secondFile] } });
     // Caption fields stay hidden until asked for, one per picked photo.
     expect(screen.queryByLabelText('Bildtext optional')).toBeNull();
@@ -497,7 +497,7 @@ describe('photo contributions', () => {
       </Routes>,
     );
     fireEvent.click(await screen.findByRole('button', { name: /Bearbeiten/ }));
-    const options = within(screen.getByLabelText('Sammlung'))
+    const options = within(screen.getByLabelText('Abstimmung'))
       .getAllByRole('option')
       .map((option) => option.textContent);
     expect(options).toEqual(['Erinnerungen', 'Jahrgangsmomente']);

@@ -18,7 +18,7 @@ const klassen = (group: HTMLElement) =>
   within(group)
     .getAllByRole('radio')
     .map((radio) => radio.closest('label')!.textContent);
-// A complete Sammlung as the API returns it; extra properties can override defaults independently by kind.
+// A complete Abstimmung as the API returns it; extra properties can override defaults independently by kind.
 const sammlung = (id: string, name: string, kind: string, extra: Record<string, unknown> = {}) => ({
   id,
   name,
@@ -113,7 +113,7 @@ describe('contribution submission', () => {
     );
 
     expect(
-      await screen.findByText('Neue Beiträge können nur in offenen Sammlungen eingereicht werden.'),
+      await screen.findByText('Neue Beiträge können nur in offenen Abstimmungen eingereicht werden.'),
     ).toBeInTheDocument();
     expect(screen.queryByPlaceholderText('Gib deinem Beitrag einen Namen')).toBeNull();
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
@@ -341,7 +341,7 @@ describe('verwaltung', () => {
   it.each(['personen', 'sammlungen', 'protokoll'])('keeps non-admins away from /verwaltung/%s', async (page) => {
     mount(`/verwaltung/${page}`, editor);
     expect(await screen.findByRole('heading', { level: 1, name: 'Redaktion' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { level: 1, name: /Personen|Sammlungen|Aktivitätsprotokoll/ })).toBeNull();
+    expect(screen.queryByRole('heading', { level: 1, name: /Personen|Abstimmungen|Aktivitätsprotokoll/ })).toBeNull();
   });
 
   it.each(['personen', 'sammlungen', 'protokoll'])('opens /verwaltung/%s in the editorial workspace', async (page) => {
@@ -361,7 +361,7 @@ describe('verwaltung', () => {
     mount('/');
     const toggle = await screen.findByRole('button', { name: 'Verwaltung' });
     expect(document.querySelector('aside a[href="/verwaltung/sammlungen"]')).toBeNull();
-    expect(within(screen.getByRole('complementary')).getByRole('link', { name: 'Alle Sammlungen' })).toHaveAttribute(
+    expect(within(screen.getByRole('complementary')).getByRole('link', { name: 'Alle Abstimmungen' })).toHaveAttribute(
       'href',
       '/sammlungen',
     );
@@ -516,12 +516,12 @@ describe('verwaltung', () => {
 
   it('keeps the old /verwaltung/rubriken bookmark working', async () => {
     mount('/verwaltung/' + 'rubriken');
-    expect(await screen.findByRole('heading', { level: 1, name: 'Sammlungen' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeInTheDocument();
   });
 
-  it('lets an admin assign a single-answer Sammlung to a manager and saves it as a draft definition', async () => {
+  it('lets an admin assign a single-answer Abstimmung to a manager and saves it as a draft definition', async () => {
     const calls = mount('/sammlungen');
-    fireEvent.click(await screen.findByRole('button', { name: /Neue Sammlung/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Neue Abstimmung/ }));
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Motto' } });
     fireEvent.click(screen.getByRole('radio', { name: kindLabel['proposal' as Kind] }));
     for (const option of ['A', 'B']) {
@@ -529,7 +529,7 @@ describe('verwaltung', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Hinzufügen' }));
     }
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Sam Redaktion' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     await waitFor(() => expect(calls).toHaveLength(2));
     expect(calls[0].body).toMatchObject({
       kind: 'proposal',
@@ -543,10 +543,10 @@ describe('verwaltung', () => {
 
   it('grants a new category to a manager with the full user payload', async () => {
     const calls = mount('/sammlungen');
-    fireEvent.click(await screen.findByRole('button', { name: /Neue Sammlung/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Neue Abstimmung/ }));
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Neu' } });
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Sam Redaktion' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     await waitFor(() => expect(calls).toHaveLength(2));
     expect(calls[0]).toMatchObject({ url: '/categories', method: 'POST' });
     expect(calls[1]).toEqual({
@@ -562,24 +562,24 @@ describe('verwaltung', () => {
     });
   });
 
-  it('does not carry unsaved grant changes over to another Sammlung', async () => {
+  it('does not carry unsaved grant changes over to another Abstimmung', async () => {
     const quotes = sammlung('quotes', 'Zitate', 'quote');
     const photos = sammlung('photos', 'Fotos', 'photo');
     const calls = mount('/sammlungen/quotes', admin, undefined, undefined, [category, quotes, photos]);
-    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung bearbeiten' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Abstimmung bearbeiten' }));
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Sam Redaktion' }));
     expect(screen.getByRole('checkbox', { name: 'Sam Redaktion' })).toBeChecked();
     fireEvent.click(within(screen.getByRole('complementary')).getByRole('link', { name: /Fotos/ }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung bearbeiten' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Abstimmung bearbeiten' }));
     await waitFor(() => expect(screen.getByLabelText('Name')).toHaveValue('Fotos'));
     expect(screen.getByRole('checkbox', { name: 'Sam Redaktion' })).not.toBeChecked();
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     await waitFor(() => expect(calls.some((c) => c.url === '/categories/photos')).toBe(true));
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Sammlung speichern' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Abstimmung speichern' })).toBeNull());
     expect(calls.filter((c) => c.url.startsWith('/admin/users'))).toEqual([]);
   });
 
-  it('merges grants into the current server state and retries a failed save without a second Sammlung', async () => {
+  it('merges grants into the current server state and retries a failed save without a second Abstimmung', async () => {
     let server = { ...editor, category_ids: ['memory'] };
     let failGrant = true;
     const calls = mount(
@@ -600,14 +600,14 @@ describe('verwaltung', () => {
       },
       () => [admin, server],
     );
-    fireEvent.click(await screen.findByRole('button', { name: /Neue Sammlung/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Neue Abstimmung/ }));
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Neu' } });
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Sam Redaktion' }));
-    // Another admin grants a further Sammlung while this form is open.
+    // Another admin grants a further Abstimmung while this form is open.
     server = { ...server, category_ids: ['memory', 'quotes'] };
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     expect(await screen.findByText('Kurz nicht erreichbar.')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     await waitFor(() => expect(server.category_ids).toEqual(['memory', 'quotes', 'new-cat']));
     expect(calls.filter((c) => c.url === '/categories' && c.method === 'POST')).toHaveLength(1);
   });
@@ -740,7 +740,7 @@ describe('navigation by view', () => {
     expect(within(aside).queryByText('Geheimer Entwurf')).toBeNull();
     expect(within(aside).getByText(/Erledigt \(2\)/)).toBeInTheDocument();
 
-    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Hey Mia. 4 Sammlungen warten.');
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Hey Mia. 4 Abstimmungen warten.');
     const main = screen.getByRole('main');
     const voting = within(main).getByRole('region', { name: 'Jetzt dran' });
     const submissionQueue = within(main).getByRole('region', { name: 'Wiederholbar' });
@@ -752,9 +752,9 @@ describe('navigation by view', () => {
     );
     expect(within(submissionQueue).getByText('2 eigene Einreichungen')).toBeInTheDocument();
     expect(within(voting).queryByRole('link', { name: /Beitragen/ })).toBeNull();
-    fireEvent.click(within(voting).getByRole('button', { name: 'Nächste Sammlung' }));
+    fireEvent.click(within(voting).getByRole('button', { name: 'Nächste Abstimmung' }));
     expect(within(voting).getByRole('heading', { name: 'Abimotto' })).toBeInTheDocument();
-    expect(within(voting).getByRole('button', { name: 'Nächste Sammlung' })).toBeDisabled();
+    expect(within(voting).getByRole('button', { name: 'Nächste Abstimmung' })).toBeDisabled();
 
     expect(screen.queryByRole('button', { name: 'Schüler' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Redaktion' })).toBeNull();
@@ -779,7 +779,7 @@ describe('navigation by view', () => {
         '/sammlungen/memory',
       );
       expect(within(main).getByText('Beitrag own')).toBeInTheDocument();
-      expect(within(screen.getByRole('complementary')).queryByRole('link', { name: 'Alle Sammlungen' })).toBeNull();
+      expect(within(screen.getByRole('complementary')).queryByRole('link', { name: 'Alle Abstimmungen' })).toBeNull();
     },
   );
 
@@ -859,11 +859,11 @@ describe('navigation by view', () => {
       submissions: [],
     });
 
-    const ballots = await screen.findByRole('region', { name: 'Sammlungen, die auf dich warten' });
+    const ballots = await screen.findByRole('region', { name: 'Abstimmungen, die auf dich warten' });
     expect(await within(ballots).findByRole('button', { name: 'Gemeinsam' })).toBeInTheDocument();
-    fireEvent.click(within(ballots).getByRole('button', { name: 'Nächste Sammlung' }));
+    fireEvent.click(within(ballots).getByRole('button', { name: 'Nächste Abstimmung' }));
     expect(await within(ballots).findByRole('button', { name: 'Ada Beispiel' })).toBeInTheDocument();
-    fireEvent.click(within(ballots).getByRole('button', { name: 'Nächste Sammlung' }));
+    fireEvent.click(within(ballots).getByRole('button', { name: 'Nächste Abstimmung' }));
     const photoLink = await within(ballots).findByRole('link', { name: /Beitragen/ });
     expect(photoLink).toHaveAttribute('href', '/beitraege/neu?kategorie=photo-once');
     expect(within(ballots).queryByRole('button', { name: /Stimme speichern/ })).toBeNull();
@@ -906,7 +906,7 @@ describe('navigation by view', () => {
     const aside = await screen.findByRole('complementary');
     expect(await within(aside).findByRole('link', { name: /Motto erneut wählen/ })).toBeInTheDocument();
     expect(within(aside).getByText('Erledigt (0)')).toBeInTheDocument();
-    const ballots = await screen.findByRole('region', { name: 'Sammlungen, die auf dich warten' });
+    const ballots = await screen.findByRole('region', { name: 'Abstimmungen, die auf dich warten' });
     expect(await within(ballots).findByRole('button', { name: 'Erneut abstimmen' })).toBeEnabled();
   });
 
@@ -939,7 +939,7 @@ describe('navigation by view', () => {
     else {
       expect(await within(main).findByRole('region', { name: 'Gesammelte Beiträge' })).toHaveTextContent('3');
       expect(within(main).queryByRole('link', { name: /Abimotto/ })).toBeNull();
-      const tiles = within(within(main).getByRole('region', { name: 'Sammlungen' }));
+      const tiles = within(within(main).getByRole('region', { name: 'Abstimmungen' }));
       expect(tiles.getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent(/3\s*Beiträge/);
       expect(tiles.getByRole('link', { name: /Zitate/ })).toHaveTextContent(/0\s*Beiträge/);
     }
@@ -949,7 +949,7 @@ describe('navigation by view', () => {
     expect(
       within(within(aside).getByRole('group', { name: 'Beiträge' })).getByRole('link', { name: /Erinnerungen/ }),
     ).toHaveAttribute('href', '/sammlungen/memory');
-    expect(within(aside).getByRole('link', { name: 'Neue Sammlung' })).toHaveAttribute('href', '/sammlungen?neu');
+    expect(within(aside).getByRole('link', { name: 'Neue Abstimmung' })).toHaveAttribute('href', '/sammlungen?neu');
 
     fireEvent.click(within(aside).getByRole('button', { name: 'Schüler' }));
     expect(await screen.findByRole('heading', { level: 1, name: /^Hey / })).toHaveTextContent(
@@ -957,7 +957,7 @@ describe('navigation by view', () => {
     );
     expect(within(aside).getByRole('button', { name: 'Schüler' })).toHaveAttribute('aria-pressed', 'true');
     expect(within(aside).getByRole('list', { name: 'Offen' })).toBeInTheDocument();
-    expect(within(aside).queryByRole('link', { name: 'Neue Sammlung' })).toBeNull();
+    expect(within(aside).queryByRole('link', { name: 'Neue Abstimmung' })).toBeNull();
     expect(within(aside).queryByRole('button', { name: 'Verwaltung' })).toBeNull();
   });
 });
@@ -1015,7 +1015,7 @@ describe('admin home', () => {
       [],
     );
 
-    const latest = await screen.findByRole('region', { name: 'Neueste Sammlungen' });
+    const latest = await screen.findByRole('region', { name: 'Neueste Abstimmungen' });
     await within(latest).findByRole('link', { name: /Keine Stimmen/ });
     const zero = within(latest).getByRole('progressbar', { name: 'Wahlbeteiligung: Keine Stimmen' });
     const partial = within(latest).getByRole('progressbar', { name: 'Wahlbeteiligung: Ein Drittel' });
@@ -1058,7 +1058,7 @@ describe('admin home', () => {
 
   it.each(['pending', 'error'] as const)('shows the API participation aggregate while users are %s', async (state) => {
     mountDashboard([dashboardPoll('waiting', 'Noch ohne Daten', 8, { voted: 1, eligible: 2 })], state);
-    const latest = await screen.findByRole('region', { name: 'Neueste Sammlungen' });
+    const latest = await screen.findByRole('region', { name: 'Neueste Abstimmungen' });
     const bar = await within(latest).findByRole('progressbar', { name: 'Wahlbeteiligung: Noch ohne Daten' });
     expect(bar).toHaveAttribute('aria-valuenow', String((1 / 2) * 100));
     expect(within(latest).getByText('50%')).toBeInTheDocument();
@@ -1066,13 +1066,13 @@ describe('admin home', () => {
 
   it('does not display a zero metric when the API has no participation aggregate', async () => {
     mountDashboard([dashboardPoll('unknown', 'Noch keine Auswertung', 7, null)]);
-    const latest = await screen.findByRole('region', { name: 'Neueste Sammlungen' });
+    const latest = await screen.findByRole('region', { name: 'Neueste Abstimmungen' });
     expect(await within(latest).findByRole('link', { name: /Noch keine Auswertung/ })).toBeInTheDocument();
     expect(within(latest).queryByRole('progressbar')).toBeNull();
     expect(within(latest).queryByText(/\d+%/)).toBeNull();
   });
 
-  it('shows counts, the three newest people awaiting admission, the latest Sammlungen and one widget per class', async () => {
+  it('shows counts, the three newest people awaiting admission, the latest Abstimmungen and one widget per class', async () => {
     localStorage.clear();
     const admin = {
       id: 'admin-1',
@@ -1154,7 +1154,7 @@ describe('admin home', () => {
       '/verwaltung/personen',
     );
 
-    const latest = screen.getByRole('region', { name: 'Neueste Sammlungen' });
+    const latest = screen.getByRole('region', { name: 'Neueste Abstimmungen' });
     await waitFor(() => expect(within(latest).getAllByRole('listitem')).toHaveLength(4));
     const links = within(latest)
       .getAllByRole('link')
@@ -1166,24 +1166,24 @@ describe('admin home', () => {
       '/sammlungen/p3',
     ]);
 
-    const widgets = screen.getByRole('region', { name: 'Sammlungen' });
+    const widgets = screen.getByRole('region', { name: 'Abstimmungen' });
     const tile = (name: string) => within(widgets).getByText(name).closest('a')!;
-    await waitFor(() => expect(tile('Erinnerungen')).toHaveTextContent('1 Sammlung'));
+    await waitFor(() => expect(tile('Erinnerungen')).toHaveTextContent('1 Abstimmung'));
     expect(within(widgets).getAllByRole('listitem')).toHaveLength(8);
     expect(tile('Erinnerungen')).toHaveTextContent('3 Beiträge');
     expect(tile('Erinnerungen')).toHaveAttribute('href', '/sammlungen?klasse=memory');
-    expect(tile('Zitate')).toHaveTextContent('1 Sammlung');
+    expect(tile('Zitate')).toHaveTextContent('1 Abstimmung');
     expect(tile('Zitate')).toHaveTextContent('1 Beitrag');
-    expect(tile('Ideen')).toHaveTextContent('0 Sammlungen');
+    expect(tile('Ideen')).toHaveTextContent('0 Abstimmungen');
     expect(tile('Ideen')).toHaveTextContent('0 Beiträge');
-    expect(tile('Fotos')).toHaveTextContent('0 Sammlungen');
-    expect(tile('Vorschlagswahl')).toHaveTextContent('3 Sammlungen');
-    expect(tile('Vorschlagswahl')).toHaveTextContent('2 offen 1 beendet');
-    expect(tile('Vorschlagswahl')).not.toHaveTextContent('Beitr');
-    expect(tile('Personenwahl')).toHaveTextContent('2 Sammlungen');
+    expect(tile('Fotos')).toHaveTextContent('0 Abstimmungen');
+    expect(tile('Auswahl')).toHaveTextContent('3 Abstimmungen');
+    expect(tile('Auswahl')).toHaveTextContent('2 offen 1 beendet');
+    expect(tile('Auswahl')).not.toHaveTextContent('Beitr');
+    expect(tile('Personenwahl')).toHaveTextContent('2 Abstimmungen');
     expect(tile('Personenwahl')).toHaveTextContent('2 offen 0 beendet');
     expect(tile('Personenwahl')).toHaveAttribute('href', '/sammlungen?klasse=person');
-    expect(tile('Wortwolke')).toHaveTextContent('0 Sammlungen');
+    expect(tile('Wortwolke')).toHaveTextContent('0 Abstimmungen');
   });
 });
 
@@ -1267,12 +1267,12 @@ describe('editor home', () => {
     const tasks = await screen.findByRole('heading', { name: 'Meine Aufgaben' });
     const docs = screen.getByRole('heading', { name: 'Dokumente' });
     expect(tasks.compareDocumentPosition(docs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.queryByRole('region', { name: 'Sammlungen' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Abstimmungen' })).toBeNull();
     expect(screen.getByRole('link', { name: 'Tickets' })).toHaveAttribute('href', '/tickets');
     expect(screen.getByRole('link', { name: 'Dokumente' })).toHaveAttribute('href', '/dokumente');
     cleanup();
     const fetchMock = mountEditor();
-    await screen.findByRole('region', { name: 'Sammlungen' });
+    await screen.findByRole('region', { name: 'Abstimmungen' });
     expect(screen.queryByRole('heading', { name: 'Meine Aufgaben' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Tickets' })).toBeNull();
     expect(fetchMock.mock.calls.map(([input]) => String(input))).not.toContainEqual(
@@ -1282,7 +1282,7 @@ describe('editor home', () => {
 
   it('shows every writable poll across lifecycle states and counts only assigned collections', async () => {
     const fetchMock = mountEditor();
-    const assigned = await screen.findByRole('region', { name: 'Deine Sammlungen' });
+    const assigned = await screen.findByRole('region', { name: 'Deine Abstimmungen' });
     await within(assigned).findByRole('link', { name: /Laufende Wahl/ });
     const links = within(assigned)
       .getAllByRole('link')
@@ -1300,11 +1300,11 @@ describe('editor home', () => {
       'aria-valuenow',
       '50',
     );
-    const tiles = within(screen.getByRole('region', { name: 'Sammlungen' }));
+    const tiles = within(screen.getByRole('region', { name: 'Abstimmungen' }));
     expect(tiles.getAllByRole('listitem')).toHaveLength(8);
-    expect(tiles.getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('1 Sammlung');
+    expect(tiles.getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('1 Abstimmung');
     expect(tiles.getByRole('link', { name: /Erinnerungen/ })).toHaveTextContent('4 Beiträge');
-    expect(tiles.getByRole('link', { name: /Vorschlagswahl/ })).toHaveTextContent('3 Sammlungen');
+    expect(tiles.getByRole('link', { name: /Auswahl/ })).toHaveTextContent('3 Abstimmungen');
     const collected = screen.getByRole('region', { name: 'Gesammelte Beiträge' });
     await waitFor(() => expect(within(collected).getAllByRole('listitem')).toHaveLength(3));
     const stories = within(collected)
@@ -1321,7 +1321,7 @@ describe('editor home', () => {
     expect(fetchMock.mock.calls.some(([path]) => String(path).includes('/admin/'))).toBe(false);
   });
 
-  it('lists only writable Sammlungen in the sidebar', async () => {
+  it('lists only writable Abstimmungen in the sidebar', async () => {
     mountEditor();
     const nav = within(await screen.findByRole('complementary'));
     expect(await nav.findByRole('link', { name: /Laufende Wahl/ })).toHaveAttribute('href', '/sammlungen/open');
@@ -1332,18 +1332,18 @@ describe('editor home', () => {
 
   it('shows assignment empty states while keeping all readable collections accessible', async () => {
     mountEditor([]);
-    const assigned = await screen.findByRole('region', { name: 'Deine Sammlungen' });
+    const assigned = await screen.findByRole('region', { name: 'Deine Abstimmungen' });
     await waitFor(() => expect(within(assigned).queryByRole('list')).toBeNull());
-    expect(await within(assigned).findByRole('link', { name: /Neue Sammlung/ })).toHaveAttribute(
+    expect(await within(assigned).findByRole('link', { name: /Neue Abstimmung/ })).toHaveAttribute(
       'href',
       '/sammlungen?neu',
     );
     expect(within(assigned).queryByRole('progressbar')).toBeNull();
     const collected = screen.getByRole('region', { name: 'Gesammelte Beiträge' });
     expect(within(collected).queryByRole('list')).toBeNull();
-    const tiles = screen.getByRole('region', { name: 'Sammlungen' });
-    for (const tile of within(tiles).getAllByRole('listitem')) expect(tile).toHaveTextContent('0 Sammlungen');
-    expect(within(screen.getByRole('complementary')).getByRole('link', { name: 'Alle Sammlungen' })).toHaveAttribute(
+    const tiles = screen.getByRole('region', { name: 'Abstimmungen' });
+    for (const tile of within(tiles).getAllByRole('listitem')) expect(tile).toHaveTextContent('0 Abstimmungen');
+    expect(within(screen.getByRole('complementary')).getByRole('link', { name: 'Alle Abstimmungen' })).toHaveAttribute(
       'href',
       '/sammlungen',
     );
@@ -1372,7 +1372,7 @@ describe('editor home', () => {
   it('keeps the personal student dashboard when a manager selects Schüler mode', async () => {
     const fetchMock = mountEditor(undefined, { view: 'schueler' });
     await screen.findByRole('heading', { level: 1, name: /Hey Mia/ });
-    expect(screen.queryByRole('region', { name: 'Deine Sammlungen' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Deine Abstimmungen' })).toBeNull();
     expect(screen.getByRole('region', { name: 'Jetzt dran' })).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([path]) => String(path).includes('/admin/'))).toBe(false);
     localStorage.clear();
@@ -1489,20 +1489,20 @@ describe('sammlungen', () => {
       '/sammlungen/alt',
     );
     expect(main).not.toHaveTextContent('Geheimer Entwurf');
-    expect(screen.queryByRole('heading', { level: 1, name: 'Sammlungen' })).toBeNull();
+    expect(screen.queryByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeNull();
   });
 
   it('shows drafts and the create button to managers', async () => {
     mount('/sammlungen', manager);
-    await screen.findByRole('heading', { level: 1, name: 'Sammlungen' });
+    await screen.findByRole('heading', { level: 1, name: 'Abstimmungen' });
     const main = screen.getByRole('main');
     expect(await within(main).findByRole('link', { name: /Geheimer Entwurf/ })).toBeInTheDocument();
-    expect(within(main).getByRole('button', { name: /Neue Sammlung/ })).toBeInTheDocument();
+    expect(within(main).getByRole('button', { name: /Neue Abstimmung/ })).toBeInTheDocument();
   });
 
   it('filters the list by class with ?klasse=', async () => {
     mount('/sammlungen?klasse=quote', manager);
-    await screen.findByRole('heading', { level: 1, name: 'Sammlungen' });
+    await screen.findByRole('heading', { level: 1, name: 'Abstimmungen' });
     const main = screen.getByRole('main');
     expect(await within(main).findByRole('link', { name: /Zitate/ })).toBeInTheDocument();
     expect(within(main).queryByText('Abimotto')).toBeNull();
@@ -1514,9 +1514,9 @@ describe('sammlungen', () => {
     'redirects the old list route %s to /sammlungen',
     async (path) => {
       mount(path, manager);
-      await screen.findByRole('heading', { level: 1, name: 'Sammlungen' });
+      await screen.findByRole('heading', { level: 1, name: 'Abstimmungen' });
       const main = screen.getByRole('main');
-      expect(await within(main).findByRole('heading', { level: 1, name: 'Sammlungen' })).toBeInTheDocument();
+      expect(await within(main).findByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeInTheDocument();
       if (path.includes('klasse')) {
         expect(within(main).getByText('Beendete Abstimmungen (1)')).toBeInTheDocument();
       } else {
@@ -1528,10 +1528,10 @@ describe('sammlungen', () => {
   it('redirects the old detail route /abstimmungen/:id to /sammlungen/:id', async () => {
     mount('/abstimmungen/motto');
     expect(await screen.findByRole('heading', { level: 1, name: 'Abstimmen' })).toBeInTheDocument();
-    expect(within(screen.getByRole('article')).getByText('Vorschlagswahl')).toBeInTheDocument();
+    expect(within(screen.getByRole('article')).getByText('Auswahl')).toBeInTheDocument();
   });
 
-  it('renders the submission flow for a repeatable Sammlung', async () => {
+  it('renders the submission flow for a repeatable Abstimmung', async () => {
     mount('/sammlungen/memory');
     expect(await screen.findByRole('heading', { level: 1, name: 'Erinnerungen' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Beitrag einreichen/ })).toHaveAttribute(
@@ -1556,7 +1556,7 @@ describe('sammlungen', () => {
       '/api/v1/categories/memory/export?status=all',
     );
     expect(within(main).queryByRole('link', { name: /Beitrag einreichen/ })).toBeNull();
-    expect(within(main).queryByRole('button', { name: 'Sammlung bearbeiten' })).toBeNull();
+    expect(within(main).queryByRole('button', { name: 'Abstimmung bearbeiten' })).toBeNull();
   });
 
   it('keeps Redaktion active when following a collection from a direct editorial link', async () => {
@@ -1570,7 +1570,7 @@ describe('sammlungen', () => {
 
   it('edits repeatable collection definitions in the shared collection view', async () => {
     const calls = mount('/sammlungen/memory', admin);
-    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung bearbeiten' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Abstimmung bearbeiten' }));
     expect(klassen(screen.getByRole('group', { name: 'Klasse' }))).toEqual([
       'Ideen',
       'Zitate',
@@ -1578,7 +1578,7 @@ describe('sammlungen', () => {
       'Fotos',
     ]);
     fireEvent.click(screen.getByRole('radio', { name: kindLabel['photo' as Kind] }));
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     await waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0]).toMatchObject({
       url: '/categories/memory',
@@ -1587,7 +1587,7 @@ describe('sammlungen', () => {
     });
   });
 
-  it('renders the ballot flow for a single-answer Sammlung and saves the vote', async () => {
+  it('renders the ballot flow for a single-answer Abstimmung and saves the vote', async () => {
     const calls = mount('/sammlungen/motto');
     expect(await screen.findByRole('heading', { level: 1, name: 'Abstimmen' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Zwei' }));
@@ -1600,7 +1600,7 @@ describe('sammlungen', () => {
 
   it('opens a draft with the current version', async () => {
     const calls = mount('/sammlungen/entwurf', { ...manager, category_ids: ['entwurf'] });
-    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung öffnen' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Abstimmung öffnen' }));
     await waitFor(() =>
       expect(calls).toEqual([
         { url: '/categories/entwurf/status', method: 'POST', body: { version: 1, status: 'open' } },
@@ -1618,7 +1618,7 @@ describe('sammlungen', () => {
       'Fotos',
       'Steckbrief',
       'Personenwahl',
-      'Vorschlagswahl',
+      'Auswahl',
       'Wortwolke',
     ]);
     fireEvent.click(screen.getByRole('radio', { name: kindLabel['proposal'] }));
@@ -1628,7 +1628,7 @@ describe('sammlungen', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Hinzufügen' }));
     }
     expect(screen.queryByLabelText(/eigene Person/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     await waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0]).toEqual({
       url: '/categories',
@@ -1655,8 +1655,8 @@ describe('sammlungen', () => {
       fireEvent.click(await screen.findByRole('radio', { name: kindLabel[kind as Kind] }));
       expect(screen.queryByText('Wer darf bearbeiten')).toBeNull();
       expect(screen.queryByLabelText('Antwortoption hinzufügen')).toBeNull();
-      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Neue Sammlung' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Neue Abstimmung' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
       await waitFor(() => expect(calls).toHaveLength(1));
       expect(calls[0]).toMatchObject({
         url: '/categories',
@@ -1669,10 +1669,10 @@ describe('sammlungen', () => {
 
   it('lets assigned managers edit repeatable definitions in the shared view', async () => {
     const calls = mount('/sammlungen/memory', { ...manager, category_ids: ['memory'] });
-    fireEvent.click(await screen.findByRole('button', { name: 'Sammlung bearbeiten' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Abstimmung bearbeiten' }));
     expect(screen.queryByText('Wer darf bearbeiten')).toBeNull();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Unsere Erinnerungen' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Sammlung speichern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abstimmung speichern' }));
     await waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0]).toMatchObject({
       url: '/categories/memory',
@@ -1684,7 +1684,7 @@ describe('sammlungen', () => {
   it('keeps an unassigned manager collection view read-only', async () => {
     mount('/sammlungen/memory', { ...manager, category_ids: [] });
     await screen.findByRole('heading', { name: 'Gesammelte Beiträge' });
-    expect(screen.queryByRole('button', { name: 'Sammlung bearbeiten' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Abstimmung bearbeiten' })).toBeNull();
     expect(screen.queryByText('Wer darf bearbeiten')).toBeNull();
   });
 
@@ -1698,7 +1698,7 @@ describe('sammlungen', () => {
       'Fotos',
       'Steckbrief',
       'Personenwahl',
-      'Vorschlagswahl',
+      'Auswahl',
       'Wortwolke',
     ]);
     expect(screen.queryByLabelText('Antwortoption hinzufügen')).toBeNull();
@@ -1712,14 +1712,14 @@ describe('sammlungen', () => {
     expect(await screen.findByRole('button', { name: 'Anna' })).toBeInTheDocument();
   });
 
-  it('offers only submission Sammlungen on the editorial review page', async () => {
+  it('offers only submission Abstimmungen on the editorial review page', async () => {
     mount('/redaktion', manager);
-    const select = (await screen.findAllByLabelText('Sammlung'))[0];
+    const select = (await screen.findAllByLabelText('Abstimmung'))[0];
     await waitFor(() => expect(within(select).getAllByRole('option').length).toBeGreaterThan(1));
     expect(
       within(select)
         .getAllByRole('option')
         .map((o) => o.textContent),
-    ).toEqual(['Alle Sammlungen', 'Erinnerungen', 'Zitate']);
+    ).toEqual(['Alle Abstimmungen', 'Erinnerungen', 'Zitate']);
   });
 });

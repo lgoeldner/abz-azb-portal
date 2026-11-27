@@ -283,11 +283,11 @@ func (m *MailService) dispatchReminder(ctx context.Context, jobID string) error 
 	date := deadline.Format("02.01.2006 um 15:04 Uhr")
 	portalURL := strings.TrimRight(m.config.PublicURL, "/") + "/"
 	category := strings.TrimSpace(d.CategoryName)
-	text := fmt.Sprintf("Die Sammlung %q schließt am %s. Falls du noch teilnehmen möchtest, findest du sie im AbiZeitBetrug-Portal:\n%s", category, date, portalURL)
-	htmlBody := mailHTML("Eine Sammlung schließt bald", fmt.Sprintf("Die Sammlung <strong>%s</strong> schließt am %s. Falls du noch teilnehmen möchtest, findest du sie im Portal.", html.EscapeString(category), html.EscapeString(date)), "Zum Portal", portalURL, "Du erhältst diese Erinnerung, weil du Erinnerungen aktiviert hast. Du kannst sie im Portal abschalten.")
+	text := fmt.Sprintf("Die Abstimmung %q schließt am %s. Falls du noch teilnehmen möchtest, findest du sie im AbiZeitBetrug-Portal:\n%s", category, date, portalURL)
+	htmlBody := mailHTML("Eine Abstimmung schließt bald", fmt.Sprintf("Die Abstimmung <strong>%s</strong> schließt am %s. Falls du noch teilnehmen möchtest, findest du sie im Portal.", html.EscapeString(category), html.EscapeString(date)), "Zum Portal", portalURL, "Du erhältst diese Erinnerung, weil du Erinnerungen aktiviert hast. Du kannst sie im Portal abschalten.")
 	messageID, sendErr := m.send(ctx, mailSendRequest{
 		UserID: d.UserID, Category: &d.Category, JobID: jobID, Kind: "reminder", Recipient: d.Email,
-		Subject: "Erinnerung: eine Sammlung schließt bald",
+		Subject: "Erinnerung: eine Abstimmung schließt bald",
 		Text:    text, HTML: htmlBody,
 	})
 	if sendErr == nil {

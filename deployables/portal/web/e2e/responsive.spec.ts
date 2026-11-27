@@ -103,7 +103,7 @@ async function useFixtures(page: Page, role: 'student' | 'manager' | 'admin') {
   });
 }
 
-test('overview, contribution detail and Sammlung layouts stay within every viewport', async ({ page }) => {
+test('overview, contribution detail and Abstimmung layouts stay within every viewport', async ({ page }) => {
   await useFixtures(page, 'student');
   for (const width of widths) {
     await page.setViewportSize({ width, height: 800 });
@@ -150,19 +150,19 @@ test('overview, contribution detail and Sammlung layouts stay within every viewp
     .toBe(true);
 });
 
-test('editor can open the Sammlung form without horizontal page overflow', async ({ page }) => {
+test('editor can open the Abstimmung form without horizontal page overflow', async ({ page }) => {
   await useFixtures(page, 'manager');
   for (const width of widths) {
     await page.setViewportSize({ width, height: 800 });
     await page.goto('/sammlungen');
-    await page.getByRole('button', { name: /Neue Sammlung/ }).click();
-    await expect(page.getByRole('heading', { name: 'Neue Sammlung' })).toBeVisible();
+    await page.getByRole('button', { name: /Neue Abstimmung/ }).click();
+    await expect(page.getByRole('heading', { name: 'Neue Abstimmung' })).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
 });
 
 for (const role of ['manager', 'admin'] as const) {
-  test(`${role} Sammlung results fit every viewport`, async ({ page }) => {
+  test(`${role} Abstimmung results fit every viewport`, async ({ page }) => {
     await useFixtures(page, role);
     for (const width of widths) {
       await page.setViewportSize({ width, height: 800 });
@@ -282,7 +282,7 @@ test('poll chips, switches and count controls fit narrow and wide screens', asyn
   for (const width of [320, 390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/sammlungen?neu');
-    await page.getByRole('group', { name: 'Klasse' }).getByText('Vorschlagswahl').click();
+    await page.getByRole('group', { name: 'Klasse' }).getByText('Auswahl').click();
     const optionInput = page.getByRole('textbox', { name: 'Antwortoption hinzufügen' });
     const longOption = 'Abimotto ' + 'X'.repeat(180);
     await optionInput.fill(longOption);

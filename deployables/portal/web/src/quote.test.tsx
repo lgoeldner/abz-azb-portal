@@ -177,7 +177,7 @@ describe('quote contribution form', () => {
       expect(await screen.findByLabelText(/Mindestens ein Foto/)).toBeInTheDocument();
       expect(screen.getByLabelText(/Mindestens ein Foto/)).toBeInTheDocument();
     }
-    expect(screen.queryByLabelText('Sammlung')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Abstimmung')).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText('Name oder Quelle')).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Dein Zitat/)).not.toBeInTheDocument();
   });
@@ -320,7 +320,7 @@ describe('quote detail', () => {
     const quote = screen.getByLabelText(/Dein Zitat/);
     expect(quote).toHaveValue('Das kommt nicht dran.');
     expect(screen.getByPlaceholderText('Name oder Quelle')).toHaveValue('Herr Kurz');
-    expect(screen.queryByLabelText('Sammlung')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Abstimmung')).not.toBeInTheDocument();
     fireEvent.change(quote, { target: { value: 'Das kommt bestimmt dran.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Änderungen speichern' }));
 

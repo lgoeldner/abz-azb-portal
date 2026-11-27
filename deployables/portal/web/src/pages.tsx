@@ -167,7 +167,7 @@ export function Contributions() {
   return (
     <>
       <PageHead title="Meine Beiträge">
-        Deine Beiträge und abgegebenen Stimmen in den Sammlungen des Jahrgangs.
+        Deine Beiträge und abgegebenen Stimmen in den Abstimmungen des Jahrgangs.
       </PageHead>
       <div className="mb-6 flex flex-wrap items-end gap-3">
         <label className={`${label} min-w-0 w-full sm:flex-1`}>
@@ -175,7 +175,7 @@ export function Contributions() {
           <input
             type="search"
             className={field}
-            placeholder="Beitrag oder Sammlung finden …"
+            placeholder="Beitrag oder Abstimmung finden …"
             maxLength={200}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -209,7 +209,7 @@ export function Contributions() {
         <SubmissionList items={own} categories={categories.data ?? []} ballots={ownBallots} />
       ) : (
         <Empty>
-          Noch keine Beiträge. <Link to="/">Wähle auf der Startseite eine Sammlung aus.</Link>
+          Noch keine Beiträge. <Link to="/">Wähle auf der Startseite eine Abstimmung aus.</Link>
         </Empty>
       )}
     </>
@@ -314,7 +314,7 @@ export function NewContribution() {
           ? 'Lade mindestens ein Foto hoch. Zu jedem Bild kannst du einen optionalen Bildtext hinzufügen.'
           : isSteckbrief
             ? category.description || 'Dein Blatt in der Abizeitung.'
-            : 'Dein Beitrag wird in der Sammlung gespeichert. Die Redaktion sichtet die Sammlung nach dem Sammelzeitraum.'}
+            : 'Dein Beitrag wird in der Abstimmung gespeichert. Die Redaktion sichtet die Abstimmung nach dem Sammelzeitraum.'}
       </PageHead>
       {categories.isPending || submissions.isPending ? (
         <Loading />
@@ -327,14 +327,14 @@ export function NewContribution() {
           }}
         />
       ) : !categories.data?.length ? (
-        <Empty>Das Team richtet die Sammlungen gerade ein.</Empty>
+        <Empty>Das Team richtet die Abstimmungen gerade ein.</Empty>
       ) : existing && (!isPhoto || existing.status !== 'pending') ? (
         <Empty>
-          Du hast bereits einen Beitrag in dieser Sammlung.{' '}
+          Du hast bereits einen Beitrag in dieser Abstimmung.{' '}
           <Link to={`/beitraege/${existing.id}`}>Zum gespeicherten Beitrag</Link>
         </Empty>
       ) : category && category.status !== 'open' && !saved ? (
-        <Empty>Neue Beiträge können nur in offenen Sammlungen eingereicht werden.</Empty>
+        <Empty>Neue Beiträge können nur in offenen Abstimmungen eingereicht werden.</Empty>
       ) : !category ? (
         <Navigate to="/" replace />
       ) : isSteckbrief ? (
@@ -587,7 +587,7 @@ export function ContributionDetail() {
   const conflict = action.error instanceof ApiError && action.error.status === 409;
   const collectionField = (
     <label className={label}>
-      Sammlung
+      Abstimmung
       <select
         className={field}
         value={draft.category_id}
@@ -741,7 +741,7 @@ export function ContributionDetail() {
         className="mb-4 inline-flex text-sm font-semibold text-muted hover:text-ink"
         to={isRedaktion ? `/sammlungen/${s.category_id}` : own ? '/beitraege' : '/redaktion'}
       >
-        ← {isRedaktion ? 'Zur Sammlung' : own ? 'Meine Beiträge' : 'Redaktion'}
+        ← {isRedaktion ? 'Zur Abstimmung' : own ? 'Meine Beiträge' : 'Redaktion'}
       </Link>
       {/* A quote's title is its attribution, already shown under the citation. */}
       <PageHead title={isQuote ? (categoryName ?? 'Zitat') : s.title} action={<Badge status={s.status} />}>
@@ -979,7 +979,7 @@ export function ContributionDetail() {
                   <dd>{date(s.created_at)}</dd>
                 </div>
                 <div>
-                  <dt className="text-muted">Sammlung</dt>
+                  <dt className="text-muted">Abstimmung</dt>
                   <dd>{categoryName ?? 'Beitrag'}</dd>
                 </div>
               </dl>
@@ -997,7 +997,7 @@ export function ContributionDetail() {
             )}
             {isRedaktion && !canEdit(user, s.category_id) && (
               <p className="text-sm text-muted">
-                Du hast Leserechte. Für Anmerkungen brauchst du eine Zuweisung zu dieser Sammlung.
+                Du hast Leserechte. Für Anmerkungen brauchst du eine Zuweisung zu dieser Abstimmung.
               </p>
             )}
           </section>
@@ -1065,12 +1065,12 @@ export function Editorial() {
   const [exportStatus, setExportStatus] = useState('all');
   return (
     <>
-      <PageHead title="Beiträge">Beiträge aus allen Sammlungen und Status.</PageHead>
+      <PageHead title="Beiträge">Beiträge aus allen Abstimmungen und Status.</PageHead>
       <div className="mb-6 flex flex-wrap items-end gap-3">
         <label className={`${label} min-w-0 w-full sm:w-56`}>
-          Sammlung
+          Abstimmung
           <select className={field} value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="">Alle Sammlungen</option>
+            <option value="">Alle Abstimmungen</option>
             {sammlungen.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -1113,16 +1113,16 @@ export function Editorial() {
       )}
       <section className={`${panel} mt-10 flex flex-wrap items-end justify-between gap-6`}>
         <div className="min-w-0 max-w-md">
-          <h2 className={heading}>Eine Sammlung exportieren</h2>
+          <h2 className={heading}>Eine Abstimmung exportieren</h2>
           <p className="mt-1 text-sm text-muted">
             ZIP mit CSV, Originaldateien und Manifest. Stimmdaten sind nicht enthalten.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <label className={`${label} min-w-0 w-full sm:w-56`}>
-            Sammlung
+            Abstimmung
             <select className={field} value={category} onChange={(e) => setCategory(e.target.value)}>
-              <option value="">Sammlung auswählen</option>
+              <option value="">Abstimmung auswählen</option>
               {sammlungen.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -1143,7 +1143,7 @@ export function Editorial() {
             </a>
           ) : (
             <button className={btn.primary} disabled>
-              Sammlung auswählen
+              Abstimmung auswählen
             </button>
           )}
         </div>
