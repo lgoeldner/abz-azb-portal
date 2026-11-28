@@ -1,11 +1,9 @@
-import { ArrowRight, FileText, Hourglass, LogOut, Plus, Settings, UserCheck, Users, Vote } from 'lucide-react';
+import { LogOut, Plus, Settings } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   api,
   ApiError,
-  canEdit,
-  date,
   editorial,
   json,
   setCsrf,
@@ -13,12 +11,10 @@ import {
   type Me,
   type MyBallot,
   type Submission,
-  type User,
   day,
 } from './api';
 import {
   Arrow,
-  Badge,
   Empty,
   Failure,
   KindIcon,
@@ -26,9 +22,7 @@ import {
   PageHead,
   Session,
   SubmissionList,
-  card,
   btn,
-  allKinds,
   Avatar,
   isBallot,
   isSubmissionCollection,
@@ -40,7 +34,6 @@ import {
   notice,
   projectsEnabled,
   roundButton,
-  since,
   useAction,
   useData,
   useSession,
@@ -53,8 +46,7 @@ import { ActivityLog, People } from './admin';
 import { AreasAdmin } from './AreasAdmin';
 import { Board, NewTicket, TicketPage } from './tickets';
 import { BentoMenu } from './BentoMenu';
-import { MyTasks } from './TicketCards';
-import { DocumentPage, DocumentsPage, DocumentTiles, NewDocument } from './Documents';
+import { DocumentPage, DocumentsPage, NewDocument } from './Documents';
 import { EmailAdmin } from './EmailAdmin';
 import { ContributionDetail, Contributions, Editorial, NewContribution, NotFound } from './pages';
 import { SammlungDetail, Sammlungen } from './sammlungen';
@@ -119,8 +111,9 @@ export function App() {
           <Route
             path="redaktion"
             element={
+              // The menu replaced the Redaktion dashboard; the path stays as the editors' entry.
               <RoleGuard>
-                <EditorialHome />
+                <Navigate to={projectsEnabled(me.data) ? '/tickets' : '/redaktion/beitraege'} replace />
               </RoleGuard>
             }
           />
@@ -247,9 +240,6 @@ function RedirectToSammlung() {
   const { id } = useParams();
   return <Navigate to={`/sammlungen/${id}`} replace />;
 }
-const time = (value: string | null | undefined) => (value ? new Date(value).getTime() : 0);
-const statusOrder = { open: 0, draft: 1, closed: 2 } as const;
-
 function Brand({ large = false }: { large?: boolean }) {
   return (
     <span className="inline-flex items-center gap-2.5">
@@ -455,11 +445,6 @@ function Dock() {
 }
 
 const hasVoted = (c: Category) => Boolean(c.my_words?.length || c.my_option_ids?.length || c.my_option_id);
-const participationColor = (percent: number) => {
-  const from = [209, 213, 219];
-  const to = [22, 101, 52];
-  return `rgb(${from.map((value, index) => Math.round(value + ((to[index] - value) * percent) / 100)).join(', ')})`;
-};
 
 // projects: the route belongs to the PROJECT_MANAGEMENT tools and disappears with the flag.
 function RoleGuard({
@@ -638,392 +623,6 @@ function StudentHome() {
         <strong className="font-semibold text-ink">Unsere Erinnerungen bleiben im Jahrgang.</strong> Nur du und
         berechtigte Mitglieder der Redaktion können deine Beiträge sehen.
       </p>
-    </>
-  );
-}
-
-function EditorialHome() {
-  const session = useSession();
-  const { user } = session;
-  const isAdmin = user.role === 'admin';
-  const projects = projectsEnabled(session);
-  const users = useData<User[]>('/admin/users', isAdmin);
-  const categories = useData<Category[]>('/categories');
-  const submissions = useData<Submission[]>('/submissions');
-  const waiting = (users.data ?? []).filter((u) => !u.admitted).sort((a, b) => time(b.created_at) - time(a.created_at));
-  const latest = isAdmin
-    ? (categories.data ?? []).toSorted(newestOpened).slice(0, 4)
-    : (categories.data ?? [])
-        .filter((c) => isBallot(c.kind) && canEdit(user, c.id))
-        .sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || newestOpened(a, b));
-  const writableCategoryIds = new Set((categories.data ?? []).filter((c) => canEdit(user, c.id)).map((c) => c.id));
-  const writableSubmissions = (submissions.data ?? []).filter((s) => writableCategoryIds.has(s.category_id));
-  const recentSubmissions = writableSubmissions.toSorted((a, b) => time(b.created_at) - time(a.created_at)).slice(0, 3);
-  const figure = 'block text-4xl font-extrabold tabular-nums leading-none tracking-tight';
-  const state = (q: { isPending: boolean; error: Error | null; refetch: () => unknown }) =>
-    q.isPending ? (
-      <div className="mt-4">
-        <Loading />
-      </div>
-    ) : q.error ? (
-      <div className="mt-4">
-        <Failure error={q.error} retry={() => q.refetch()} />
-      </div>
-    ) : null;
-  const managerCategoriesState =
-    categories.isPending || submissions.isPending ? (
-      <div className="mt-4">
-        <Loading />
-      </div>
-    ) : categories.error || submissions.error ? (
-      <div className="mt-4">
-        <Failure
-          error={(categories.error ?? submissions.error)!}
-          retry={() => {
-            categories.refetch();
-            submissions.refetch();
-          }}
-        />
-      </div>
-    ) : null;
-  const initials = (name: string) =>
-    name
-      .replace(/\(.*?\)/g, '')
-      .split(/\s+/)
-      .filter((w) => /^\p{L}/u.test(w))
-      .map((w) => w[0])
-      .slice(0, 2)
-      .join('')
-      .toUpperCase();
-  const collections = (
-    <section aria-labelledby="home-neueste" className={card}>
-      <div className="flex items-baseline justify-between gap-4">
-        <h2 id="home-neueste" className={`${heading} flex items-center gap-2`}>
-          <Vote aria-hidden="true" className="size-[18px] shrink-0" />
-          {isAdmin ? 'Neueste Abstimmungen' : 'Meine Abstimmungen'}
-        </h2>
-        <Link to="/sammlungen" className={btn.text}>
-          Alle <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-        </Link>
-      </div>
-      {state(categories) ??
-        (latest.length === 0 ? (
-          <div className="mt-4">
-            {isAdmin ? (
-              <Empty>Noch keine Abstimmung.</Empty>
-            ) : (
-              <Empty>Dir sind noch keine Abstimmungen zugewiesen.</Empty>
-            )}
-          </div>
-        ) : (
-          <ul className="mt-3 divide-y divide-line">
-            {latest.map((c) => {
-              const participation = isBallot(c.kind) ? c.participation : null;
-              const showParticipation = Boolean(participation);
-              const voted = participation?.voted ?? 0;
-              const eligible = participation?.eligible ?? 0;
-              const percent = eligible === 0 ? 0 : Math.max(0, Math.min(100, (voted / eligible) * 100));
-              return (
-                <li key={c.id} className="min-w-0">
-                  <Link
-                    to={`/sammlungen/${c.id}`}
-                    className={`-mx-2 flex gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30 ${showParticipation ? 'items-start' : 'items-center'}`}
-                  >
-                    <KindIcon
-                      icon={kindIcon[c.kind]}
-                      className={`size-4 shrink-0 text-muted ${showParticipation ? 'mt-1' : ''}`}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <strong className="line-clamp-2 min-w-0 flex-1 break-words text-[15px] font-semibold leading-snug">
-                          {c.name}
-                        </strong>
-                        {isBallot(c.kind) && <Badge status={c.status} />}
-                      </span>
-                      <span className="block text-[13px] text-muted">
-                        {[kindLabel[c.kind], c.status === 'open' && isBallot(c.kind) ? since(c.opened_at) : '']
-                          .filter(Boolean)
-                          .join(', ')}
-                      </span>
-                      {showParticipation && (
-                        <span className="mt-2 block">
-                          <span className="flex items-center gap-1 text-[12px] leading-4 text-muted">
-                            <span className="tabular-nums">
-                              {voted} von {eligible}
-                            </span>{' '}
-                            abgestimmt
-                          </span>
-                          <span
-                            role="progressbar"
-                            aria-label={`Wahlbeteiligung: ${c.name}`}
-                            aria-valuemin={0}
-                            aria-valuemax={100}
-                            aria-valuenow={percent}
-                            aria-valuetext={`${voted} von ${eligible} Personen abgestimmt (${Math.round(percent)} %)`}
-                            className="mt-1 block h-1.5 overflow-hidden rounded-full"
-                            style={{ backgroundColor: '#e5e7eb' }}
-                          >
-                            <span
-                              aria-hidden="true"
-                              className="block h-full rounded-full"
-                              style={{ width: `${percent}%`, backgroundColor: participationColor(percent) }}
-                            />
-                          </span>
-                        </span>
-                      )}
-                    </span>
-                    {showParticipation && (
-                      <span className="w-24 flex-none whitespace-nowrap pt-0.5 text-right">
-                        <strong className="block text-3xl font-extrabold tabular-nums leading-none tracking-tight">
-                          {Math.round(percent)}%
-                        </strong>
-                        <span className="mt-1 block text-[12px] font-normal leading-4 text-muted">Teilgenommen</span>
-                      </span>
-                    )}
-                  </Link>
-                  <DevDebug
-                    label="Abstimmung"
-                    data={{
-                      id: c.id,
-                      status: c.status,
-                      kind: c.kind,
-                      version: c.version,
-                      options: c.options.length,
-                    }}
-                  />
-                </li>
-              );
-            })}
-          </ul>
-        ))}
-      {!isAdmin && (
-        <Link to="/sammlungen?neu" className={`${btn.redaktion} mt-5`}>
-          <Plus aria-hidden="true" className="size-4 shrink-0" /> Neue Abstimmung
-        </Link>
-      )}
-    </section>
-  );
-  return (
-    <>
-      <PageHead
-        title="Redaktion"
-        action={
-          <Link to="/redaktion/beitraege" className={btn.text}>
-            Alle Beiträge <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-          </Link>
-        }
-      >
-        {isAdmin
-          ? 'Zugänge und Abstimmungen im Überblick.'
-          : projects
-            ? undefined
-            : 'Überblick über Rubriken und Beiträge aus den Abstimmungen, die dir zugewiesen sind.'}
-      </PageHead>
-      {/* DOM order puts the tasks first on phones. */}
-      <div className={`mb-10 grid items-start gap-4 ${projects ? 'lg:grid-cols-2' : ''}`}>
-        {projects && <MyTasks user={session} />}
-        {collections}
-      </div>
-      {projects && (
-        <div className="mb-10">
-          <DocumentTiles limit={6} />
-        </div>
-      )}
-      {(isAdmin || !projects) && (
-        <section aria-labelledby="home-sammlungen" className="mb-10">
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            <h2 id="home-sammlungen" className={heading}>
-              Abstimmungen
-            </h2>
-            <Link to="/sammlungen?neu" className={btn.redaktion}>
-              <Plus aria-hidden="true" className="size-4 shrink-0" /> Neue Abstimmung
-            </Link>
-          </div>
-          {(isAdmin ? state(categories) : managerCategoriesState) ?? (
-            <ul className="mt-4 grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">
-              {allKinds.map((kind) => {
-                const mine = (categories.data ?? []).filter((c) => c.kind === kind && canEdit(user, c.id));
-                const ids = new Set(mine.map((c) => c.id));
-                const n = writableSubmissions.filter((s) => ids.has(s.category_id)).length;
-                const submissionsKind = isSubmissionCollection(kind);
-                return (
-                  <li key={kind} className="min-w-0">
-                    <Link
-                      to={`/sammlungen?klasse=${kind}`}
-                      className="flex h-full flex-col rounded-ui bg-white p-4 transition-transform hover:-translate-y-0.5 hover:bg-pop/40 active:scale-[.99] sm:p-5"
-                    >
-                      <span className="flex items-center gap-2">
-                        <KindIcon icon={kindIcon[kind]} className="size-4 text-muted" />
-                        <strong className="min-w-0 truncate text-[15px] font-bold">{kindLabel[kind]}</strong>
-                      </span>
-                      <span className="mt-5 flex items-baseline gap-2">
-                        <strong className={figure}>{categories.isPending ? '–' : mine.length}</strong>{' '}
-                        <span className="text-[13px] text-muted">
-                          {mine.length === 1 ? 'Abstimmung' : 'Abstimmungen'}
-                        </span>
-                      </span>
-                      {submissionsKind ? (
-                        <span className="mt-4 text-[13px] text-muted">
-                          <strong className="text-lg font-extrabold tabular-nums leading-tight text-ink">
-                            {submissions.isPending ? '–' : n}
-                          </strong>{' '}
-                          {n === 1 ? 'Beitrag' : 'Beiträge'}
-                        </span>
-                      ) : (
-                        <span className="mt-4 grid grid-cols-2 gap-2 text-[13px] text-muted">
-                          <span>
-                            <strong className="block text-lg font-extrabold tabular-nums leading-tight text-ink">
-                              {mine.filter((c) => c.status === 'open').length}
-                            </strong>{' '}
-                            offen
-                          </span>{' '}
-                          <span>
-                            <strong className="block text-lg font-extrabold tabular-nums leading-tight text-ink">
-                              {mine.filter((c) => c.status === 'closed').length}
-                            </strong>{' '}
-                            beendet
-                          </span>
-                        </span>
-                      )}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-      )}
-      {isAdmin ? (
-        <section aria-labelledby="home-personen" className={card}>
-          <h2 id="home-personen" className={`${heading} flex items-center gap-2`}>
-            <Users aria-hidden="true" className="size-[18px] shrink-0" />
-            Personen
-          </h2>
-          {state(users) ?? (
-            <>
-              <div className="mt-5 flex flex-wrap gap-x-10 gap-y-3">
-                <p>
-                  <strong className={figure}>{users.data?.length}</strong>
-                  <span className="mt-1.5 block text-[13px] text-muted">Angemeldet</span>
-                </p>
-                <p>
-                  <strong className={`${figure} ${waiting.length ? 'text-wait' : ''}`}>{waiting.length}</strong>
-                  <span className="mt-1.5 block text-[13px] text-muted">
-                    {waiting.length === 1 ? 'wartet' : 'warten'} auf Freigabe
-                  </span>
-                </p>
-              </div>
-              <h3 className="mt-7 flex items-center gap-2 text-sm font-bold">
-                <Hourglass aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0 text-muted" />
-                Zuletzt angemeldet, noch nicht freigegeben
-              </h3>
-              {waiting.length === 0 ? (
-                <p className="mt-2 flex items-center gap-2 text-[15px] text-muted">
-                  <UserCheck aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0" />
-                  Alle sind freigegeben.
-                </p>
-              ) : (
-                <ul aria-label="Warten auf Freigabe" className="mt-2 divide-y divide-line">
-                  {waiting.slice(0, 3).map((u) => (
-                    <li key={u.id}>
-                      <Link
-                        to="/verwaltung/personen"
-                        className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30"
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="grid size-8 flex-none place-items-center rounded-full bg-soft text-xs font-bold text-ink"
-                        >
-                          {initials(u.name) || '?'}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{u.name}</span>
-                        <span className="flex-none text-[13px] text-muted">{since(u.created_at)}</span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {waiting.length > 3 && <p className="mt-1 text-[13px] text-muted">und {waiting.length - 3} weitere</p>}
-              <Link to="/verwaltung/personen" className={`${btn.text} mt-5 self-start`}>
-                Zugänge verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-              </Link>
-              <Link to="/verwaltung/email" className={`${btn.text} mt-3 self-start`}>
-                E-Mail-Versand verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-              </Link>
-              <Link to="/verwaltung/protokoll" className={`${btn.text} mt-3 self-start`}>
-                Aktivitätsprotokoll <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-              </Link>
-              {projects && (
-                <Link to="/verwaltung/bereiche" className={`${btn.text} mt-3 self-start`}>
-                  Bereiche verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-                </Link>
-              )}
-              <DevDebug
-                label="Personen"
-                data={{
-                  total: users.data?.length ?? 0,
-                  waiting: waiting.length,
-                  admins: (users.data ?? []).filter((u) => u.role === 'admin').length,
-                }}
-              />
-            </>
-          )}
-        </section>
-      ) : (
-        <section aria-labelledby="home-beitraege" className={card}>
-          <h2 id="home-beitraege" className={`${heading} flex items-center gap-2`}>
-            <FileText aria-hidden="true" className="size-[18px] shrink-0" />
-            Gesammelte Beiträge
-          </h2>
-          <p className="mt-5">
-            <strong className={figure}>
-              {categories.isPending || submissions.isPending || categories.error || submissions.error
-                ? '–'
-                : writableSubmissions.length}
-            </strong>
-            <span className="mt-1.5 block text-[13px] text-muted">In deinen zugewiesenen Abstimmungen</span>
-          </p>
-          {categories.isPending || submissions.isPending ? (
-            <div className="mt-4">
-              <Loading />
-            </div>
-          ) : categories.error || submissions.error ? (
-            <div className="mt-4">
-              <Failure
-                error={(categories.error ?? submissions.error)!}
-                retry={() => {
-                  categories.refetch();
-                  submissions.refetch();
-                }}
-              />
-            </div>
-          ) : recentSubmissions.length === 0 ? (
-            <div className="mt-4">
-              <Empty>In deinen zugewiesenen Abstimmungen gibt es noch keine Beiträge.</Empty>
-            </div>
-          ) : (
-            <ul className="mt-3 divide-y divide-line">
-              {recentSubmissions.map((submission) => (
-                <li key={submission.id}>
-                  <Link
-                    to={`/redaktion/beitraege/${submission.id}`}
-                    className="-mx-2 flex min-w-0 items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <strong className="block truncate text-[15px] font-semibold">{submission.title}</strong>
-                      <small className="mt-0.5 block text-[13px] text-muted">
-                        {categories.data?.find((c) => c.id === submission.category_id)?.name ?? 'Beitrag'} ·{' '}
-                        {date(submission.created_at)}
-                      </small>
-                    </span>
-                    <Badge status={submission.status} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
     </>
   );
 }

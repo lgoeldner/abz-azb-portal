@@ -74,10 +74,9 @@ function DocTile({ doc }: { doc: Document }) {
 }
 
 /** Unread documents first; the server already sorts newest change first and sort is stable. */
-function Tiles({ docs, limit }: { docs: Document[]; limit?: number }) {
+function Tiles({ docs }: { docs: Document[] }) {
   const sorted = docs.toSorted((a, b) => Number(b.unread) - Number(a.unread));
   const unread = sorted.filter((doc) => doc.unread).length;
-  const shown = limit === undefined ? sorted : sorted.slice(0, limit);
   return (
     <div>
       {unread > 0 && (
@@ -91,35 +90,11 @@ function Tiles({ docs, limit }: { docs: Document[]; limit?: number }) {
           <Plus aria-hidden="true" className="size-6" />
           Neues Dokument
         </Link>
-        {shown.map((doc) => (
+        {sorted.map((doc) => (
           <DocTile key={doc.id} doc={doc} />
         ))}
       </div>
-      {limit !== undefined && (
-        <Link to="/dokumente" className={`${btn.text} mt-4 min-h-11`}>
-          Alle Dokumente
-        </Link>
-      )}
     </div>
-  );
-}
-
-/** Home page tiles, folded unless something changed. With limit only that many show, plus a link to all of them. */
-export function DocumentTiles({ limit }: { limit?: number }) {
-  const docs = useData<Document[]>('/documents');
-  return (
-    <details open={Boolean(docs.error) || Boolean(docs.data?.some((doc) => doc.unread))}>
-      <summary className="min-h-11 cursor-pointer py-2">
-        <h2 className="inline text-xl font-extrabold tracking-tight">Dokumente</h2>
-      </summary>
-      {docs.error ? (
-        <Failure error={docs.error} retry={() => docs.refetch()} />
-      ) : !docs.data ? (
-        <Loading />
-      ) : (
-        <Tiles docs={docs.data} limit={limit} />
-      )}
-    </details>
   );
 }
 

@@ -126,12 +126,6 @@ export function useView(): [View, (v: View) => void] {
 
 export const roleName = (role: User['role']) =>
   ({ student: 'Jahrgang', manager: 'Redaktion', admin: 'Administration' })[role];
-export function since(value: string | null | undefined) {
-  if (!value) return '';
-  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
-  return days <= 0 ? 'seit heute' : days === 1 ? 'seit gestern' : `seit ${days} Tagen`;
-}
-
 export function Failure({ error, retry }: { error: Error; retry?: () => void }) {
   const stale =
     error instanceof ApiError &&

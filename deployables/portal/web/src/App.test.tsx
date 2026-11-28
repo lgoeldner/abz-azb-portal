@@ -631,8 +631,8 @@ describe('navigation by view', () => {
   it('restores the view of a shared page on back navigation', async () => {
     const who = { id: 'manager-1', name: 'Sam Redaktion', role: 'manager', admitted: true, cohort_member: false };
     mount({ ...who, category_ids: ['memory'] }, { polls: [], submissions: [] });
-    const assigned = await screen.findByRole('region', { name: 'Meine Abstimmungen' });
-    fireEvent.click(within(assigned).getByRole('link', { name: 'Alle' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Redaktionsmenü' }));
+    fireEvent.click(await screen.findByRole('link', { name: /abgestimmt/ }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Redaktionsmenü' }));
     fireEvent.click(await screen.findByRole('link', { name: 'Zur Schüleransicht' }));
