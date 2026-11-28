@@ -17,13 +17,14 @@
       position: relative;
       width: var(--card-w);
       height: calc(var(--card-h) + 22px);
-      margin: 16px auto 0;
+      /* The bar (10 + 44px) holds the app name; the stack starts right under it. */
+      margin: calc(66px + env(safe-area-inset-top)) auto 0;
       touch-action: none;
       user-select: none;
       -webkit-user-select: none;
     }
     @media (min-width: 744px) {
-      .stack { height: calc(var(--card-h) + 26px); margin-top: 24px; }
+      .stack { height: calc(var(--card-h) + 26px); margin-top: calc(74px + env(safe-area-inset-top)); }
     }
     .sizer { position: absolute; width: var(--card-w); height: var(--card-h); visibility: hidden; pointer-events: none; }
 
@@ -65,11 +66,6 @@
 </head>
 <body>
   <main>
-    <header class="page hero">
-      <h1 class="large-title">AbiZeitBetrug</h1>
-      <p class="hero-sub" id="heroSub"></p>
-    </header>
-
     <div class="stack" id="stage">
       <div class="sizer" id="sizer"></div>
       <div class="commit-pill" id="commitPill"></div>
@@ -77,7 +73,6 @@
 
     <div class="page">
       <section class="section" id="sammeln"></section>
-      <p class="hint"><kbd>←</kbd> <kbd>→</kbd> blättern · <kbd>1</kbd>–<kbd>9</kbd> auswählen · <kbd>↓</kbd> / <kbd>Enter</kbd> abgeben · <kbd>⌘Z</kbd> zurückholen</p>
     </div>
   </main>
 
@@ -102,8 +97,8 @@
       dropActive: false,
       dragId: null,
       dragMode: null, // 'horiz' | 'drop' | 'scroll'
-      incomingId: null, // card being pulled back in from the left (swipe right = previous)
     };
+    const ORDER = Object.keys(Cards.POLLS);
 
     const cards = new Map();
     const stage = $('stage');
@@ -190,6 +185,10 @@
         ? smoothstep(0, ARM, state.dropPullY) : 0;
       const promote = state.dragMode === 'horiz' ? state.dragProgress : dropPromote;
 
+      // Every open card knows its place ("3/6"), counted in a fixed order, so skipping round the stack
+      // counts up and wraps, and submitting one renumbers the rest.
+      const ordered = [...state.queue].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+
       state.queue.forEach((id, depth) => {
         const c = ensureCard(id);
         if (c.mode !== 'stack') return;
@@ -202,6 +201,13 @@
           c.tOpacity = pose.opacity;
         }
         c.z = pose.z;
+        const count = ordered.length > 1 ? `${ordered.indexOf(id) + 1}/${ordered.length}` : '';
+        if (c.count !== count) {
+          c.count = count;
+          const el = c.el.querySelector('.q-count');
+          el.textContent = count;
+          el.setAttribute('aria-label', count ? `Frage ${ordered.indexOf(id) + 1} von ${ordered.length}` : '');
+        }
         c.el.dataset.depth = String(Math.min(depth, 3));
         c.el.style.setProperty('--reveal', depth === 1 ? state.dragProgress.toFixed(3) : '0');
         c.el.classList.toggle('is-top', depth === 0);
@@ -211,7 +217,6 @@
     }
 
     function resetGesture() {
-      releaseIncoming();
       state.dragProgress = 0;
       state.dropPullY = 0;
       state.dropActive = false;
@@ -239,61 +244,6 @@
         nextTop.mode = 'stack';
         nextTop.x = -dir * 160; nextTop.y = 8; nextTop.rot = -dir * 4; nextTop.opacity = 0; nextTop.vx = dir * 400;
       }
-      resetGesture();
-      syncTargets();
-      wakeLoop();
-    }
-
-    function pullPrevious() {
-      if (state.queue.length <= 1) return;
-      setArmed(false);
-      const id = state.queue.pop();
-      state.queue.unshift(id);
-      const c = ensureCard(id);
-      c.mode = 'stack';
-      c.x = -Math.min(window.innerWidth * 0.6, W + 40);
-      c.y = 10; c.rot = -7; c.scale = 0.97; c.opacity = 0;
-      c.vx = 600; c.vy = 0; c.vRot = 0;
-      resetGesture();
-      syncTargets();
-      wakeLoop();
-    }
-
-    function beginIncoming() {
-      if (state.incomingId || state.queue.length <= 1) return state.incomingId ? cards.get(state.incomingId) : null;
-      const id = state.queue[state.queue.length - 1];
-      const c = cards.get(id);
-      if (!c || c.mode !== 'stack') return null;
-      c.mode = 'incoming';
-      c.z = 60;
-      c.el.style.pointerEvents = 'none';
-      state.incomingId = id;
-      return c;
-    }
-
-    // Not far enough: the card slides back out to the left and rejoins the back of the stack.
-    function releaseIncoming() {
-      if (!state.incomingId) return;
-      const c = cards.get(state.incomingId);
-      state.incomingId = null;
-      if (!c || c.mode !== 'incoming') return;
-      c.mode = 'flying';
-      c.throwDir = -1;
-      c.vx = -900; c.vy = 0;
-      c.z = 60;
-    }
-
-    function commitIncoming(vx = 0) {
-      const id = state.incomingId;
-      const c = id && cards.get(id);
-      if (!c) return;
-      state.incomingId = null;
-      state.queue.splice(state.queue.indexOf(id), 1);
-      state.queue.unshift(id);
-      c.mode = 'stack';
-      c.vx = Math.max(0, vx) * 0.35; c.vy = 0; c.vScale = 0; c.vRot = 0;
-      c.el.style.pointerEvents = '';
-      setArmed(false);
       resetGesture();
       syncTargets();
       wakeLoop();
@@ -388,15 +338,6 @@
           continue;
         }
 
-        if (c.mode === 'incoming') {
-          c.el.style.transform = `translate3d(${c.x.toFixed(2)}px, ${c.y.toFixed(2)}px, 0) scale(${c.scale.toFixed(4)}) rotate(${c.rot.toFixed(3)}deg)`;
-          c.el.style.opacity = String(clamp(c.opacity, 0, 1));
-          c.el.style.zIndex = String(c.z);
-          c.el.dataset.depth = '0';
-          moving = true;
-          continue;
-        }
-
         if (c.mode === 'flying') {
           c.vx += c.throwDir * 1400 * dt;
           c.x += c.vx * dt;
@@ -451,8 +392,7 @@
       rafId = moving ? requestAnimationFrame(stepFrame) : 0;
     }
 
-    /* Pointer: left = next, right = previous, down = submit, up (touch) = scroll page */
-    let lastDx = 0;
+    /* Pointer: left or right = skip (the card goes to the back), down = submit, up (touch) = scroll page */
     let pid = null, sx = 0, sy = 0, startScroll = 0, didDrag = false, ptrType = 'mouse', inScroller = false;
 
     stage.addEventListener('pointerdown', (e) => {
@@ -469,7 +409,6 @@
       startScroll = window.scrollY;
       state.dragMode = null;
       state.onTop = onTop;
-      lastDx = 0;
       didDrag = false;
     });
 
@@ -509,35 +448,17 @@
         window.scrollTo(0, startScroll - dy);
       } else if (state.dragMode === 'horiz') {
         state.dropPullY = 0;
-        lastDx = dx;
         if (state.queue.length <= 1) {
           const rx = rubberBand(dx, 48);
           top.x = rx; top.y = 0; top.rot = rx * 0.035; top.scale = 1;
           state.dragProgress = 0;
-        } else if (dx < 0) {
-          // Next: the top card follows the finger off to the left.
-          releaseIncoming();
+        } else {
+          // Either way: the top card follows the finger off the stack, the next one comes forward.
           top.x = dx;
           top.y = Math.abs(dx) * 0.02;
           top.rot = dx * 0.024;
           top.scale = 1;
-          state.dragProgress = smoothstep(0, W * 0.4, -dx);
-        } else {
-          // Previous: the last card slides in from the left over the top card.
-          state.dragProgress = 0;
-          const inc = beginIncoming();
-          const span = W * 0.85;
-          const p = clamp(dx / span, 0, 1);
-          top.x = 0; top.rot = 0;
-          top.y = lerp(0, SLOT[1].y, p * 0.6);
-          top.scale = lerp(1, SLOT[1].scale, p * 0.6);
-          if (inc) {
-            inc.x = dx <= span ? dx - span : rubberBand(dx - span, 60);
-            inc.y = 12 * (1 - p);
-            inc.rot = -6 * (1 - p);
-            inc.scale = 0.97 + 0.03 * p;
-            inc.opacity = smoothstep(0, 0.4, p);
-          }
+          state.dragProgress = smoothstep(0, W * 0.4, Math.abs(dx));
         }
         syncTargets();
       } else if (state.dragMode === 'drop') {
@@ -566,11 +487,14 @@
       if (m === 'drop' && top && !Cards.isValid(top.id) && pulled > 14) Cards.shake(top.el);
 
       const vxPx = vel.get();
-      if (m === 'horiz' && state.incomingId) {
-        if (lastDx > THROW_X || vxPx > 0.5) commitIncoming(vxPx * 1000);
-        else { releaseIncoming(); syncTargets(); wakeLoop(); }
+      // A flick decides the direction unless it fights a card that is already far out; otherwise distance does.
+      let dir = 0;
+      if (m === 'horiz' && top && state.queue.length > 1) {
+        const x = top.x;
+        if (Math.abs(vxPx) > 0.5 && (Math.sign(vxPx) === Math.sign(x) || Math.abs(x) < 24)) dir = Math.sign(vxPx);
+        else if (Math.abs(x) > THROW_X && vxPx * Math.sign(x) > -0.3) dir = Math.sign(x);
       }
-      else if (m === 'horiz' && top && state.queue.length > 1 && (top.x < -THROW_X || vxPx < -0.5)) throwCardToBack(-1, vxPx * 1000);
+      if (dir) throwCardToBack(dir, vxPx * 1000);
       else if (m === 'drop' && top && state.armed) commitTopCard(true);
       else { setArmed(false); syncTargets(); wakeLoop(); }
 
@@ -593,8 +517,7 @@
       if (now < wheelLockUntil) return;
       wheelAcc += d;
       if (Math.abs(wheelAcc) > 44) {
-        if (wheelAcc > 0) throwCardToBack(-1);
-        else pullPrevious();
+        throwCardToBack(wheelAcc > 0 ? -1 : 1);
         wheelAcc = 0;
         wheelLockUntil = now + 340;
       }
@@ -613,14 +536,12 @@
         if (top && Cards.pressDigit(top.el.querySelector('.q'), top.id, Number(e.key) - 1)) e.preventDefault();
         return;
       }
-      if (e.key === 'ArrowRight') {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        // The arrow says which way the card leaves.
         e.preventDefault();
-        if (state.queue.length > 1) throwCardToBack(-1);
-        else if (top) { top.vx -= 260; wakeLoop(); }
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        if (state.queue.length > 1) pullPrevious();
-        else if (top) { top.vx += 260; wakeLoop(); }
+        const dir = e.key === 'ArrowLeft' ? -1 : 1;
+        if (state.queue.length > 1) throwCardToBack(dir);
+        else if (top) { top.vx += dir * 260; wakeLoop(); }
       } else if (e.key === 'ArrowDown' || (e.key === 'Enter' && (!e.target.closest('button, a') || e.target.closest('.q .row')))) {
         e.preventDefault();
         commitTopCard(false);
@@ -636,7 +557,7 @@
     }
 
     UI.mount({
-      title: 'AbiZeitBetrug',
+      brand: true,
       getLists: () => ({ done: state.done, closed: state.closed }),
       describe: Cards.describe,
       onRestore: restoreCard,

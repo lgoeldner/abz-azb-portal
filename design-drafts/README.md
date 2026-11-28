@@ -15,9 +15,9 @@ mechanics and visual directions before anything is built in the real portal.
 | --- | --- |
 | `index.html` | Entry page linking the drafts and visual styles |
 | `01-carousel.html` | Card carousel (swipe/scrub/arrows, pull down to submit) |
-| `02-swipe-stack.html` | Card stack (left = next, right = back, pull down to submit) |
+| `02-swipe-stack.html` | Card stack (swipe either way to skip, pull down to submit) |
 | `ios.css`, `chrome.js`, `cards.js` | Shared look, floating bars/menus and placeholder poll cards |
-| `themes.css`, `themes.js` | Style variants: Basis, Jahrbuch, Abiball, Knast (`?v=` or palette button) |
+| `themes.css`, `themes.js` | Style variants: Basis, Jahrbuch, Abiball, Knast (only via `?v=` links on the index page) |
 
 Open `index.html` directly in a browser, or see `/design-drafts/` on the Pages preview
 (copied in by `.github/workflows/pages-preview.yml`).

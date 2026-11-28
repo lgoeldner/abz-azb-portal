@@ -83,6 +83,11 @@
     return `Noch ${p.days} Tage`;
   }
 
+  const personRow = (n, on) => `
+          <button type="button" class="row pp${on ? ' on' : ''}" data-name="${esc(n)}" aria-pressed="${on}">
+            <span class="av">${esc(initials(n))}</span><span class="pp-name">${esc(n)}</span><span class="tick">${ICONS.checkSmall}</span>
+          </button>`;
+
   function bodyHtml(p) {
     if (p.kind === 'proposal') {
       return `<div class="opts grp"><div class="scroll-fade">${p.options.map((o, i) => `
@@ -95,11 +100,8 @@
     if (p.kind === 'person') {
       return `<div class="ppl">
         <label class="search">${ICONS.search}<input type="search" placeholder="Suchen" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-label="Personen suchen" /></label>
-        <div class="chips"></div>
-        <div class="ppl-list grp"><div class="scroll-fade">${COHORT.map((n) => `
-          <button type="button" class="row pp" data-name="${esc(n)}" aria-pressed="false">
-            <span class="av">${esc(initials(n))}</span><span class="pp-name">${esc(n)}</span><span class="tick">${ICONS.checkSmall}</span>
-          </button>`).join('')}
+        <div class="ppl-picked" aria-label="Ausgewählt"><div class="grp"></div></div>
+        <div class="ppl-list grp"><div class="scroll-fade">${COHORT.map((n) => personRow(n, false)).join('')}
           <div class="ppl-empty">Niemand gefunden</div>
         </div></div>
       </div>`;
@@ -119,6 +121,7 @@
     root.dataset.id = id;
     root.innerHTML = `
       <header class="q-head">
+        <span class="q-count"></span>
         <h3 class="q-title">${esc(p.title)}</h3>
         <p class="q-meta"><span class="q-rule"></span><span class="q-sep">·</span><span class="q-due${soon}">${dueText(p)}</span></p>
       </header>
@@ -131,6 +134,7 @@
     wire(root, id);
     update(root, id);
     root.querySelectorAll('.scroll-fade').forEach((el) => { el._fade = scrollFade(el); });
+    root._ready = true;
     return root;
   }
 
@@ -155,7 +159,7 @@
     const p = POLLS[id];
     root.addEventListener('click', (e) => {
       if (gesture.moved) return;
-      const hit = e.target.closest('.opt, .pp, .chip');
+      const hit = e.target.closest('.opt, .pp');
       if (!hit) return;
       const v = hit.classList.contains('opt') ? Number(hit.dataset.i) : hit.dataset.name;
       if (!toggle(id, v)) nope(hit);
@@ -170,9 +174,11 @@
         let shown = 0;
         list.querySelectorAll('.pp').forEach((row) => {
           const match = !q || row.dataset.name.toLocaleLowerCase('de').includes(q);
-          row.hidden = !match;
-          if (match) shown++;
+          row.classList.toggle('nomatch', !match);
+          applyVis(row);
+          if (!row.hidden) shown++;
         });
+        markFirst(list);
         list.classList.toggle('none', shown === 0);
         const sc = list.querySelector('.scroll-fade');
         sc.scrollTop = 0;
@@ -227,16 +233,8 @@
         o.setAttribute('aria-pressed', String(on));
       });
     } else if (p.kind === 'person') {
-      root.querySelectorAll('.pp').forEach((o) => {
-        const on = a.includes(o.dataset.name);
-        o.classList.toggle('on', on);
-        o.classList.toggle('dim', !on && full);
-        o.setAttribute('aria-pressed', String(on));
-      });
-      root.querySelector('.chips').innerHTML = a.map((n) => `
-        <button type="button" class="chip no-drag" data-name="${esc(n)}" aria-label="${esc(n)} entfernen">
-          <span class="av">${esc(initials(n))}</span><span>${esc(n)}</span>${ICONS.xmark.replace('width="17" height="17"', 'width="12" height="12"')}
-        </button>`).join('');
+      root.querySelectorAll('.ppl-list .pp').forEach((o) => o.classList.toggle('dim', full));
+      syncPicked(root, a, !!root._ready);
     } else {
       root.querySelectorAll('.w-in').forEach((inp) => {
         const i = Number(inp.dataset.i);
@@ -244,6 +242,70 @@
         inp.closest('.w-row').classList.toggle('filled', !!a[i]);
       });
     }
+  }
+
+  /* Picked people move out of the list into their own group above it (like Screen Time's
+     "Always Allowed"): the row collapses where it was and grows in up top, and the list box shrinks
+     by exactly that much, so nothing ever jumps. */
+  const ROW_EASE = 'cubic-bezier(0.32, 0.72, 0, 1)';
+  const ROW_MS = 320;
+  const SHUT = { height: '0px', minHeight: '0px', paddingTop: '0px', paddingBottom: '0px', opacity: 0 };
+  function collapse(el, done) {
+    const h = el.getBoundingClientRect().height;
+    el.style.overflow = 'hidden';
+    el.animate([{ height: h + 'px', minHeight: '0px', opacity: 1 }, SHUT], { duration: ROW_MS, easing: ROW_EASE })
+      .onfinish = () => { el.style.overflow = ''; done(); };
+  }
+  function expand(el) {
+    const h = el.getBoundingClientRect().height;
+    el.style.overflow = 'hidden';
+    el.animate([SHUT, { height: h + 'px', minHeight: '0px', opacity: 1 }], { duration: ROW_MS, easing: ROW_EASE })
+      .onfinish = () => { el.style.overflow = ''; };
+  }
+  const applyVis = (row) => { row.hidden = row.classList.contains('picked') || row.classList.contains('nomatch'); };
+  // Separators sit on top of every row except the first one that is actually shown.
+  function markFirst(list) {
+    let first = true;
+    list.querySelectorAll('.pp').forEach((r) => {
+      r.classList.toggle('first-vis', first && !r.hidden);
+      if (!r.hidden) first = false;
+    });
+  }
+
+  function syncPicked(root, names, animate) {
+    const wrap = root.querySelector('.ppl-picked');
+    const grp = wrap.firstElementChild;
+    const list = root.querySelector('.ppl-list');
+    const live = new Map([...grp.querySelectorAll('.pp:not(.leaving)')].map((r) => [r.dataset.name, r]));
+    const had = live.size > 0;
+    live.forEach((r, n) => {
+      if (names.includes(n)) return;
+      r.classList.add('leaving');
+      if (animate) collapse(r, () => r.remove()); else r.remove();
+    });
+    names.forEach((n) => {
+      if (live.has(n)) return;
+      grp.insertAdjacentHTML('beforeend', personRow(n, true));
+      if (animate) expand(grp.lastElementChild);
+    });
+    const has = names.length > 0;
+    wrap.classList.toggle('has', has);
+    if (animate && has !== had) {
+      wrap.animate([{ paddingBottom: has ? '0px' : '8px' }, { paddingBottom: has ? '8px' : '0px' }], { duration: ROW_MS, easing: ROW_EASE });
+    }
+    list.querySelectorAll('.pp').forEach((row) => {
+      const picked = names.includes(row.dataset.name);
+      if (picked === row.classList.contains('picked')) return;
+      row.classList.toggle('picked', picked);
+      if (picked && animate && !row.hidden) collapse(row, () => { applyVis(row); markFirst(list); });
+      else {
+        applyVis(row);
+        if (!picked && animate && !row.hidden) expand(row);
+      }
+    });
+    markFirst(list);
+    const sc = list.querySelector('.scroll-fade');
+    if (sc && sc._fade) { sc._fade(); setTimeout(sc._fade, ROW_MS + 20); }
   }
 
   // Number keys pick options on the focused proposal card.

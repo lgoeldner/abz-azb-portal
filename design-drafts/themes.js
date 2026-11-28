@@ -1,20 +1,11 @@
 'use strict';
-/* Character variants on top of the base prototypes. Pick one with ?v=jahrbuch|abiball|knast|basis
-   (remembered in localStorage) or with the palette button at the top right. Each theme adds colour,
-   typography and a few unexpected details through small hooks in chrome.js / cards.js. */
+/* Character variants on top of the base prototypes, picked only from the index page with
+   ?v=jahrbuch|abiball|knast (no switcher in the UI, nothing remembered: a plain URL is the real UI).
+   Each theme adds colour, typography and a few unexpected details through small hooks in chrome.js / cards.js. */
 (function () {
-  const KEY = 'abz-theme';
   const NAMES = { basis: 'Basis', jahrbuch: 'Jahrbuch', abiball: 'Abiball', knast: 'Knast' };
-  const BLURBS = {
-    basis: 'Neutral, systemnah',
-    jahrbuch: 'Papier, Serifen, Stempel',
-    abiball: 'Farbe, Konfetti, Sticker',
-    knast: '13 Jahre abgesessen',
-  };
   const qp = new URLSearchParams(location.search).get('v');
-  let v = qp && NAMES[qp] ? qp : null;
-  try { if (v) localStorage.setItem(KEY, v); else v = localStorage.getItem(KEY); } catch (e) { /* private mode */ }
-  if (!v || !NAMES[v]) v = 'basis';
+  const v = qp && NAMES[qp] ? qp : 'basis';
   document.documentElement.classList.add('t-' + v);
 
   const FONTS = {
@@ -120,7 +111,6 @@
   }
 
   const ICON = {
-    palette: svg('<path d="M12 3.2a8.8 8.8 0 0 0 0 17.6c1.05 0 1.65-.78 1.65-1.6 0-.48-.18-.86-.47-1.16-.29-.3-.47-.7-.47-1.17 0-.88.7-1.58 1.58-1.58h1.9a4.9 4.9 0 0 0 4.9-4.9c0-4.02-4.03-7.19-9.09-7.19z"/><circle cx="7.6" cy="11.4" r="1.15" fill="currentColor" stroke="none"/><circle cx="10.4" cy="7.4" r="1.15" fill="currentColor" stroke="none"/><circle cx="15" cy="7.4" r="1.15" fill="currentColor" stroke="none"/>', '0 0 24 24', 'stroke-width="1.8" width="21" height="21"'),
     check: svg('<path d="M5.3 11.6 9.5 15.6 17.3 6.6"/>', '0 0 24 24', 'stroke-width="3" width="15" height="15"'),
     handCheck: '<svg class="hand-check" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"><path pathLength="1" d="M6.5 16.8c1.9 1.3 3.7 3.5 5.2 6.6 2.4-7 7-12.7 14.2-17.4"/></svg>',
     arrow: '<svg class="hand-arrow" viewBox="0 0 60 40" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M56 6C42 4 24 9 12 28"/><path d="M10 18 11.6 29.5 22 26"/></svg>',
@@ -234,7 +224,7 @@
 
   const T = Object.assign({ name: v }, THEMES[v]);
 
-  // Palette button + menu (prototype chrome): switches variant by reloading with ?v=
+  // Rough-ink filter used by the stamps.
   const baseMount = T.mount;
   T.mount = function () {
     document.body.insertAdjacentHTML('beforeend', `<svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -244,29 +234,6 @@
         <feColorMatrix in="noise" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -2.4 1.85" result="speckle"/>
         <feComposite in="rough" in2="speckle" operator="in"/>
       </filter></svg>`);
-    const row = document.querySelector('.top-row');
-    if (row) {
-      row.insertAdjacentHTML('beforeend', `
-        <div class="theme-anchor">
-          <button class="back-btn glass theme-btn" id="themeBtn" type="button" aria-label="Stil wählen" aria-haspopup="menu">${ICON.palette}</button>
-          <div class="theme-menu" id="themeMenu" role="menu">
-            ${Object.keys(NAMES).map((k) => `
-              <button class="menu-item" role="menuitemradio" aria-checked="${k === v}" data-v="${k}" type="button">
-                <span class="mi-label"><b>${NAMES[k]}</b><small>${BLURBS[k]}</small></span>
-                <span class="mi-icon">${k === v ? ICON.check : ''}</span>
-              </button>`).join('')}
-          </div>
-        </div>`);
-      const menu = document.getElementById('themeMenu');
-      document.getElementById('themeBtn').addEventListener('click', (e) => { e.stopPropagation(); menu.classList.toggle('open'); });
-      menu.querySelectorAll('[data-v]').forEach((b) => b.addEventListener('click', () => {
-        const u = new URL(location.href);
-        u.searchParams.set('v', b.dataset.v);
-        location.href = u.toString();
-      }));
-      document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.theme-anchor')) menu.classList.remove('open'); }, true);
-      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') menu.classList.remove('open'); });
-    }
     if (baseMount) baseMount();
   };
 

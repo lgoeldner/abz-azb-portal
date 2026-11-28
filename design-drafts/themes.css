@@ -1,33 +1,6 @@
 /* Character variants (see themes.js). Each block only overrides tokens and adds its own details. */
 
 /* ───────── shared bits ───────── */
-.theme-anchor { position: relative; margin-left: auto; pointer-events: auto; }
-.theme-btn { color: var(--label); }
-.theme-menu {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  width: 240px;
-  padding: 6px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.9);
-  -webkit-backdrop-filter: blur(24px) saturate(190%);
-  backdrop-filter: blur(24px) saturate(190%);
-  box-shadow: 0 18px 48px -12px rgba(0, 0, 0, 0.24), 0 2px 8px rgba(0, 0, 0, 0.05);
-  transform-origin: calc(100% - 22px) -30px;
-  transform: scale(0.4);
-  opacity: 0;
-  pointer-events: none;
-  transition: transform 380ms var(--ease-ios), opacity 160ms ease;
-  z-index: 5;
-}
-.theme-menu.open { transform: none; opacity: 1; pointer-events: auto; }
-.theme-menu .menu-item { height: 52px; color: #000; font-family: var(--font); text-transform: none; letter-spacing: -0.02em; }
-.theme-menu .mi-label { display: flex; flex-direction: column; }
-.theme-menu .mi-label b { font-size: 16px; line-height: 20px; font-weight: 600; }
-.theme-menu .mi-label small { font-size: 13px; line-height: 17px; color: rgba(60, 60, 67, 0.6); }
-.theme-menu .mi-icon { color: #0088FF; }
-
 .stamp {
   position: absolute;
   z-index: 20;

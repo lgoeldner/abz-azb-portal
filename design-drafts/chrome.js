@@ -44,6 +44,8 @@
     photo: `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M5 4h14a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3zm3.5 4.2a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6zM4.5 17.5h15l-4.4-5.5a1 1 0 0 0-1.56 0l-3.1 3.85-1.58-1.9a1 1 0 0 0-1.54 0L4.5 17.5z"/></svg>`,
     quote: `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 5h4.2A2.3 2.3 0 0 1 11 7.3v5.2c0 4.2-2.2 6.8-6.4 7.5a.8.8 0 0 1-.92-.8v-1.7c0-.4.28-.74.67-.84 1.85-.46 2.85-1.56 3.05-3.46H5.2A2.2 2.2 0 0 1 3 11V7.2A2.2 2.2 0 0 1 4.5 5zm10.5 0h4.2A2.3 2.3 0 0 1 21.5 7.3v5.2c0 4.2-2.2 6.8-6.4 7.5a.8.8 0 0 1-.92-.8v-1.7c0-.4.28-.74.67-.84 1.85-.46 2.85-1.56 3.05-3.46h-2.2A2.2 2.2 0 0 1 13.5 11V7.2A2.2 2.2 0 0 1 15 5z"/></svg>`,
     sparkle: `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.4c.42 0 .79.26.93.66l1.95 5.66 5.66 1.95a.98.98 0 0 1 0 1.86l-5.66 1.95-1.95 5.66a.98.98 0 0 1-1.86 0l-1.95-5.66-5.66-1.95a.98.98 0 0 1 0-1.86l5.66-1.95 1.95-5.66c.14-.4.51-.66.93-.66z"/></svg>`,
+    // The portal's logo (deployables/portal/web/src/App.tsx, Mark): a tilted notebook with the year on it.
+    mark: `<svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><g transform="rotate(-7 20 20)"><path d="M5 4h30a2 2 0 0 1 2 2v28a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" fill="#15181F"/><path d="M37 6v11H26a2 2 0 0 1-2-2V4h11a2 2 0 0 1 2 2z" fill="#D81E44"/><path d="M24 4v11a2 2 0 0 0 2 2h11" fill="none" stroke-width="1.5" stroke="var(--bg)"/><text x="4.5" y="31" font-size="21" font-weight="800" letter-spacing="-1.5" fill="#C8F23C" style="font-family: inherit">27</text><rect x="6" y="9" width="13" height="2.4" rx="1.2" fill="#F5F6EC"/></g></svg>`,
     bulb: `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5a6.8 6.8 0 0 0-4.1 12.22c.68.52 1.1 1.32 1.1 2.18v.35A1.25 1.25 0 0 0 10.25 18.5h3.5A1.25 1.25 0 0 0 15 17.25v-.35c0-.86.42-1.66 1.1-2.18A6.8 6.8 0 0 0 12 2.5zM9.6 20a.9.9 0 0 0 0 1.8h4.8a.9.9 0 1 0 0-1.8H9.6z"/></svg>`,
   };
 
@@ -187,8 +189,10 @@
     top.innerHTML = `
       <div class="edge-top"><div class="pblur"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
       <div class="top-row">
-        <a class="back-btn glass" href="${o.backHref || './index.html'}" aria-label="Zurück zu Konzepte">${ICONS.back}</a>
-        <span class="inline-title">${o.title}</span>
+        ${o.backHref ? `<a class="back-btn glass" href="${o.backHref}" aria-label="Zurück">${ICONS.back}</a>` : ''}
+        ${o.brand
+          ? `<span class="brand">${ICONS.mark}<span class="brand-word">AbiZeit<span>Betrug</span></span></span>`
+          : `<span class="inline-title">${o.title}</span>`}
       </div>`;
     document.body.prepend(top);
     const tint = document.createElement('div');
@@ -203,7 +207,7 @@
     dock.setAttribute('aria-label', 'Leiste');
     dock.innerHTML = `
       <div class="dock-row">
-        <button class="dock-capsule glass" id="abgBtn" type="button" aria-haspopup="dialog" aria-expanded="false">
+        <button class="dock-capsule" id="abgBtn" type="button" aria-haspopup="dialog" aria-expanded="false">
           <span class="ring" id="ring">
             <svg class="ring-svg" viewBox="0 0 36 36" fill="none">
               <circle class="ring-track" cx="18" cy="18" r="14.5" stroke-width="3.5"/>
@@ -220,31 +224,40 @@
           <span class="cap-chev">${ICONS.chevUp}</span>
         </button>
         <div class="menu-anchor">
-          <button class="dock-circle glass" id="accountBtn" type="button" aria-label="Konto" aria-haspopup="menu">
+          <button class="dock-circle" id="accountBtn" type="button" aria-label="Konto" aria-haspopup="menu">
             ${ICONS.person}<span class="badge-dot" id="badgeDot"></span>
           </button>
           <div class="menu" id="accountMenu" role="menu">
             <button class="menu-item" id="steckbriefItem" type="button" role="menuitem">
-              <span class="mi-label">Steckbrief</span><span class="mi-badge" id="steckbriefBadge">Offen</span><span class="mi-icon">${ICONS.steckbrief}</span>
+              <span class="mi-icon">${ICONS.steckbrief}</span><span class="mi-label">Steckbrief</span><span class="mi-badge" id="steckbriefBadge">Offen</span>
             </button>
             <button class="menu-item" type="button" role="menuitem" data-close>
-              <span class="mi-label">Einstellungen</span><span class="mi-icon">${ICONS.gear}</span>
+              <span class="mi-icon">${ICONS.gear}</span><span class="mi-label">Einstellungen</span>
             </button>
             <div class="menu-sep"></div>
             <button class="menu-item destructive" type="button" role="menuitem" data-close>
-              <span class="mi-label">Abmelden</span><span class="mi-icon">${ICONS.logout}</span>
+              <span class="mi-icon">${ICONS.logout}</span><span class="mi-label">Abmelden</span>
             </button>
           </div>
         </div>
       </div>`;
     edge.style.webkitMaskImage = edge.style.maskImage = `url(${easedTint({ maxAlpha: 0.9, reverse: true })})`;
-    document.body.append(edge, dock);
+
+    // Everything that floats (bar, account menu, Abgegeben) lives on one layer with one shared shadow,
+    // so a menu never casts a shadow onto the bar it comes out of. The scrim sits underneath that layer.
+    const layer = document.createElement('div');
+    layer.className = 'float-layer';
+    const scrimRoot = document.createElement('div');
+    scrimRoot.className = 'scrim-root';
+    scrimRoot.id = 'scrimRoot';
+    scrimRoot.innerHTML = '<div class="scrim" id="scrim"></div>';
+    document.body.append(edge, scrimRoot, layer);
+    layer.append(dock);
 
     const panelRoot = document.createElement('div');
     panelRoot.className = 'panel-root';
     panelRoot.id = 'panelRoot';
     panelRoot.innerHTML = `
-      <div class="scrim" id="scrim"></div>
       <section class="panel" id="panel" role="dialog" aria-modal="true" aria-labelledby="panelTitle">
         <div id="panelGrip">
           <div class="panel-edge"><div class="pblur"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
@@ -256,7 +269,7 @@
         </div>
         <div class="panel-body" id="panelBody"></div>
       </section>`;
-    document.body.append(panelRoot);
+    layer.append(panelRoot);
 
     const sammeln = $('sammeln');
     if (sammeln) {
@@ -313,11 +326,11 @@
       const y = Math.max(0, window.scrollY);
       top.classList.toggle('scrolled', y > 2);
       top.classList.toggle('collapsed', !!title && title.getBoundingClientRect().bottom < 62);
-      // The edge always starts at the top of the screen. At rest it only covers the bar area above the
-      // large title (58px); as content scrolls under the bar it grows to its full 108px. On phones the title
-      // sits directly under the back button, so it reaches full height within the first ~24px of scrolling;
-      // on wide screens nothing is under the bar for a while, so it grows over ~90px.
-      const REST = 58, FULL = 108, ramp = isWide() ? 90 : 24;
+      // The edge always starts at the top of the screen. At rest it only covers the bar itself (58px); as
+      // content scrolls under the bar it grows to its full 108px. Pages with a large title (subpages) have
+      // nothing under the bar for a while on wide screens, so there it grows over ~90px; otherwise the
+      // content sits right under the bar and the edge reaches full height within the first ~24px.
+      const REST = 58, FULL = 108, ramp = title && isWide() ? 90 : 24;
       const h = REST + (FULL - REST) * Math.min(1, y / ramp);
       edge.style.height = `calc(${h.toFixed(1)}px + env(safe-area-inset-top))`;
     };
@@ -326,13 +339,18 @@
     onScroll();
   }
 
-  function closeMenu() { $('accountMenu').classList.remove('open'); }
+  // While one popup is open, the other button in the bar is muted (that is how you see where it came from).
+  function setMenu(open) {
+    $('accountMenu').classList.toggle('open', open);
+    $('abgBtn').classList.toggle('muted', open);
+  }
+  function closeMenu() { setMenu(false); }
   function wireDock() {
     const menu = $('accountMenu');
     $('accountBtn').addEventListener('click', (e) => {
       e.stopPropagation();
       if (isPanelOpen()) closePanel();
-      menu.classList.toggle('open');
+      setMenu(!menu.classList.contains('open'));
     });
     $('steckbriefItem').addEventListener('click', () => { opts.onSteckbrief && opts.onSteckbrief(); closeMenu(); });
     menu.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', closeMenu));
@@ -362,47 +380,50 @@
     });
   }
 
-  /* Abgegeben list: floating sheet on phones, popover above the capsule on wide screens */
+  /* Abgegeben list: a popover above the bar, exactly as wide as the bar, growing out of the capsule */
   const isPanelOpen = () => $('panelRoot').classList.contains('shown');
   let closeTimer = null;
   let panelFade = () => {};
 
   function positionPanel() {
     const panel = $('panel');
-    if (!isWide()) { panel.style.left = ''; panel.style.bottom = ''; return; }
-    const r = $('abgBtn').getBoundingClientRect();
-    const half = 200 + 12;
-    panel.style.left = clamp(r.left + r.width / 2, half, window.innerWidth - half) + 'px';
-    panel.style.bottom = (window.innerHeight - r.top + 12) + 'px';
+    const row = document.querySelector('.dock-row').getBoundingClientRect();
+    const cap = $('abgBtn').getBoundingClientRect();
+    panel.style.left = row.left + 'px';
+    panel.style.width = row.width + 'px';
+    panel.style.bottom = (window.innerHeight - row.top + 10) + 'px';
+    panel.style.transformOrigin = `${(cap.left + cap.width / 2 - row.left).toFixed(1)}px calc(100% + ${(10 + cap.height / 2).toFixed(1)}px)`;
   }
 
+  // The panel and its scrim live on different layers but open and close together.
+  const panelRoots = () => [$('panelRoot'), $('scrimRoot')];
   function openPanel() {
     const root = $('panelRoot');
     clearTimeout(closeTimer);
     closeMenu();
-    root.classList.add('open');
-    $('panel').style.setProperty('--drag-y', '0px');
+    panelRoots().forEach((r) => r.classList.add('open'));
     positionPanel();
     hasRendered = false;
     refreshPanel();
     $('panelBody').scrollTop = 0;
     $('panel').classList.remove('scrolled');
     $('abgBtn').setAttribute('aria-expanded', 'true');
+    $('accountBtn').classList.add('muted');
     void root.offsetWidth;
-    root.classList.add('shown');
+    panelRoots().forEach((r) => r.classList.add('shown'));
   }
 
   function closePanel() {
     const root = $('panelRoot');
-    root.classList.remove('shown');
+    panelRoots().forEach((r) => r.classList.remove('shown'));
     $('abgBtn').setAttribute('aria-expanded', 'false');
+    $('accountBtn').classList.remove('muted');
     clearTimeout(closeTimer);
     closeTimer = setTimeout(() => {
       if (!root.classList.contains('shown')) {
-        root.classList.remove('open');
-        $('panel').style.setProperty('--drag-y', '0px');
+        panelRoots().forEach((r) => r.classList.remove('open'));
       }
-    }, 540);
+    }, 420);
   }
 
   function wirePanel() {
@@ -412,35 +433,6 @@
     const body = $('panelBody');
     body.addEventListener('scroll', () => $('panel').classList.toggle('scrolled', body.scrollTop > 2), { passive: true });
     panelFade = scrollFade(body, { top: false });
-
-    // Drag the sheet down to dismiss (phones).
-    const grip = $('panelGrip');
-    const panel = $('panel');
-    let d = null;
-    grip.addEventListener('pointerdown', (e) => {
-      if (isWide() || e.target.closest('button')) return;
-      d = { id: e.pointerId, y0: e.clientY, ly: e.clientY, lt: performance.now(), v: 0, dy: 0 };
-      panel.classList.add('dragging');
-      grip.setPointerCapture(e.pointerId);
-    });
-    grip.addEventListener('pointermove', (e) => {
-      if (!d || d.id !== e.pointerId) return;
-      const now = performance.now();
-      d.v = (e.clientY - d.ly) / Math.max(1, now - d.lt);
-      d.ly = e.clientY; d.lt = now;
-      d.dy = e.clientY - d.y0;
-      const y = d.dy >= 0 ? d.dy : -rubberBand(-d.dy, 36);
-      panel.style.setProperty('--drag-y', y + 'px');
-    });
-    const end = (e) => {
-      if (!d || d.id !== e.pointerId) return;
-      panel.classList.remove('dragging');
-      if (d.dy > 110 || d.v > 0.65) closePanel();
-      else panel.style.setProperty('--drag-y', '0px');
-      d = null;
-    };
-    grip.addEventListener('pointerup', end);
-    grip.addEventListener('pointercancel', end);
   }
 
   let hasRendered = false;

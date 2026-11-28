@@ -17,11 +17,12 @@
     .carousel {
       --card-w: var(--col);
       position: relative;
-      margin-top: 16px;
+      /* The bar (10 + 44px) holds the app name; the cards start right under it. */
+      margin-top: calc(66px + env(safe-area-inset-top));
       overflow-x: clip;
       overflow-y: visible;
     }
-    @media (min-width: 744px) { .carousel { margin-top: 24px; } }
+    @media (min-width: 744px) { .carousel { margin-top: calc(74px + env(safe-area-inset-top)); } }
     .sizer { position: absolute; width: var(--card-w); height: var(--card-h); visibility: hidden; pointer-events: none; }
     .ring-viewport {
       position: relative;
@@ -98,11 +99,6 @@
 </head>
 <body>
   <main>
-    <header class="page hero">
-      <h1 class="large-title">AbiZeitBetrug</h1>
-      <p class="hero-sub" id="heroSub"></p>
-    </header>
-
     <div class="carousel" id="carousel">
       <div class="sizer" id="sizer"></div>
       <div class="ring-viewport" id="viewport">
@@ -115,7 +111,6 @@
 
     <div class="page">
       <section class="section" id="sammeln"></section>
-      <p class="hint"><kbd>←</kbd> <kbd>→</kbd> blättern · <kbd>1</kbd>–<kbd>9</kbd> auswählen · <kbd>↓</kbd> / <kbd>Enter</kbd> abgeben · <kbd>⌘Z</kbd> zurückholen</p>
     </div>
   </main>
 
@@ -627,7 +622,7 @@
     });
 
     UI.mount({
-      title: 'AbiZeitBetrug',
+      brand: true,
       getLists: () => ({ done: state.done, closed: state.closed }),
       describe: Cards.describe,
       onRestore: restoreCard,
