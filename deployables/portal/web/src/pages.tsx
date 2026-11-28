@@ -60,20 +60,10 @@ function photoValidationError(files: File[], alreadyAttached = 0) {
 }
 const submittable = (c: Category) => isSubmissionCollection(c.kind);
 
-// One look for quotes: the paper with large marks and the attribution below it,
+// One look for quotes: free-standing display type with the attribution below it,
 // whether the quote is being written, read or edited.
 function QuotePaper({ children }: { children: ReactNode }) {
-  return (
-    <span className="quote-paper">
-      <span className="quote-mark quote-mark-open" aria-hidden="true">
-        „
-      </span>
-      {children}
-      <span className="quote-mark quote-mark-close" aria-hidden="true">
-        “
-      </span>
-    </span>
-  );
+  return <span className="quote-paper">{children}</span>;
 }
 
 type QuoteDraft = { title: string; body: string };
@@ -848,7 +838,7 @@ export function ContributionDetail() {
               />
               {s.context && (
                 <div className="border-t border-line pt-4">
-                  <h3 className="text-sm font-semibold text-muted">Kontext & Hinweise</h3>
+                  <h3 className="text-sm">Kontext & Hinweise</h3>
                   <p className="mt-1 whitespace-pre-wrap break-words text-[15px]">{s.context}</p>
                 </div>
               )}
@@ -873,11 +863,15 @@ export function ContributionDetail() {
                 )}
               </div>
               {(s.body || !isPhoto) && (
-                <p className="mt-4 whitespace-pre-wrap break-words text-[15px]">{s.body || 'Kein Text hinzugefügt.'}</p>
+                <p
+                  className={`reading mt-4 whitespace-pre-wrap break-words text-[15px] ${s.body ? 'reading-lead' : ''}`}
+                >
+                  {s.body || 'Kein Text hinzugefügt.'}
+                </p>
               )}
               {s.context && (
                 <div className="mt-5 border-t border-line pt-4">
-                  <h3 className="text-sm font-semibold text-muted">Kontext & Hinweise</h3>
+                  <h3 className="text-sm">Kontext & Hinweise</h3>
                   <p className="mt-1 whitespace-pre-wrap break-words text-[15px]">{s.context}</p>
                 </div>
               )}

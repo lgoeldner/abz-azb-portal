@@ -36,15 +36,15 @@ export const btn = {
     'inline-flex items-center justify-center gap-2 rounded-full bg-pop px-5 py-2.5 text-[15px] font-bold text-ink transition-transform hover:-translate-y-0.5 active:scale-95',
   redaktion:
     'inline-flex items-center justify-center gap-3 rounded-full bg-redaktion px-6 py-3 text-[15px] font-bold text-white transition-transform hover:bg-redaktion-dark active:scale-95 hover:-translate-y-0.5',
-  text: 'inline-flex items-center gap-2 bg-transparent p-0 text-sm font-bold text-ink underline decoration-2 underline-offset-4 decoration-pop hover:decoration-accent hover:text-accent-dark',
+  text: 'inline-flex items-center gap-2 bg-transparent p-0 text-sm font-bold text-ink underline decoration-2 underline-offset-4 decoration-accent/40 hover:decoration-accent hover:text-accent-dark',
   danger: 'inline-flex items-center gap-2 bg-transparent p-0 text-sm font-bold text-bad hover:underline',
 };
 export const field =
-  'mt-1.5 block font-normal min-h-12 w-full rounded-ui border-2 border-line bg-white px-4 py-2 text-[15px] text-ink placeholder:text-muted/70 focus:border-ink';
+  'mt-1.5 block font-normal min-h-12 w-full rounded-ui border-2 border-line bg-white px-4 py-2 text-[15px] text-ink placeholder:text-muted focus:border-ink';
 export const label = 'block text-sm font-bold';
 export const panel = 'rounded-ui bg-soft p-5 sm:p-6';
-export const heading = 'text-xl font-extrabold tracking-tight';
-export const card = 'flex min-w-0 flex-col rounded-ui bg-white p-5 sm:p-6';
+export const heading = 'text-xl font-bold tracking-tight';
+export const card = 'flex min-w-0 flex-col rounded-ui border border-line bg-white p-5 sm:p-6';
 export const notice = 'rounded-ui bg-soft px-4 py-3 text-sm';
 
 // Floating controls share one geometry so the corners stay concentric: 48px items, padding = gap = 6px,
@@ -162,7 +162,7 @@ export function Loading() {
 }
 export function Empty({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-32 flex-col items-center justify-center rounded-ui border-2 border-dashed border-pill px-6 py-8 text-center text-sm text-muted [&_a]:font-semibold [&_a]:text-ink [&_a]:underline">
+    <div className="flex min-h-32 flex-col items-center justify-center rounded-ui bg-soft px-6 py-8 text-center text-sm text-muted [&_a]:font-semibold [&_a]:text-ink [&_a]:underline">
       {children}
     </div>
   );
@@ -230,8 +230,8 @@ export function PageHead({ title, children, action }: { title: string; children?
   return (
     <header className="mb-10 flex flex-wrap items-start justify-between gap-4">
       <div className="min-w-0">
-        <h1 className="text-4xl font-extrabold leading-[1.05] tracking-tighter sm:text-5xl">{title}</h1>
-        {children && <p className="mt-2 max-w-2xl text-[15px] text-muted">{children}</p>}
+        <h1 className="text-4xl leading-[1.05] sm:text-5xl">{title}</h1>
+        {children && <p className="mt-2 max-w-2xl text-[15px] text-ink-soft">{children}</p>}
       </div>
       {action}
     </header>

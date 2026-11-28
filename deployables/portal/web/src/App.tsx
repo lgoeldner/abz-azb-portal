@@ -78,9 +78,9 @@ export function App() {
   if (!me.data.user.admitted)
     return (
       <main className="grid min-h-screen place-items-center p-6">
-        <section className="flex w-full max-w-md flex-col items-start gap-5 rounded-ui bg-white p-6 sm:p-8">
+        <section className="flex w-full max-w-md flex-col items-start gap-5 rounded-ui border border-line bg-white p-6 sm:p-8">
           <Brand />
-          <h1 className="text-3xl font-extrabold tracking-tight">Dein Platz ist reserviert.</h1>
+          <h1 className="text-3xl">Dein Platz ist reserviert.</h1>
           <p className="text-[15px] text-muted">
             Die Administration muss deinen Zugang noch freigeben. Melde dich beim Abizeitungsteam.
           </p>
@@ -291,11 +291,11 @@ function Login() {
         <div>
           <span
             aria-hidden="true"
-            className="block select-none -rotate-6 text-[min(40vw,15rem)] font-extrabold leading-[.8] tracking-tighter text-pop"
+            className="block select-none -rotate-6 font-display text-[min(40vw,15rem)] font-extrabold leading-[.8] tracking-tighter text-accent"
           >
             27
           </span>
-          <h1 className="mt-8 text-5xl font-extrabold leading-[1.02] tracking-tighter sm:text-7xl">
+          <h1 className="mt-8 text-5xl leading-[1.02] sm:text-7xl">
             Die beste Zeit.
             <br />
             <span className="text-muted">Zum Festhalten.</span>
@@ -310,7 +310,7 @@ function Login() {
       </section>
       <section className="flex items-center bg-chrome p-6 sm:p-10 lg:p-14">
         <div className="w-full max-w-md rounded-ui bg-white p-6 sm:p-8">
-          <h2 className="text-3xl font-extrabold tracking-tight">Schön, dass du da bist.</h2>
+          <h2 className="text-3xl font-bold tracking-tight">Schön, dass du da bist.</h2>
           <p className="mt-3 text-[15px] text-muted">
             Melde dich an, um Erinnerungen einzureichen und bei unseren Abstimmungen mitzumachen.
           </p>
@@ -556,7 +556,7 @@ function StudentHome() {
                   <li key={collection.id} className="min-w-0">
                     <Link
                       to={`/sammlungen/${collection.id}`}
-                      className="flex h-full flex-col gap-3 rounded-ui bg-white p-5 transition-colors hover:bg-soft"
+                      className="flex h-full flex-col gap-3 rounded-ui border border-line bg-white p-5 transition-colors hover:bg-soft"
                     >
                       <span className="flex items-center gap-2 text-sm text-muted">
                         <KindIcon icon={kindIcon[collection.kind]} />

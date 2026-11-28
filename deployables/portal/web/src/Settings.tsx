@@ -9,7 +9,7 @@ export function Settings() {
       <PageHead title="Einstellungen">Dein Konto: E-Mail-Benachrichtigungen, Passkeys und Google-Anmeldung.</PageHead>
       <div className="space-y-6">
         <section className={`${panel} space-y-3`} aria-labelledby="settings-email">
-          <h2 id="settings-email" className="text-xl font-extrabold tracking-tight">
+          <h2 id="settings-email" className="text-xl font-bold tracking-tight">
             E-Mail-Benachrichtigungen
           </h2>
           <Preference />

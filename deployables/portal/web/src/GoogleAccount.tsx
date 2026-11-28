@@ -38,7 +38,7 @@ export function GoogleAccount() {
   };
   return (
     <section className={`${panel} space-y-4`} aria-labelledby="google-account">
-      <h2 id="google-account" className="text-xl font-extrabold tracking-tight">
+      <h2 id="google-account" className="text-xl font-bold tracking-tight">
         Google
       </h2>
       <p className="text-[15px] text-muted">

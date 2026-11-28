@@ -29,9 +29,9 @@ export function ConsentStep({
   const action = useAction();
   return (
     <main className="grid min-h-screen place-items-center p-6">
-      <section className="flex w-full max-w-xl flex-col items-start gap-5 rounded-ui bg-white p-6 sm:p-8">
+      <section className="flex w-full max-w-xl flex-col items-start gap-5 rounded-ui border border-line bg-white p-6 sm:p-8">
         {brand}
-        <h1 className="text-3xl font-extrabold tracking-tight">Bevor es losgeht</h1>
+        <h1 className="text-3xl">Bevor es losgeht</h1>
         {consent.isPending ? (
           <Loading />
         ) : consent.error ? (

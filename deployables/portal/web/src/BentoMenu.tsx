@@ -24,7 +24,7 @@ const grid =
   'grid grid-flow-row-dense auto-rows-[84px] grid-cols-4 gap-2 min-[651px]:auto-rows-[88px] min-[651px]:grid-cols-6';
 const lift =
   'transition-[translate,box-shadow] duration-100 hover:-translate-y-0.5 hover:shadow-[0_3px_0_var(--color-ink)] active:translate-y-0 active:shadow-none';
-const figure = 'text-2xl font-extrabold leading-tight tracking-tight tabular-nums';
+const figure = 'font-display text-2xl font-extrabold leading-tight tracking-tight tabular-nums';
 const caption = 'text-[13px] font-semibold leading-tight';
 const wide = 'col-span-2';
 const small = 'items-center px-1 text-center';
@@ -61,7 +61,7 @@ export function BentoMenu({ container }: { container: HTMLElement | null }) {
           <>
             <span
               aria-hidden="true"
-              className="absolute right-[3px] top-[3px] size-3.5 rounded-full border-2 border-white bg-[#d81e44]"
+              className="absolute right-[3px] top-[3px] size-3.5 rounded-full border-2 border-white bg-[#d41f2b]"
             />
             <span className="sr-only">, neue Dokumente</span>
           </>
@@ -244,7 +244,7 @@ function Bento() {
           <>
             <Tile to="/dokumente" className={small}>
               {!!unread && (
-                <span aria-hidden="true" className="absolute left-2.5 top-2.5 size-2.5 rounded-full bg-[#d81e44]" />
+                <span aria-hidden="true" className="absolute left-2.5 top-2.5 size-2.5 rounded-full bg-[#d41f2b]" />
               )}
               <span className={figure}>{unread ?? '–'}</span>{' '}
               <span className="text-xs font-semibold leading-tight">
@@ -267,7 +267,7 @@ function Bento() {
         </Tile>
         <Tile
           to="/"
-          tone="bg-[#15181f] text-[#c8f23c]"
+          tone="bg-[#141413] text-[#f8dbdd]"
           className="col-span-4 !flex-row items-center !justify-between !gap-2 min-[651px]:col-span-2"
         >
           <span className="text-base font-bold leading-tight">Zur Schüleransicht</span>

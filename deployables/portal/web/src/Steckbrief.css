@@ -218,7 +218,7 @@
 .sb-stamp text {
   fill: var(--color-accent);
   stroke: none;
-  font: 800 25px var(--font-sans);
+  font: 800 25px var(--font-display);
   letter-spacing: 0.02em;
 }
 .sb-doodle {
@@ -254,7 +254,6 @@
 .sb-photo {
   position: relative;
   width: min(100%, 12.5rem);
-  border: 1px solid var(--color-line);
   background: white;
   padding: 0.6rem 0.6rem 0.5rem;
   box-shadow: 0 10px 18px -14px rgb(21 24 31 / 0.55);
@@ -269,7 +268,7 @@
   aspect-ratio: 4 / 5;
   place-items: center;
   overflow: hidden;
-  background: var(--color-soft);
+  background: var(--color-photo);
 }
 label.sb-photo-frame {
   cursor: pointer;
@@ -345,9 +344,7 @@ label.sb-photo-frame {
   padding: 0;
   color: var(--color-muted);
   font-size: 0.74rem;
-  font-weight: 800;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font-weight: 700;
 }
 .sb-input,
 .sb-value {
@@ -386,7 +383,7 @@ label.sb-photo-frame {
   field-sizing: content;
 }
 :is(.sb-input, .sb-ruled)::placeholder {
-  color: color-mix(in srgb, var(--color-muted) 55%, white);
+  color: var(--color-muted);
   font-weight: 500;
   opacity: 1;
 }

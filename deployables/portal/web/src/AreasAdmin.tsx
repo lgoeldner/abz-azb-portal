@@ -137,7 +137,7 @@ function AreaRow({ area, options }: { area: Area; options: PeoplePickerOption[] 
   return (
     <li className={panel}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="min-w-0 break-words text-lg font-extrabold">{area.name}</h3>
+        <h3 className="min-w-0 break-words text-lg font-bold">{area.name}</h3>
         {area.reviewers.length === 0 && (
           <span className="inline-flex items-center rounded-full bg-bad-tint px-3 py-1 text-xs font-bold text-bad">
             Keine Reviewer: Tickets dieses Bereichs können nicht abgenommen werden

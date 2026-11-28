@@ -1,18 +1,25 @@
 @import 'tailwindcss';
 
-/* Brand tokens. Everything else is a Tailwind utility in the components. */
+/* Brand tokens, following the Abizeitung article style guide (docs/style-guide.md).
+   Everything else is a Tailwind utility in the components. */
 @theme {
-  --font-sans: 'Bricolage Grotesque Variable', 'Avenir Next', 'Segoe UI', sans-serif;
-  --color-paper: #f5f6ec;
-  --color-ink: #15181f;
-  --color-muted: #5d6270;
-  --color-line: #d6dac0;
-  --color-soft: #e8ebd5;
-  --color-chrome: #e4e8cc;
-  --color-pill: #d3d9ad;
-  --color-pop: #c8f23c;
-  --color-accent: #d81e44;
-  --color-accent-dark: #b01236;
+  --font-sans: 'Figtree Variable', 'Avenir Next', 'Segoe UI', sans-serif;
+  --font-serif: 'Instrument Serif', Georgia, serif;
+  --font-display: 'Poppins', 'Avenir Next', 'Segoe UI', sans-serif;
+  --font-body: 'Merriweather Variable', Georgia, serif;
+  --color-paper: #fff;
+  --color-ink: #141413;
+  --color-ink-soft: #2b2926;
+  --color-muted: #5c5750;
+  --color-photo: #e4e0d6;
+  --color-line: #e4e0d6;
+  --color-soft: #f4f2ed;
+  --color-chrome: #f4f2ed;
+  --color-pill: #e9e6de;
+  /* The red is provisional: change --color-accent only, the tints follow. */
+  --color-accent: #d41f2b;
+  --color-accent-dark: color-mix(in srgb, var(--color-accent) 80%, black);
+  --color-pop: color-mix(in srgb, var(--color-accent) 16%, white);
   /* Actions that lead into the Redaktion are blue in both views. */
   --color-redaktion: #1d5fbf;
   --color-redaktion-dark: #16488e;
@@ -37,11 +44,17 @@
     font-family: var(--font-sans);
     line-height: 1.5;
   }
-  h1,
+  h1 {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-synthesis: none;
+    letter-spacing: -0.012em;
+    text-wrap: balance;
+  }
   h2,
   h3 {
-    font-weight: 800;
-    letter-spacing: -0.025em;
+    font-weight: 700;
+    letter-spacing: -0.01em;
   }
   h1,
   h2,
@@ -96,14 +109,11 @@
 }
 [data-workspace='redaktion'] h1 {
   font-size: 28px;
-  font-weight: 600;
   line-height: 1.2;
-  letter-spacing: -0.025em;
 }
 [data-workspace='redaktion'] h2,
 [data-workspace='redaktion'] h3 {
   font-size: 18px;
-  font-weight: 600;
 }
 [data-workspace='redaktion'] strong {
   font-weight: 600;
@@ -167,6 +177,22 @@ body:has([data-workspace='redaktion']) {
   background: #f4f5f6;
 }
 
+/* Contribution text as it will read in the Abizeitung. */
+.reading,
+.md-editor[data-readonly] .milkdown .ProseMirror p {
+  font-family: var(--font-body);
+  font-weight: 300;
+}
+.reading-lead {
+  display: flow-root;
+}
+.reading-lead::first-letter {
+  float: left;
+  margin-right: 0.08em;
+  color: var(--color-accent);
+  font: 400 4.1em / 0.85 var(--font-serif);
+}
+
 /* Quote submissions use the title as their attribution and keep the quotation itself in the foreground. */
 .quote-submission-form {
   padding: clamp(1.25rem, 4vw, 2.5rem);
@@ -183,21 +209,22 @@ body:has([data-workspace='redaktion']) {
   display: block;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--color-line) 72%, white);
   border-radius: 12px;
+}
+.quote-paper:has(textarea) {
   background: white;
 }
 .quote-textarea,
 .quote-text {
   display: block;
   width: 100%;
-  min-height: 18rem;
-  padding: 3.25rem 3.75rem;
+  padding: 1.25rem;
   color: var(--color-ink);
-  font: 500 clamp(2rem, 4vw, 2.5rem) / 1.35 var(--font-sans);
-  letter-spacing: -0.035em;
+  font: 600 clamp(2rem, 4vw, 2.5rem) / 1.35 var(--font-display);
+  letter-spacing: -0.01em;
 }
 .quote-textarea {
+  min-height: 18rem;
   resize: vertical;
   border: 0;
   border-radius: inherit;
@@ -218,7 +245,7 @@ body:has([data-workspace='redaktion']) {
   cursor: text;
 }
 .quote-citation-edit:hover .quote-paper {
-  border-color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-pop) 50%, transparent);
 }
 .quote-citation-edit:focus-visible {
   outline: 3px solid var(--color-ink);
@@ -231,24 +258,6 @@ body:has([data-workspace='redaktion']) {
 .quote-textarea:focus-visible {
   outline: 3px solid var(--color-ink);
   outline-offset: -4px;
-}
-.quote-mark {
-  position: absolute;
-  z-index: 1;
-  color: var(--color-ink);
-  font-family: Georgia, serif;
-  font-size: 6rem;
-  font-weight: 700;
-  line-height: 1;
-  pointer-events: none;
-}
-.quote-mark-open {
-  bottom: 1.25rem;
-  left: 0.65rem;
-}
-.quote-mark-close {
-  top: 0.5rem;
-  right: 0.75rem;
 }
 .quote-attribution-label {
   max-width: 38rem;
@@ -293,20 +302,11 @@ body:has([data-workspace='redaktion']) {
   }
   .quote-textarea,
   .quote-text {
-    min-height: 16rem;
-    padding: 3.4rem 1.15rem;
+    padding: 1rem;
     font-size: clamp(1.625rem, 7vw, 1.875rem);
   }
-  .quote-mark {
-    font-size: 4.75rem;
-  }
-  .quote-mark-open {
-    bottom: 1rem;
-    left: 0.35rem;
-  }
-  .quote-mark-close {
-    top: 0.4rem;
-    right: 0.45rem;
+  .quote-textarea {
+    min-height: 16rem;
   }
 }
 
@@ -383,7 +383,6 @@ html[data-env]::after {
   color: var(--env-fg);
   font: 700 0.625rem/1.5 var(--font-sans);
   letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 @media print {
   html[data-env]::before,
