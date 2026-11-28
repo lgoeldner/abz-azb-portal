@@ -1,25 +1,4 @@
-import { Drawer } from '@base-ui/react/drawer';
-import {
-  ArrowRight,
-  ClipboardList,
-  Files,
-  FileText,
-  Grip,
-  Hourglass,
-  House,
-  Library,
-  LogOut,
-  Mail,
-  Plus,
-  ScrollText,
-  Settings,
-  SquareKanban,
-  UserCheck,
-  Users,
-  Vote,
-  X,
-  type LucideIcon,
-} from 'lucide-react';
+import { ArrowRight, FileText, Hourglass, LogOut, Plus, Settings, UserCheck, Users, Vote } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -56,9 +35,11 @@ import {
   heading,
   kindIcon,
   kindLabel,
+  Mark,
   newestOpened,
   notice,
   projectsEnabled,
+  roundButton,
   since,
   useAction,
   useData,
@@ -71,6 +52,7 @@ import {
 import { ActivityLog, People } from './admin';
 import { AreasAdmin } from './AreasAdmin';
 import { Board, NewTicket, TicketPage } from './tickets';
+import { BentoMenu } from './BentoMenu';
 import { MyTasks } from './TicketCards';
 import { DocumentPage, DocumentsPage, DocumentTiles, NewDocument } from './Documents';
 import { EmailAdmin } from './EmailAdmin';
@@ -268,30 +250,6 @@ function RedirectToSammlung() {
 const time = (value: string | null | undefined) => (value ? new Date(value).getTime() : 0);
 const statusOrder = { open: 0, draft: 1, closed: 2 } as const;
 
-// Colours follow the surrounding workspace; `workspace` pins one palette (corner, 27, ink, paper) regardless of the view.
-function Mark({ className = 'size-8', workspace }: { className?: string; workspace?: View }) {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 40 40" className={`flex-none ${className}`} data-workspace={workspace}>
-      <g transform="rotate(-7 20 20)">
-        <path d="M5 4h30a2 2 0 0 1 2 2v28a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" className="fill-ink" />
-        <path d="M37 6v11H26a2 2 0 0 1-2-2V4h11a2 2 0 0 1 2 2z" className="fill-accent" />
-        <path d="M24 4v11a2 2 0 0 0 2 2h11" fill="none" strokeWidth="1.5" className="stroke-paper" />
-        <text
-          x="4.5"
-          y="31"
-          fontSize="21"
-          fontWeight="800"
-          letterSpacing="-1.5"
-          className="fill-pop"
-          style={{ fontFamily: 'inherit' }}
-        >
-          27
-        </text>
-        <rect x="6" y="9" width="13" height="2.4" rx="1.2" className="fill-paper" />
-      </g>
-    </svg>
-  );
-}
 function Brand({ large = false }: { large?: boolean }) {
   return (
     <span className="inline-flex items-center gap-2.5">
@@ -380,10 +338,6 @@ function Login() {
 }
 
 // ---------- layout + floating controls ----------
-// Floating controls share one geometry so the corners stay concentric: 48px items, padding = gap = 6px,
-// outer radius = 24px item radius + 6px = 30px.
-const roundButton =
-  'grid size-12 flex-none place-items-center rounded-full border border-black/10 transition-[translate,border-color,box-shadow] duration-100 hover:-translate-y-1 active:translate-y-0.5 active:shadow-none';
 const floatBottom = 'bottom-[max(1rem,env(safe-area-inset-bottom))]';
 
 function Layout() {
@@ -433,7 +387,7 @@ function Layout() {
           <Dock />
           {editorial(user) && (
             <div className="pointer-events-none flex items-end gap-1.5 *:pointer-events-auto max-[360px]:flex-col min-[651px]:flex-col min-[651px]:items-start">
-              <NavDrawer container={root} />
+              <BentoMenu container={root} />
               <ModeFab />
             </div>
           )}
@@ -537,146 +491,6 @@ const modes = {
 const motion = 'duration-200 ease-out motion-reduce:transition-none';
 // Text pill, 48px tall and as wide as the longer label, so the whole pill is the tap target.
 const modePill = 'flex h-12 w-full items-center justify-center rounded-full px-3 text-lg font-bold active:scale-95';
-
-// Redaktionsmenü for editors in both views, blue like the Redaktion mode: a bottom sheet on phones; from 651px a floating card as wide as the account card, opening over its trigger.
-// Static links only; individual Abstimmungen and Beiträge stay on their list pages.
-function NavDrawer({ container }: { container: HTMLElement | null }) {
-  const session = useSession();
-  const projects = projectsEnabled(session);
-  const [, setView] = useWorkspaceView();
-  const [open, setOpen] = useState(false);
-  // Subheading with a hairline filling the rest of the row.
-  const label =
-    'flex items-center gap-3 px-4 pb-1 pt-3 text-sm font-bold text-muted after:h-px after:flex-1 after:bg-black/10';
-  return (
-    <Drawer.Root open={open} onOpenChange={setOpen} swipeDirection="down">
-      <Drawer.Trigger className="flex-none rounded-[30px] bg-white p-1.5 text-ink shadow-lg">
-        <span
-          className={`${roundButton} bg-redaktion text-white hover:border-redaktion-dark hover:bg-redaktion-dark hover:shadow-[0_4px_0_var(--color-redaktion-dark)]`}
-        >
-          <Grip aria-hidden="true" className="size-6" />
-          <span className="sr-only">Redaktionsmenü</span>
-        </span>
-      </Drawer.Trigger>
-      <Drawer.Portal container={container}>
-        <Drawer.Backdrop className="fixed inset-0 z-50 bg-black/40 transition-opacity duration-300 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none min-[651px]:bg-transparent" />
-        <Drawer.Viewport className="fixed inset-0 z-50">
-          {/* ponytail: bottom-[150px] = 24px offset + 114px editor account card + 12px gap, so the card opens over the menu pill; follow the Dock if it changes.
-              Phones: the ::after block continues the sheet below its edge, so the upward rubber band never shows the page. */}
-          <Drawer.Popup className="absolute inset-x-0 bottom-0 flex max-h-[85dvh] flex-col rounded-t-[30px] bg-white text-ink shadow-lg outline-none [--color-pill:#e4e6e9] transition-[transform,opacity] duration-300 ease-out [transform:translateY(var(--drawer-swipe-movement-y,0px))] data-[swiping]:transition-none motion-reduce:transition-none max-[651px]:pb-[env(safe-area-inset-bottom)] max-[651px]:after:absolute max-[651px]:after:inset-x-0 max-[651px]:after:top-full max-[651px]:after:h-[50dvh] max-[651px]:after:bg-white max-[651px]:data-[ending-style]:[transform:translateY(100%)] max-[651px]:data-[starting-style]:[transform:translateY(100%)] min-[651px]:bottom-[150px] min-[651px]:left-6 min-[651px]:right-auto min-[651px]:max-h-[calc(100dvh-174px)] min-[651px]:w-[320px] min-[651px]:rounded-[30px] min-[651px]:data-[ending-style]:opacity-0 min-[651px]:data-[starting-style]:opacity-0 min-[651px]:data-[ending-style]:[transform:translateY(1rem)] min-[651px]:data-[starting-style]:[transform:translateY(1rem)]">
-            <span
-              aria-hidden="true"
-              className="mx-auto mt-2.5 h-1.5 w-10 flex-none rounded-full bg-pill min-[651px]:hidden"
-            />
-            <div className="flex min-h-[60px] flex-none items-center justify-between py-1.5 pl-3 pr-1.5">
-              <Drawer.Title className="flex items-center gap-2.5 text-xl font-extrabold tracking-tight">
-                <Mark className="size-9" workspace="redaktion" />
-                Redaktionsmenü
-              </Drawer.Title>
-              <Drawer.Close
-                aria-label="Menü schließen"
-                className="grid size-12 place-items-center rounded-full hover:bg-pill min-[651px]:hidden"
-              >
-                <X aria-hidden="true" className="size-5" />
-              </Drawer.Close>
-            </div>
-            <Drawer.Content
-              render={<nav aria-label="Redaktionsmenü" />}
-              className="flex flex-col overflow-y-auto px-1.5 pb-1.5 min-[651px]:pb-[60px]"
-              onClick={(e) => {
-                if (!(e.target as Element).closest('a')) return;
-                // Also opened from the Schüler view; Abstimmungen pages would redirect students away.
-                setView('redaktion');
-                setOpen(false);
-              }}
-            >
-              <DrawerLink to="/redaktion" icon={House}>
-                Überblick
-              </DrawerLink>
-              {projects && (
-                <>
-                  <DrawerLink to="/tickets" icon={SquareKanban}>
-                    Tickets
-                  </DrawerLink>
-                  <DrawerLink to="/dokumente" icon={Files}>
-                    Dokumente
-                  </DrawerLink>
-                </>
-              )}
-              <div role="group" aria-labelledby="menu-abstimmungen" className="flex flex-col">
-                <p id="menu-abstimmungen" className={label}>
-                  Abstimmungen
-                </p>
-                <DrawerLink to="/sammlungen?neu" icon={Plus}>
-                  Neue Abstimmung
-                </DrawerLink>
-                <DrawerLink to="/sammlungen" icon={Library}>
-                  Alle Abstimmungen
-                </DrawerLink>
-              </div>
-              <div role="group" aria-labelledby="menu-beitraege" className="flex flex-col">
-                <p id="menu-beitraege" className={label}>
-                  Beiträge
-                </p>
-                <DrawerLink to="/redaktion/beitraege" icon={ClipboardList}>
-                  Alle Beiträge
-                </DrawerLink>
-              </div>
-              {session.user.role === 'admin' && (
-                <div role="group" aria-labelledby="menu-verwaltung" className="flex flex-col">
-                  <p id="menu-verwaltung" className={label}>
-                    Verwaltung
-                  </p>
-                  <DrawerLink to="/verwaltung/personen" icon={Users}>
-                    Personen
-                  </DrawerLink>
-                  <DrawerLink to="/verwaltung/protokoll" icon={ScrollText}>
-                    Aktivitätsprotokoll
-                  </DrawerLink>
-                  {projects && (
-                    <DrawerLink to="/verwaltung/bereiche" icon={SquareKanban}>
-                      Bereiche
-                    </DrawerLink>
-                  )}
-                  <DrawerLink to="/verwaltung/email" icon={Mail}>
-                    E-Mail
-                  </DrawerLink>
-                </div>
-              )}
-            </Drawer.Content>
-            {/* Desktop: sits exactly on the trigger, so the Grip stays put and turns dark while the card is open.
-                The list's 60px bottom padding lets the last item scroll clear of it. */}
-            <Drawer.Close
-              aria-label="Redaktionsmenü schließen"
-              className="absolute bottom-0 left-0 p-1.5 max-[651px]:hidden"
-            >
-              <span
-                className={`${roundButton} bg-ink text-white hover:border-ink hover:bg-gray-600 hover:shadow-[0_4px_0_var(--color-ink)]`}
-              >
-                <Grip aria-hidden="true" className="size-6" />
-              </span>
-            </Drawer.Close>
-          </Drawer.Popup>
-        </Drawer.Viewport>
-      </Drawer.Portal>
-    </Drawer.Root>
-  );
-}
-
-function DrawerLink({ to, icon: Icon, children }: { to: string; icon: LucideIcon; children: ReactNode }) {
-  const location = useLocation();
-  const active = location.pathname + location.search === to;
-  return (
-    <Link
-      to={to}
-      aria-current={active ? 'page' : undefined}
-      className={`flex min-h-11 items-center gap-3 rounded-full px-4 text-[15px] font-semibold transition-transform active:scale-[.98] ${active ? 'bg-ink text-pop' : 'hover:bg-pill'}`}
-    >
-      <Icon aria-hidden="true" className="size-5 shrink-0" />
-      {children}
-    </Link>
-  );
-}
 
 // Phone mode switch: a pill naming the current mode that grows upward to offer the other one.
 function ModeFab() {
