@@ -16,6 +16,7 @@ mechanics and visual directions before anything is built in the real portal.
 | `index.html` | Entry page linking the drafts and visual styles |
 | `01-carousel.html` | Card carousel (swipe/scrub/arrows, pull down to submit) |
 | `02-swipe-stack.html` | Card stack (swipe either way to skip, pull down to submit) |
+| `03-redaktion.html`, `redaktion.js`, `redaktion.css` | Redaktion page in four layouts (`?l=liste|karten|fokus|spalten`) |
 | `ios.css`, `chrome.js`, `cards.js` | Shared look, floating bars/menus and placeholder poll cards |
 | `themes.css`, `themes.js` | Style variants: Basis, Jahrbuch, Abiball, Knast (only via `?v=` links on the index page) |
 

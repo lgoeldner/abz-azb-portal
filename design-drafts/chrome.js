@@ -46,6 +46,10 @@
     sparkle: `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.4c.42 0 .79.26.93.66l1.95 5.66 5.66 1.95a.98.98 0 0 1 0 1.86l-5.66 1.95-1.95 5.66a.98.98 0 0 1-1.86 0l-1.95-5.66-5.66-1.95a.98.98 0 0 1 0-1.86l5.66-1.95 1.95-5.66c.14-.4.51-.66.93-.66z"/></svg>`,
     // The portal's logo (deployables/portal/web/src/App.tsx, Mark): a tilted notebook with the year on it.
     mark: `<svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><g transform="rotate(-7 20 20)"><path d="M5 4h30a2 2 0 0 1 2 2v28a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" fill="#15181F"/><path d="M37 6v11H26a2 2 0 0 1-2-2V4h11a2 2 0 0 1 2 2z" fill="#D81E44"/><path d="M24 4v11a2 2 0 0 0 2 2h11" fill="none" stroke-width="1.5" stroke="var(--bg)"/><text x="4.5" y="31" font-size="21" font-weight="800" letter-spacing="-1.5" fill="#C8F23C" style="font-family: inherit">27</text><rect x="6" y="9" width="13" height="2.4" rx="1.2" fill="#F5F6EC"/></g></svg>`,
+    plus: S('<path d="M12 5.25v13.5M5.25 12h13.5"/>', 18, 'stroke-width="2.6"'),
+    ticket: S('<path d="M7.25 3.75h6.9l4.6 4.6v10.9a1.75 1.75 0 0 1-1.75 1.75H7.25A1.75 1.75 0 0 1 5.5 19.25V5.5a1.75 1.75 0 0 1 1.75-1.75z"/><path d="M14 4v4.5h4.5M8.75 12.75h6.5M8.75 16.25h4.25"/>', 21, 'stroke-width="1.8"'),
+    poll: S('<path d="M6.5 19.25v-6M12 19.25V4.75M17.5 19.25v-9.5"/>', 21, 'stroke-width="2.4"'),
+    folder: S('<path d="M3.75 7.25c0-.97.78-1.75 1.75-1.75h3.9l2.1 2.1h7a1.75 1.75 0 0 1 1.75 1.75v8.4a1.75 1.75 0 0 1-1.75 1.75h-13a1.75 1.75 0 0 1-1.75-1.75z"/>', 21, 'stroke-width="1.8"'),
     bulb: `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5a6.8 6.8 0 0 0-4.1 12.22c.68.52 1.1 1.32 1.1 2.18v.35A1.25 1.25 0 0 0 10.25 18.5h3.5A1.25 1.25 0 0 0 15 17.25v-.35c0-.86.42-1.66 1.1-2.18A6.8 6.8 0 0 0 12 2.5zM9.6 20a.9.9 0 0 0 0 1.8h4.8a.9.9 0 1 0 0-1.8H9.6z"/></svg>`,
   };
 
@@ -176,6 +180,25 @@
   let pendingCapsule = null;
   const RING_C = 2 * Math.PI * 14.5;
 
+  // Redaktion: the bar's capsule becomes the page's main action. It opens a menu of what you can create,
+  // as wide as the bar, growing out of the capsule (same material and motion as the account menu).
+  function newCapsule(items) {
+    return `
+        <button class="dock-capsule cap-new" id="abgBtn" type="button" aria-haspopup="menu" aria-expanded="false">
+          <span class="new-disc">${ICONS.plus}</span>
+          <span class="cap-text">
+            <span class="cap-title">Neu</span>
+            <span class="cap-sub">${items.map((i) => i.label).join(', ').replace(/, ([^,]*)$/, ' oder $1')}</span>
+          </span>
+          <span class="cap-chev">${ICONS.chevUp}</span>
+        </button>
+        <div class="menu menu-new" id="newMenu" role="menu">
+          ${items.map((i) => `<button class="menu-item" type="button" role="menuitem" data-close-new>
+            <span class="mi-icon">${ICONS[i.icon]}</span><span class="mi-label">${i.label}</span><span class="mi-note">${i.note || ''}</span>
+          </button>`).join('')}
+        </div>`;
+  }
+
   function mount(o) {
     opts = o;
     const top = document.createElement('div');
@@ -201,7 +224,7 @@
     dock.className = 'dock';
     dock.setAttribute('aria-label', 'Leiste');
     dock.innerHTML = `
-      <div class="dock-row">
+      <div class="dock-row">${o.newMenu ? newCapsule(o.newMenu) : `
         <button class="dock-capsule" id="abgBtn" type="button" aria-haspopup="dialog" aria-expanded="false">
           <span class="ring" id="ring">
             <svg class="ring-svg" viewBox="0 0 36 36" fill="none">
@@ -217,7 +240,7 @@
             <span class="cap-sub" id="capSub">–</span>
           </span>
           <span class="cap-chev">${ICONS.chevUp}</span>
-        </button>
+        </button>`}
         <div class="menu-anchor">
           <button class="dock-circle" id="accountBtn" type="button" aria-label="Konto" aria-haspopup="menu">
             ${ICONS.person}<span class="badge-dot" id="badgeDot"></span>
@@ -362,6 +385,8 @@
       if (menu.classList.contains('open') && !e.target.closest('.menu-anchor')) closeMenu();
     }, true);
 
+    if (opts.newMenu) { wireNewMenu(); return; }
+
     // Tap toggles the list; swiping up on the capsule opens it (like the mini player).
     const cap = $('abgBtn');
     let sy = null, swiped = false;
@@ -382,6 +407,54 @@
       if (isPanelOpen()) closePanel();
       closeMenu();
     });
+  }
+
+  function setNewMenu(open) {
+    const m = $('newMenu');
+    if (!m) return;
+    m.classList.toggle('open', open);
+    $('abgBtn').setAttribute('aria-expanded', String(open));
+    $('accountBtn').classList.toggle('muted', open);
+  }
+  function wireNewMenu() {
+    const m = $('newMenu');
+    $('abgBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeMenu();
+      setNewMenu(!m.classList.contains('open'));
+    });
+    $('accountBtn').addEventListener('click', () => setNewMenu(false));
+    m.querySelectorAll('[data-close-new]').forEach((b) => b.addEventListener('click', () => setNewMenu(false)));
+    document.addEventListener('pointerdown', (e) => {
+      if (m.classList.contains('open') && !e.target.closest('#newMenu, #abgBtn')) setNewMenu(false);
+    }, true);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { setNewMenu(false); closeMenu(); } });
+  }
+
+  /* Toast with an undo action: a white capsule on the floating layer, right above the bar. */
+  let toastTimer = null;
+  function toast(text, action, onAction) {
+    let t = $('toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.className = 'toast';
+      t.id = 'toast';
+      t.setAttribute('role', 'status');
+      document.querySelector('.float-layer').append(t);
+    }
+    t.innerHTML = `<span class="toast-text"></span>${action ? '<button class="toast-btn" type="button"></button>' : ''}`;
+    t.querySelector('.toast-text').textContent = text;
+    const hide = () => { clearTimeout(toastTimer); t.classList.remove('shown'); };
+    if (action) {
+      const b = t.querySelector('.toast-btn');
+      b.textContent = action;
+      b.addEventListener('click', () => { hide(); onAction(); });
+    }
+    t.classList.remove('shown');
+    void t.offsetWidth;
+    t.classList.add('shown');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hide, 4200);
   }
 
   /* Abgegeben list: a popover above the bar, exactly as wide as the bar, growing out of the capsule */
@@ -591,7 +664,9 @@
     openPanel,
     closePanel,
     openEditor,
-    overlayOpen: () => isEditorOpen() || isPanelOpen() || $('accountMenu').classList.contains('open'),
+    toast,
+    overlayOpen: () => isEditorOpen() || isPanelOpen() || $('accountMenu').classList.contains('open')
+      || !!($('newMenu') && $('newMenu').classList.contains('open')),
   };
 
   const gesture = { moved: false };

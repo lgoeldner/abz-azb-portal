@@ -498,6 +498,53 @@ main {
 .dock-capsule > *, .dock-circle > * { transition: opacity 200ms ease; }
 .dock-capsule.muted > *, .dock-circle.muted > * { opacity: 0.3; }
 
+/* "Neu" capsule (Redaktion) and its menu */
+.new-disc {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: grid; place-items: center;
+  background: var(--blue);
+  color: #fff;
+}
+.new-disc svg { width: 16px; height: 16px; }
+.menu-new { transform-origin: calc((100% - 62px) / 2) calc(100% + 37px); /* the capsule's centre */ }
+.mi-note { font-size: 15px; color: var(--label-2); }
+
+/* Undo toast: on the floating layer, right above the bar */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--dock-bottom) + var(--dock-h) + 12px);
+  max-width: calc(100vw - 32px);
+  height: 44px;
+  padding: 0 6px 0 18px;
+  border-radius: 22px;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 15px;
+  letter-spacing: -0.012em;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate(-50%, 10px) scale(0.96);
+  pointer-events: none;
+  transition: transform 380ms var(--ease-ios), opacity 180ms ease;
+}
+.toast.shown { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.toast-text { overflow: hidden; text-overflow: ellipsis; }
+.toast-btn {
+  flex-shrink: 0;
+  height: 32px; /* 6px inset: radius 22 − 6 = 16 */
+  padding: 0 14px;
+  border-radius: 16px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 15px;
+  font-weight: 600;
+}
+
 /* ───────── Abgegeben: popover above the bar, exactly as wide as the bar (like the menu) ───────── */
 .scrim-root { position: fixed; inset: 0; z-index: 48; display: none; }
 .panel-root { position: fixed; inset: 0; display: none; pointer-events: none; }
