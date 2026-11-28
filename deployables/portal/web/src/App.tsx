@@ -1,32 +1,9 @@
-import { Drawer } from '@base-ui/react/drawer';
-import {
-  ArrowRight,
-  ClipboardList,
-  Files,
-  FileText,
-  Grip,
-  Hourglass,
-  House,
-  Library,
-  LogOut,
-  Mail,
-  Plus,
-  ScrollText,
-  Settings,
-  SquareKanban,
-  UserCheck,
-  Users,
-  Vote,
-  X,
-  type LucideIcon,
-} from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ChevronLeft, LogOut, Plus, Settings } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   api,
   ApiError,
-  canEdit,
-  date,
   editorial,
   json,
   setCsrf,
@@ -34,12 +11,10 @@ import {
   type Me,
   type MyBallot,
   type Submission,
-  type User,
   day,
 } from './api';
 import {
   Arrow,
-  Badge,
   Empty,
   Failure,
   KindIcon,
@@ -47,19 +22,18 @@ import {
   PageHead,
   Session,
   SubmissionList,
-  card,
   btn,
-  allKinds,
   Avatar,
   isBallot,
   isSubmissionCollection,
   heading,
   kindIcon,
   kindLabel,
+  Mark,
   newestOpened,
   notice,
   projectsEnabled,
-  since,
+  roundButton,
   useAction,
   useData,
   useSession,
@@ -71,8 +45,8 @@ import {
 import { ActivityLog, People } from './admin';
 import { AreasAdmin } from './AreasAdmin';
 import { Board, NewTicket, TicketPage } from './tickets';
-import { MyTasks } from './TicketCards';
-import { DocumentPage, DocumentsPage, DocumentTiles, NewDocument } from './Documents';
+import { BentoMenu } from './BentoMenu';
+import { DocumentPage, DocumentsPage, NewDocument } from './Documents';
 import { EmailAdmin } from './EmailAdmin';
 import { ContributionDetail, Contributions, Editorial, NewContribution, NotFound } from './pages';
 import { SammlungDetail, Sammlungen } from './sammlungen';
@@ -137,8 +111,9 @@ export function App() {
           <Route
             path="redaktion"
             element={
+              // The menu replaced the Redaktion dashboard; the path stays as the editors' entry.
               <RoleGuard>
-                <EditorialHome />
+                <Navigate to={projectsEnabled(me.data) ? '/tickets' : '/redaktion/beitraege'} replace />
               </RoleGuard>
             }
           />
@@ -265,33 +240,6 @@ function RedirectToSammlung() {
   const { id } = useParams();
   return <Navigate to={`/sammlungen/${id}`} replace />;
 }
-const time = (value: string | null | undefined) => (value ? new Date(value).getTime() : 0);
-const statusOrder = { open: 0, draft: 1, closed: 2 } as const;
-
-// Colours follow the surrounding workspace; `workspace` pins one palette (corner, 27, ink, paper) regardless of the view.
-function Mark({ className = 'size-8', workspace }: { className?: string; workspace?: View }) {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 40 40" className={`flex-none ${className}`} data-workspace={workspace}>
-      <g transform="rotate(-7 20 20)">
-        <path d="M5 4h30a2 2 0 0 1 2 2v28a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" className="fill-ink" />
-        <path d="M37 6v11H26a2 2 0 0 1-2-2V4h11a2 2 0 0 1 2 2z" className="fill-accent" />
-        <path d="M24 4v11a2 2 0 0 0 2 2h11" fill="none" strokeWidth="1.5" className="stroke-paper" />
-        <text
-          x="4.5"
-          y="31"
-          fontSize="21"
-          fontWeight="800"
-          letterSpacing="-1.5"
-          className="fill-pop"
-          style={{ fontFamily: 'inherit' }}
-        >
-          27
-        </text>
-        <rect x="6" y="9" width="13" height="2.4" rx="1.2" className="fill-paper" />
-      </g>
-    </svg>
-  );
-}
 function Brand({ large = false }: { large?: boolean }) {
   return (
     <span className="inline-flex items-center gap-2.5">
@@ -311,7 +259,7 @@ function Logout({ compact = false }: { compact?: boolean }) {
         type="button"
         className={
           compact
-            ? `${roundButton} bg-red-100 text-red-700 [grid-area:logout] hover:border-red-700 hover:bg-red-600 hover:text-white hover:shadow-[0_4px_0_var(--color-red-700)] disabled:opacity-50`
+            ? `${roundButton} bg-red-100 text-red-700 hover:border-red-700 hover:bg-red-600 hover:text-white hover:shadow-[0_4px_0_var(--color-red-700)] disabled:opacity-50`
             : btn.text
         }
         aria-label={compact ? 'Abmelden' : undefined}
@@ -380,10 +328,6 @@ function Login() {
 }
 
 // ---------- layout + floating controls ----------
-// Floating controls share one geometry so the corners stay concentric: 48px items, padding = gap = 6px,
-// outer radius = 24px item radius + 6px = 30px.
-const roundButton =
-  'grid size-12 flex-none place-items-center rounded-full border border-black/10 transition-[translate,border-color,box-shadow] duration-100 hover:-translate-y-1 active:translate-y-0.5 active:shadow-none';
 const floatBottom = 'bottom-[max(1rem,env(safe-area-inset-bottom))]';
 
 function Layout() {
@@ -425,16 +369,15 @@ function Layout() {
         >
           Zum Inhalt
         </a>
-        {/* Phones: account left, menu and mode right in one row; below 360px the menu sits above the mode pill.
-            From 651px: the menu button sits above the account card's left edge. */}
+        {/* Phones: account left, menu right. From 651px the menu button sits above the account card's left edge. */}
         <div
-          className={`pointer-events-none fixed ${floatBottom} inset-x-4 z-40 flex items-end justify-between gap-1.5 *:pointer-events-auto min-[651px]:bottom-6 min-[651px]:left-6 min-[651px]:right-auto min-[651px]:w-[320px] min-[651px]:flex-col-reverse min-[651px]:items-stretch min-[651px]:gap-3`}
+          className={`pointer-events-none fixed ${floatBottom} inset-x-4 z-40 flex items-end justify-between gap-1.5 *:pointer-events-auto min-[651px]:bottom-6 min-[651px]:left-6 min-[651px]:right-auto min-[651px]:w-[320px] min-[651px]:flex-col-reverse min-[651px]:items-start min-[651px]:gap-3`}
         >
           <Dock />
           {editorial(user) && (
-            <div className="pointer-events-none flex items-end gap-1.5 *:pointer-events-auto max-[360px]:flex-col min-[651px]:flex-col min-[651px]:items-start">
-              <NavDrawer container={root} />
-              <ModeFab />
+            <div className="relative">
+              <BentoMenu container={root} />
+              {view === 'redaktion' && <RedaktionHint />}
             </div>
           )}
         </div>
@@ -443,10 +386,26 @@ function Layout() {
             id="inhalt"
             className={`mx-auto w-full flex-1 px-4 py-6 sm:px-8 sm:py-8 ${location.pathname === '/tickets' ? 'max-w-[96rem]' : 'max-w-5xl'}`}
           >
+            {/* iOS-style back button: top left of the page column, stays while scrolling; the brand moves over. */}
+            {view === 'redaktion' && (
+              <div className="sticky top-[calc(env(safe-area-inset-top,0px)+0.75rem)] z-30 h-0">
+                <Link
+                  to="/"
+                  aria-label="Zurück zur Schüleransicht"
+                  className="block w-fit rounded-[30px] bg-white p-1.5 text-ink shadow-lg ring-1 ring-black/5"
+                >
+                  <span
+                    className={`${roundButton} bg-[#e4e6e9] hover:border-ink hover:bg-gray-600 hover:text-white hover:shadow-[0_4px_0_var(--color-ink)]`}
+                  >
+                    <ChevronLeft aria-hidden="true" className="size-6" />
+                  </span>
+                </Link>
+              </div>
+            )}
             <Link
               to={view === 'redaktion' ? '/redaktion' : '/'}
               aria-label="AbiZeitBetrug Startseite"
-              className="mb-8 inline-flex rounded-full"
+              className={`mb-8 inline-flex rounded-full ${view === 'redaktion' ? 'ml-[72px] h-[60px] items-center' : ''}`}
             >
               <Brand />
             </Link>
@@ -478,40 +437,72 @@ function Layout() {
   );
 }
 
-// Account controls, rendered once and restyled by breakpoint: a bottom-left pill on phones
-// (avatar, settings, logout), a floating card on wider screens (mode switch and logout above, avatar, name, settings below).
+const hintKey = 'redaktion-hint-seen';
+
+// Points editors in the Redaktion at the menu button, until dismissed once per browser.
+function RedaktionHint() {
+  const [open, setOpen] = useState(() => {
+    // ponytail: previews show it on every visit for now; drop this line once the hint is approved.
+    if (document.documentElement.dataset.env === 'preview') return true;
+    try {
+      return !localStorage.getItem(hintKey);
+    } catch {
+      return true;
+    }
+  });
+  if (!open) return null;
+  return (
+    // Click-through except for its button, so it never blocks the page under it.
+    <div
+      role="note"
+      className="pointer-events-none absolute bottom-full right-0 mb-3 w-60 rounded-[20px] bg-ink px-4 py-3 text-sm text-white shadow-lg min-[651px]:bottom-0 min-[651px]:left-full min-[651px]:right-auto min-[651px]:mb-0 min-[651px]:ml-3"
+    >
+      <span
+        aria-hidden="true"
+        className="absolute -bottom-1 right-6 size-3 rotate-45 bg-ink min-[651px]:-left-1 min-[651px]:bottom-6 min-[651px]:right-auto"
+      />
+      <p>
+        <strong className="block">Du bist in der Redaktion.</strong>
+        Über diesen Menüknopf erreichst du alle Redaktionswerkzeuge.
+      </p>
+      <button
+        type="button"
+        className="pointer-events-auto mt-2 rounded-full bg-white px-4 py-1.5 font-bold text-ink"
+        onClick={() => {
+          setOpen(false);
+          try {
+            localStorage.setItem(hintKey, '1');
+          } catch {
+            /* private mode */
+          }
+        }}
+      >
+        Verstanden
+      </button>
+    </div>
+  );
+}
+
+// Account controls: avatar, name (wider screens), settings and logout in one pill; a 320px card from 651px.
 function Dock() {
   const { user } = useSession();
   const location = useLocation();
-  const editor = editorial(user);
   return (
     // Pinned to the neutral Redaktion grey, so the olive Schüler pill never tints the floating controls.
     <section
       aria-label="Konto"
-      className={`flex items-center gap-1.5 rounded-[30px] bg-white p-1.5 shadow-lg ring-1 ring-black/5 [--color-pill:#e4e6e9] min-[651px]:grid min-[651px]:w-[320px] ${
-        editor
-          ? "min-[651px]:grid-cols-[auto_minmax(0,1fr)_auto] min-[651px]:[grid-template-areas:'switch_switch_logout'_'avatar_name_settings']"
-          : "min-[651px]:grid-cols-[auto_minmax(0,1fr)_auto_auto] min-[651px]:[grid-template-areas:'avatar_name_settings_logout']"
-      }`}
+      className="flex items-center gap-1.5 rounded-[30px] bg-white p-1.5 shadow-lg ring-1 ring-black/5 [--color-pill:#e4e6e9] min-[651px]:w-[320px]"
     >
-      {editor && (
-        <div className="[grid-area:switch] max-[651px]:hidden">
-          <ViewSwitch />
-        </div>
-      )}
-      {/* Decorative; dropped on narrow phones so account pill, menu button and mode pill fit in one row. */}
-      <Avatar
-        user={user}
-        className={`size-12 border-[3px] border-white text-lg ring-1 ring-black/10 [grid-area:avatar] max-[360px]:hidden ${editor ? 'max-[398px]:hidden' : ''}`}
-      />
-      <strong className="line-clamp-2 min-w-0 break-words px-1 text-[15px] font-semibold leading-tight [grid-area:name] max-[651px]:sr-only">
+      {/* Decorative */}
+      <Avatar user={user} className="size-12 border-[3px] border-white text-lg ring-1 ring-black/10" />
+      <strong className="line-clamp-2 min-w-0 break-words px-1 text-[15px] font-semibold leading-tight max-[651px]:sr-only min-[651px]:flex-1">
         {user.name}
       </strong>
       <Link
         to="/einstellungen"
         aria-label="Einstellungen"
         aria-current={location.pathname === '/einstellungen' ? 'page' : undefined}
-        className={`${roundButton} bg-pill [grid-area:settings] hover:border-ink hover:bg-gray-600 hover:text-white hover:shadow-[0_4px_0_var(--color-ink)]`}
+        className={`${roundButton} bg-pill hover:border-ink hover:bg-gray-600 hover:text-white hover:shadow-[0_4px_0_var(--color-ink)]`}
       >
         <Settings aria-hidden="true" className="size-6" />
       </Link>
@@ -520,261 +511,7 @@ function Dock() {
   );
 }
 
-function useSwitchView() {
-  const [, setView] = useWorkspaceView();
-  const navigate = useNavigate();
-  return (next: View) => {
-    setView(next);
-    navigate(next === 'redaktion' ? '/redaktion' : '/');
-  };
-}
-
-// Fixed colors per mode, so the selected pill previews the workspace it stands for.
-const modes = {
-  schueler: { label: 'Schüler', active: 'bg-[#15181f] text-[#c8f23c]' },
-  redaktion: { label: 'Redaktion', active: 'bg-[#1d5fbf] text-white' },
-};
-const motion = 'duration-200 ease-out motion-reduce:transition-none';
-// Text pill, 48px tall and as wide as the longer label, so the whole pill is the tap target.
-const modePill = 'flex h-12 w-full items-center justify-center rounded-full px-3 text-lg font-bold active:scale-95';
-
-// Redaktionsmenü for editors in both views, blue like the Redaktion mode: a bottom sheet on phones; from 651px a floating card as wide as the account card, opening over its trigger.
-// Static links only; individual Abstimmungen and Beiträge stay on their list pages.
-function NavDrawer({ container }: { container: HTMLElement | null }) {
-  const session = useSession();
-  const projects = projectsEnabled(session);
-  const [, setView] = useWorkspaceView();
-  const [open, setOpen] = useState(false);
-  // Subheading with a hairline filling the rest of the row.
-  const label =
-    'flex items-center gap-3 px-4 pb-1 pt-3 text-sm font-bold text-muted after:h-px after:flex-1 after:bg-black/10';
-  return (
-    <Drawer.Root open={open} onOpenChange={setOpen} swipeDirection="down">
-      <Drawer.Trigger className="flex-none rounded-[30px] bg-white p-1.5 text-ink shadow-lg">
-        <span
-          className={`${roundButton} bg-redaktion text-white hover:border-redaktion-dark hover:bg-redaktion-dark hover:shadow-[0_4px_0_var(--color-redaktion-dark)]`}
-        >
-          <Grip aria-hidden="true" className="size-6" />
-          <span className="sr-only">Redaktionsmenü</span>
-        </span>
-      </Drawer.Trigger>
-      <Drawer.Portal container={container}>
-        <Drawer.Backdrop className="fixed inset-0 z-50 bg-black/40 transition-opacity duration-300 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none min-[651px]:bg-transparent" />
-        <Drawer.Viewport className="fixed inset-0 z-50">
-          {/* ponytail: bottom-[150px] = 24px offset + 114px editor account card + 12px gap, so the card opens over the menu pill; follow the Dock if it changes.
-              Phones: the ::after block continues the sheet below its edge, so the upward rubber band never shows the page. */}
-          <Drawer.Popup className="absolute inset-x-0 bottom-0 flex max-h-[85dvh] flex-col rounded-t-[30px] bg-white text-ink shadow-lg outline-none [--color-pill:#e4e6e9] transition-[transform,opacity] duration-300 ease-out [transform:translateY(var(--drawer-swipe-movement-y,0px))] data-[swiping]:transition-none motion-reduce:transition-none max-[651px]:pb-[env(safe-area-inset-bottom)] max-[651px]:after:absolute max-[651px]:after:inset-x-0 max-[651px]:after:top-full max-[651px]:after:h-[50dvh] max-[651px]:after:bg-white max-[651px]:data-[ending-style]:[transform:translateY(100%)] max-[651px]:data-[starting-style]:[transform:translateY(100%)] min-[651px]:bottom-[150px] min-[651px]:left-6 min-[651px]:right-auto min-[651px]:max-h-[calc(100dvh-174px)] min-[651px]:w-[320px] min-[651px]:rounded-[30px] min-[651px]:data-[ending-style]:opacity-0 min-[651px]:data-[starting-style]:opacity-0 min-[651px]:data-[ending-style]:[transform:translateY(1rem)] min-[651px]:data-[starting-style]:[transform:translateY(1rem)]">
-            <span
-              aria-hidden="true"
-              className="mx-auto mt-2.5 h-1.5 w-10 flex-none rounded-full bg-pill min-[651px]:hidden"
-            />
-            <div className="flex min-h-[60px] flex-none items-center justify-between py-1.5 pl-3 pr-1.5">
-              <Drawer.Title className="flex items-center gap-2.5 text-xl font-extrabold tracking-tight">
-                <Mark className="size-9" workspace="redaktion" />
-                Redaktionsmenü
-              </Drawer.Title>
-              <Drawer.Close
-                aria-label="Menü schließen"
-                className="grid size-12 place-items-center rounded-full hover:bg-pill min-[651px]:hidden"
-              >
-                <X aria-hidden="true" className="size-5" />
-              </Drawer.Close>
-            </div>
-            <Drawer.Content
-              render={<nav aria-label="Redaktionsmenü" />}
-              className="flex flex-col overflow-y-auto px-1.5 pb-1.5 min-[651px]:pb-[60px]"
-              onClick={(e) => {
-                if (!(e.target as Element).closest('a')) return;
-                // Also opened from the Schüler view; Abstimmungen pages would redirect students away.
-                setView('redaktion');
-                setOpen(false);
-              }}
-            >
-              <DrawerLink to="/redaktion" icon={House}>
-                Überblick
-              </DrawerLink>
-              {projects && (
-                <>
-                  <DrawerLink to="/tickets" icon={SquareKanban}>
-                    Tickets
-                  </DrawerLink>
-                  <DrawerLink to="/dokumente" icon={Files}>
-                    Dokumente
-                  </DrawerLink>
-                </>
-              )}
-              <div role="group" aria-labelledby="menu-abstimmungen" className="flex flex-col">
-                <p id="menu-abstimmungen" className={label}>
-                  Abstimmungen
-                </p>
-                <DrawerLink to="/sammlungen?neu" icon={Plus}>
-                  Neue Abstimmung
-                </DrawerLink>
-                <DrawerLink to="/sammlungen" icon={Library}>
-                  Alle Abstimmungen
-                </DrawerLink>
-              </div>
-              <div role="group" aria-labelledby="menu-beitraege" className="flex flex-col">
-                <p id="menu-beitraege" className={label}>
-                  Beiträge
-                </p>
-                <DrawerLink to="/redaktion/beitraege" icon={ClipboardList}>
-                  Alle Beiträge
-                </DrawerLink>
-              </div>
-              {session.user.role === 'admin' && (
-                <div role="group" aria-labelledby="menu-verwaltung" className="flex flex-col">
-                  <p id="menu-verwaltung" className={label}>
-                    Verwaltung
-                  </p>
-                  <DrawerLink to="/verwaltung/personen" icon={Users}>
-                    Personen
-                  </DrawerLink>
-                  <DrawerLink to="/verwaltung/protokoll" icon={ScrollText}>
-                    Aktivitätsprotokoll
-                  </DrawerLink>
-                  {projects && (
-                    <DrawerLink to="/verwaltung/bereiche" icon={SquareKanban}>
-                      Bereiche
-                    </DrawerLink>
-                  )}
-                  <DrawerLink to="/verwaltung/email" icon={Mail}>
-                    E-Mail
-                  </DrawerLink>
-                </div>
-              )}
-            </Drawer.Content>
-            {/* Desktop: sits exactly on the trigger, so the Grip stays put and turns dark while the card is open.
-                The list's 60px bottom padding lets the last item scroll clear of it. */}
-            <Drawer.Close
-              aria-label="Redaktionsmenü schließen"
-              className="absolute bottom-0 left-0 p-1.5 max-[651px]:hidden"
-            >
-              <span
-                className={`${roundButton} bg-ink text-white hover:border-ink hover:bg-gray-600 hover:shadow-[0_4px_0_var(--color-ink)]`}
-              >
-                <Grip aria-hidden="true" className="size-6" />
-              </span>
-            </Drawer.Close>
-          </Drawer.Popup>
-        </Drawer.Viewport>
-      </Drawer.Portal>
-    </Drawer.Root>
-  );
-}
-
-function DrawerLink({ to, icon: Icon, children }: { to: string; icon: LucideIcon; children: ReactNode }) {
-  const location = useLocation();
-  const active = location.pathname + location.search === to;
-  return (
-    <Link
-      to={to}
-      aria-current={active ? 'page' : undefined}
-      className={`flex min-h-11 items-center gap-3 rounded-full px-4 text-[15px] font-semibold transition-transform active:scale-[.98] ${active ? 'bg-ink text-pop' : 'hover:bg-pill'}`}
-    >
-      <Icon aria-hidden="true" className="size-5 shrink-0" />
-      {children}
-    </Link>
-  );
-}
-
-// Phone mode switch: a pill naming the current mode that grows upward to offer the other one.
-function ModeFab() {
-  const [view] = useWorkspaceView();
-  const switchView = useSwitchView();
-  const [open, setOpen] = useState(false);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const other: View = view === 'redaktion' ? 'schueler' : 'redaktion';
-  // Document listeners, because iOS Safari does not focus tapped buttons, so blur alone would never close it.
-  useEffect(() => {
-    if (!open) return;
-    const outside = (e: PointerEvent) => {
-      if (!trigger.current?.parentElement?.contains(e.target as Node)) setOpen(false);
-    };
-    const escape = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      setOpen(false);
-      trigger.current?.focus();
-    };
-    document.addEventListener('pointerdown', outside);
-    document.addEventListener('keydown', escape);
-    return () => {
-      document.removeEventListener('pointerdown', outside);
-      document.removeEventListener('keydown', escape);
-    };
-  }, [open]);
-  return (
-    <div
-      className="grid rounded-[30px] bg-white p-1.5 text-[#15181f] shadow-lg min-[651px]:hidden"
-      onBlur={(e) => {
-        if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget)) setOpen(false);
-      }}
-    >
-      <div
-        inert={!open}
-        className={`grid transition-[grid-template-rows,opacity] ${motion} ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr] opacity-0'}`}
-      >
-        <div className="min-h-0 overflow-hidden">
-          <button
-            key={other}
-            type="button"
-            aria-label={`Zu ${modes[other].label} wechseln`}
-            className={`${modePill} mb-1.5 transition-[translate,scale] ${motion} hover:bg-[#15181f]/5 focus-visible:-outline-offset-2 ${open ? '' : 'translate-y-3'}`}
-            onClick={() => {
-              setOpen(false);
-              trigger.current?.focus();
-              switchView(other);
-            }}
-          >
-            {modes[other].label}
-          </button>
-        </div>
-      </div>
-      <button
-        ref={trigger}
-        type="button"
-        aria-label={`Ansicht: ${modes[view].label}`}
-        aria-expanded={open}
-        className={`${modePill} ${modes[view].active} transition-[scale,background-color,color] ${motion}`}
-        onClick={() => setOpen(!open)}
-      >
-        <span key={view} className={`transition-opacity ${motion} starting:opacity-0`}>
-          {modes[view].label}
-        </span>
-      </button>
-    </div>
-  );
-}
-
-// Wider-screen mode switch; 48px track with 4px padding, so the 40px segments stay concentric.
-function ViewSwitch() {
-  const [view] = useWorkspaceView();
-  const switchView = useSwitchView();
-  const seg = (mode: View) =>
-    `min-h-10 flex-1 rounded-full px-3 text-[17px] font-bold transition-[scale,background-color,color] ${motion} active:scale-95 ${view === mode ? modes[mode].active : 'text-ink hover:bg-white/60'}`;
-  return (
-    <div className="flex gap-0.5 rounded-full bg-pill p-1">
-      {(['schueler', 'redaktion'] as const).map((mode) => (
-        <button
-          key={mode}
-          type="button"
-          className={seg(mode)}
-          aria-pressed={view === mode}
-          onClick={() => switchView(mode)}
-        >
-          {modes[mode].label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 const hasVoted = (c: Category) => Boolean(c.my_words?.length || c.my_option_ids?.length || c.my_option_id);
-const participationColor = (percent: number) => {
-  const from = [209, 213, 219];
-  const to = [22, 101, 52];
-  return `rgb(${from.map((value, index) => Math.round(value + ((to[index] - value) * percent) / 100)).join(', ')})`;
-};
 
 // projects: the route belongs to the PROJECT_MANAGEMENT tools and disappears with the flag.
 function RoleGuard({
@@ -828,16 +565,7 @@ function StudentHome() {
       : `Hey ${first}.`;
   return (
     <>
-      <PageHead
-        title={title}
-        action={
-          editorial(user) && (
-            <button type="button" className={btn.redaktion} onClick={() => toRedaktion('/redaktion')}>
-              Zum Redaktionsbereich <Arrow />
-            </button>
-          )
-        }
-      >
+      <PageHead title={title}>
         {waiting.length > 0
           ? 'Deine Stimme und deine Geschichten machen unsere Abizeitung.'
           : 'Vielleicht fällt dir noch eine Geschichte ein, die in die Abizeitung gehört.'}
@@ -953,392 +681,6 @@ function StudentHome() {
         <strong className="font-semibold text-ink">Unsere Erinnerungen bleiben im Jahrgang.</strong> Nur du und
         berechtigte Mitglieder der Redaktion können deine Beiträge sehen.
       </p>
-    </>
-  );
-}
-
-function EditorialHome() {
-  const session = useSession();
-  const { user } = session;
-  const isAdmin = user.role === 'admin';
-  const projects = projectsEnabled(session);
-  const users = useData<User[]>('/admin/users', isAdmin);
-  const categories = useData<Category[]>('/categories');
-  const submissions = useData<Submission[]>('/submissions');
-  const waiting = (users.data ?? []).filter((u) => !u.admitted).sort((a, b) => time(b.created_at) - time(a.created_at));
-  const latest = isAdmin
-    ? (categories.data ?? []).toSorted(newestOpened).slice(0, 4)
-    : (categories.data ?? [])
-        .filter((c) => isBallot(c.kind) && canEdit(user, c.id))
-        .sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || newestOpened(a, b));
-  const writableCategoryIds = new Set((categories.data ?? []).filter((c) => canEdit(user, c.id)).map((c) => c.id));
-  const writableSubmissions = (submissions.data ?? []).filter((s) => writableCategoryIds.has(s.category_id));
-  const recentSubmissions = writableSubmissions.toSorted((a, b) => time(b.created_at) - time(a.created_at)).slice(0, 3);
-  const figure = 'block text-4xl font-extrabold tabular-nums leading-none tracking-tight';
-  const state = (q: { isPending: boolean; error: Error | null; refetch: () => unknown }) =>
-    q.isPending ? (
-      <div className="mt-4">
-        <Loading />
-      </div>
-    ) : q.error ? (
-      <div className="mt-4">
-        <Failure error={q.error} retry={() => q.refetch()} />
-      </div>
-    ) : null;
-  const managerCategoriesState =
-    categories.isPending || submissions.isPending ? (
-      <div className="mt-4">
-        <Loading />
-      </div>
-    ) : categories.error || submissions.error ? (
-      <div className="mt-4">
-        <Failure
-          error={(categories.error ?? submissions.error)!}
-          retry={() => {
-            categories.refetch();
-            submissions.refetch();
-          }}
-        />
-      </div>
-    ) : null;
-  const initials = (name: string) =>
-    name
-      .replace(/\(.*?\)/g, '')
-      .split(/\s+/)
-      .filter((w) => /^\p{L}/u.test(w))
-      .map((w) => w[0])
-      .slice(0, 2)
-      .join('')
-      .toUpperCase();
-  const collections = (
-    <section aria-labelledby="home-neueste" className={card}>
-      <div className="flex items-baseline justify-between gap-4">
-        <h2 id="home-neueste" className={`${heading} flex items-center gap-2`}>
-          <Vote aria-hidden="true" className="size-[18px] shrink-0" />
-          {isAdmin ? 'Neueste Abstimmungen' : 'Meine Abstimmungen'}
-        </h2>
-        <Link to="/sammlungen" className={btn.text}>
-          Alle <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-        </Link>
-      </div>
-      {state(categories) ??
-        (latest.length === 0 ? (
-          <div className="mt-4">
-            {isAdmin ? (
-              <Empty>Noch keine Abstimmung.</Empty>
-            ) : (
-              <Empty>Dir sind noch keine Abstimmungen zugewiesen.</Empty>
-            )}
-          </div>
-        ) : (
-          <ul className="mt-3 divide-y divide-line">
-            {latest.map((c) => {
-              const participation = isBallot(c.kind) ? c.participation : null;
-              const showParticipation = Boolean(participation);
-              const voted = participation?.voted ?? 0;
-              const eligible = participation?.eligible ?? 0;
-              const percent = eligible === 0 ? 0 : Math.max(0, Math.min(100, (voted / eligible) * 100));
-              return (
-                <li key={c.id} className="min-w-0">
-                  <Link
-                    to={`/sammlungen/${c.id}`}
-                    className={`-mx-2 flex gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30 ${showParticipation ? 'items-start' : 'items-center'}`}
-                  >
-                    <KindIcon
-                      icon={kindIcon[c.kind]}
-                      className={`size-4 shrink-0 text-muted ${showParticipation ? 'mt-1' : ''}`}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <strong className="line-clamp-2 min-w-0 flex-1 break-words text-[15px] font-semibold leading-snug">
-                          {c.name}
-                        </strong>
-                        {isBallot(c.kind) && <Badge status={c.status} />}
-                      </span>
-                      <span className="block text-[13px] text-muted">
-                        {[kindLabel[c.kind], c.status === 'open' && isBallot(c.kind) ? since(c.opened_at) : '']
-                          .filter(Boolean)
-                          .join(', ')}
-                      </span>
-                      {showParticipation && (
-                        <span className="mt-2 block">
-                          <span className="flex items-center gap-1 text-[12px] leading-4 text-muted">
-                            <span className="tabular-nums">
-                              {voted} von {eligible}
-                            </span>{' '}
-                            abgestimmt
-                          </span>
-                          <span
-                            role="progressbar"
-                            aria-label={`Wahlbeteiligung: ${c.name}`}
-                            aria-valuemin={0}
-                            aria-valuemax={100}
-                            aria-valuenow={percent}
-                            aria-valuetext={`${voted} von ${eligible} Personen abgestimmt (${Math.round(percent)} %)`}
-                            className="mt-1 block h-1.5 overflow-hidden rounded-full"
-                            style={{ backgroundColor: '#e5e7eb' }}
-                          >
-                            <span
-                              aria-hidden="true"
-                              className="block h-full rounded-full"
-                              style={{ width: `${percent}%`, backgroundColor: participationColor(percent) }}
-                            />
-                          </span>
-                        </span>
-                      )}
-                    </span>
-                    {showParticipation && (
-                      <span className="w-24 flex-none whitespace-nowrap pt-0.5 text-right">
-                        <strong className="block text-3xl font-extrabold tabular-nums leading-none tracking-tight">
-                          {Math.round(percent)}%
-                        </strong>
-                        <span className="mt-1 block text-[12px] font-normal leading-4 text-muted">Teilgenommen</span>
-                      </span>
-                    )}
-                  </Link>
-                  <DevDebug
-                    label="Abstimmung"
-                    data={{
-                      id: c.id,
-                      status: c.status,
-                      kind: c.kind,
-                      version: c.version,
-                      options: c.options.length,
-                    }}
-                  />
-                </li>
-              );
-            })}
-          </ul>
-        ))}
-      {!isAdmin && (
-        <Link to="/sammlungen?neu" className={`${btn.redaktion} mt-5`}>
-          <Plus aria-hidden="true" className="size-4 shrink-0" /> Neue Abstimmung
-        </Link>
-      )}
-    </section>
-  );
-  return (
-    <>
-      <PageHead
-        title="Redaktion"
-        action={
-          <Link to="/redaktion/beitraege" className={btn.text}>
-            Alle Beiträge <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-          </Link>
-        }
-      >
-        {isAdmin
-          ? 'Zugänge und Abstimmungen im Überblick.'
-          : projects
-            ? undefined
-            : 'Überblick über Rubriken und Beiträge aus den Abstimmungen, die dir zugewiesen sind.'}
-      </PageHead>
-      {/* DOM order puts the tasks first on phones. */}
-      <div className={`mb-10 grid items-start gap-4 ${projects ? 'lg:grid-cols-2' : ''}`}>
-        {projects && <MyTasks user={session} />}
-        {collections}
-      </div>
-      {projects && (
-        <div className="mb-10">
-          <DocumentTiles limit={6} />
-        </div>
-      )}
-      {(isAdmin || !projects) && (
-        <section aria-labelledby="home-sammlungen" className="mb-10">
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            <h2 id="home-sammlungen" className={heading}>
-              Abstimmungen
-            </h2>
-            <Link to="/sammlungen?neu" className={btn.redaktion}>
-              <Plus aria-hidden="true" className="size-4 shrink-0" /> Neue Abstimmung
-            </Link>
-          </div>
-          {(isAdmin ? state(categories) : managerCategoriesState) ?? (
-            <ul className="mt-4 grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">
-              {allKinds.map((kind) => {
-                const mine = (categories.data ?? []).filter((c) => c.kind === kind && canEdit(user, c.id));
-                const ids = new Set(mine.map((c) => c.id));
-                const n = writableSubmissions.filter((s) => ids.has(s.category_id)).length;
-                const submissionsKind = isSubmissionCollection(kind);
-                return (
-                  <li key={kind} className="min-w-0">
-                    <Link
-                      to={`/sammlungen?klasse=${kind}`}
-                      className="flex h-full flex-col rounded-ui bg-white p-4 transition-transform hover:-translate-y-0.5 hover:bg-pop/40 active:scale-[.99] sm:p-5"
-                    >
-                      <span className="flex items-center gap-2">
-                        <KindIcon icon={kindIcon[kind]} className="size-4 text-muted" />
-                        <strong className="min-w-0 truncate text-[15px] font-bold">{kindLabel[kind]}</strong>
-                      </span>
-                      <span className="mt-5 flex items-baseline gap-2">
-                        <strong className={figure}>{categories.isPending ? '–' : mine.length}</strong>{' '}
-                        <span className="text-[13px] text-muted">
-                          {mine.length === 1 ? 'Abstimmung' : 'Abstimmungen'}
-                        </span>
-                      </span>
-                      {submissionsKind ? (
-                        <span className="mt-4 text-[13px] text-muted">
-                          <strong className="text-lg font-extrabold tabular-nums leading-tight text-ink">
-                            {submissions.isPending ? '–' : n}
-                          </strong>{' '}
-                          {n === 1 ? 'Beitrag' : 'Beiträge'}
-                        </span>
-                      ) : (
-                        <span className="mt-4 grid grid-cols-2 gap-2 text-[13px] text-muted">
-                          <span>
-                            <strong className="block text-lg font-extrabold tabular-nums leading-tight text-ink">
-                              {mine.filter((c) => c.status === 'open').length}
-                            </strong>{' '}
-                            offen
-                          </span>{' '}
-                          <span>
-                            <strong className="block text-lg font-extrabold tabular-nums leading-tight text-ink">
-                              {mine.filter((c) => c.status === 'closed').length}
-                            </strong>{' '}
-                            beendet
-                          </span>
-                        </span>
-                      )}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-      )}
-      {isAdmin ? (
-        <section aria-labelledby="home-personen" className={card}>
-          <h2 id="home-personen" className={`${heading} flex items-center gap-2`}>
-            <Users aria-hidden="true" className="size-[18px] shrink-0" />
-            Personen
-          </h2>
-          {state(users) ?? (
-            <>
-              <div className="mt-5 flex flex-wrap gap-x-10 gap-y-3">
-                <p>
-                  <strong className={figure}>{users.data?.length}</strong>
-                  <span className="mt-1.5 block text-[13px] text-muted">Angemeldet</span>
-                </p>
-                <p>
-                  <strong className={`${figure} ${waiting.length ? 'text-wait' : ''}`}>{waiting.length}</strong>
-                  <span className="mt-1.5 block text-[13px] text-muted">
-                    {waiting.length === 1 ? 'wartet' : 'warten'} auf Freigabe
-                  </span>
-                </p>
-              </div>
-              <h3 className="mt-7 flex items-center gap-2 text-sm font-bold">
-                <Hourglass aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0 text-muted" />
-                Zuletzt angemeldet, noch nicht freigegeben
-              </h3>
-              {waiting.length === 0 ? (
-                <p className="mt-2 flex items-center gap-2 text-[15px] text-muted">
-                  <UserCheck aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0" />
-                  Alle sind freigegeben.
-                </p>
-              ) : (
-                <ul aria-label="Warten auf Freigabe" className="mt-2 divide-y divide-line">
-                  {waiting.slice(0, 3).map((u) => (
-                    <li key={u.id}>
-                      <Link
-                        to="/verwaltung/personen"
-                        className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30"
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="grid size-8 flex-none place-items-center rounded-full bg-soft text-xs font-bold text-ink"
-                        >
-                          {initials(u.name) || '?'}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{u.name}</span>
-                        <span className="flex-none text-[13px] text-muted">{since(u.created_at)}</span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {waiting.length > 3 && <p className="mt-1 text-[13px] text-muted">und {waiting.length - 3} weitere</p>}
-              <Link to="/verwaltung/personen" className={`${btn.text} mt-5 self-start`}>
-                Zugänge verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-              </Link>
-              <Link to="/verwaltung/email" className={`${btn.text} mt-3 self-start`}>
-                E-Mail-Versand verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-              </Link>
-              <Link to="/verwaltung/protokoll" className={`${btn.text} mt-3 self-start`}>
-                Aktivitätsprotokoll <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-              </Link>
-              {projects && (
-                <Link to="/verwaltung/bereiche" className={`${btn.text} mt-3 self-start`}>
-                  Bereiche verwalten <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-                </Link>
-              )}
-              <DevDebug
-                label="Personen"
-                data={{
-                  total: users.data?.length ?? 0,
-                  waiting: waiting.length,
-                  admins: (users.data ?? []).filter((u) => u.role === 'admin').length,
-                }}
-              />
-            </>
-          )}
-        </section>
-      ) : (
-        <section aria-labelledby="home-beitraege" className={card}>
-          <h2 id="home-beitraege" className={`${heading} flex items-center gap-2`}>
-            <FileText aria-hidden="true" className="size-[18px] shrink-0" />
-            Gesammelte Beiträge
-          </h2>
-          <p className="mt-5">
-            <strong className={figure}>
-              {categories.isPending || submissions.isPending || categories.error || submissions.error
-                ? '–'
-                : writableSubmissions.length}
-            </strong>
-            <span className="mt-1.5 block text-[13px] text-muted">In deinen zugewiesenen Abstimmungen</span>
-          </p>
-          {categories.isPending || submissions.isPending ? (
-            <div className="mt-4">
-              <Loading />
-            </div>
-          ) : categories.error || submissions.error ? (
-            <div className="mt-4">
-              <Failure
-                error={(categories.error ?? submissions.error)!}
-                retry={() => {
-                  categories.refetch();
-                  submissions.refetch();
-                }}
-              />
-            </div>
-          ) : recentSubmissions.length === 0 ? (
-            <div className="mt-4">
-              <Empty>In deinen zugewiesenen Abstimmungen gibt es noch keine Beiträge.</Empty>
-            </div>
-          ) : (
-            <ul className="mt-3 divide-y divide-line">
-              {recentSubmissions.map((submission) => (
-                <li key={submission.id}>
-                  <Link
-                    to={`/redaktion/beitraege/${submission.id}`}
-                    className="-mx-2 flex min-w-0 items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-pop/30"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <strong className="block truncate text-[15px] font-semibold">{submission.title}</strong>
-                      <small className="mt-0.5 block text-[13px] text-muted">
-                        {categories.data?.find((c) => c.id === submission.category_id)?.name ?? 'Beitrag'} ·{' '}
-                        {date(submission.created_at)}
-                      </small>
-                    </span>
-                    <Badge status={submission.status} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
     </>
   );
 }

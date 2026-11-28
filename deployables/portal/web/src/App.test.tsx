@@ -309,6 +309,7 @@ describe('verwaltung', () => {
           return onWrite(c) ?? Response.json({ id: 'new-cat' });
         }
         if (url === '/admin/users') return Response.json(people());
+        if (url === '/admin/email/status') return Response.json({ usage: { used: 0 }, policy: { daily_limit: 300 } });
         if (url === '/categories') return Response.json(categories);
         if (url === '/admin/status')
           return Response.json({ backup_last_success: null, backup_stale: false, upload_bytes: 0 });
@@ -331,7 +332,7 @@ describe('verwaltung', () => {
   it.each([
     ['admin', admin, true],
     ['manager', editor, false],
-  ])('the Redaktion menu lists static pages; Verwaltung only for admins (%s)', async (_role, me, verwaltung) => {
+  ])('the Redaktion menu links the editorial pages; Verwaltung only for admins (%s)', async (_role, me, verwaltung) => {
     localStorage.clear();
     mount('/redaktion', me);
     fireEvent.click(await screen.findByRole('button', { name: 'Redaktionsmenü' }));
@@ -339,13 +340,10 @@ describe('verwaltung', () => {
     const hrefs = within(menu)
       .getAllByRole('link')
       .map((a) => a.getAttribute('href'));
-    expect(hrefs).toEqual(
-      expect.arrayContaining(['/redaktion', '/sammlungen?neu', '/sammlungen', '/redaktion/beitraege']),
-    );
-    expect(hrefs.some((href) => /^\/(sammlungen|redaktion\/beitraege)\/./.test(href ?? ''))).toBe(false);
+    expect(hrefs).toEqual(expect.arrayContaining(['/', '/sammlungen?neu', '/sammlungen', '/redaktion/beitraege']));
     expect(within(menu).queryByRole('group', { name: 'Verwaltung' }) !== null).toBe(verwaltung);
     expect(hrefs.includes('/verwaltung/personen')).toBe(verwaltung);
-    fireEvent.click(within(menu).getByRole('link', { name: 'Alle Beiträge' }));
+    fireEvent.click(within(menu).getByRole('link', { name: /Alle Beiträge/ }));
     await waitFor(() => expect(screen.queryByRole('navigation', { name: 'Redaktionsmenü' })).toBeNull());
   });
 
@@ -358,7 +356,7 @@ describe('verwaltung', () => {
     mount('/', editor);
     fireEvent.click(await screen.findByRole('button', { name: 'Redaktionsmenü' }));
     const menu = await screen.findByRole('navigation', { name: 'Redaktionsmenü' });
-    fireEvent.click(within(menu).getByRole('link', { name: 'Alle Abstimmungen' }));
+    fireEvent.click(within(menu).getByRole('link', { name: /abgestimmt/ }));
     // The Schüler view would redirect /sammlungen to /, so the menu must switch to Redaktion first.
     expect(await screen.findByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeInTheDocument();
     expect(document.querySelector('[data-workspace="redaktion"]')).toBeInTheDocument();
@@ -633,10 +631,11 @@ describe('navigation by view', () => {
   it('restores the view of a shared page on back navigation', async () => {
     const who = { id: 'manager-1', name: 'Sam Redaktion', role: 'manager', admitted: true, cohort_member: false };
     mount({ ...who, category_ids: ['memory'] }, { polls: [], submissions: [] });
-    const assigned = await screen.findByRole('region', { name: 'Meine Abstimmungen' });
-    fireEvent.click(within(assigned).getByRole('link', { name: 'Alle' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Redaktionsmenü' }));
+    fireEvent.click(await screen.findByRole('link', { name: /abgestimmt/ }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeInTheDocument();
-    fireEvent.click(within(screen.getByRole('region', { name: 'Konto' })).getByRole('button', { name: 'Schüler' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Redaktionsmenü' }));
+    fireEvent.click(await screen.findByRole('link', { name: 'Zur Schüleransicht' }));
     expect(await screen.findByRole('heading', { level: 1, name: /^Hey / })).toBeInTheDocument();
     // /sammlungen redirects the Schüler view home, so this only holds if back restores the Redaktion view.
     fireEvent.click(screen.getByRole('button', { name: 'Zurück (Test)' }));

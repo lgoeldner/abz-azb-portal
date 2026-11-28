@@ -133,14 +133,9 @@ for (const role of ['student', 'manager', 'admin'] as const) {
       const account = page.getByRole('region', { name: 'Konto' });
       await expect(account.getByRole('button', { name: 'Abmelden' })).toBeInViewport();
       await expect(account.getByRole('link', { name: 'Einstellungen' })).toBeInViewport();
-      // Phones get the expanding mode pill, wider screens the segmented switch in the account card.
-      const phone = width < 651;
-      await expect(page.getByRole('button', { name: /^Ansicht:/ })).toBeVisible({
-        visible: phone && role !== 'student',
-      });
-      await expect(account.getByRole('button', { name: 'Schüler' })).toBeVisible({
-        visible: !phone && role !== 'student',
-      });
+      const menu = page.getByRole('button', { name: /^Redaktionsmenü/ });
+      if (role === 'student') await expect(menu).toHaveCount(0);
+      else await expect(menu).toBeInViewport();
     }
 
     await page.setViewportSize({ width: 640, height: 360 });

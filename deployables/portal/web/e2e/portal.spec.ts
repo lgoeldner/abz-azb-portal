@@ -14,9 +14,18 @@ async function signInAs(page: Page, role: 'Jahrgang' | 'Redaktion' | 'Administra
   const access = page.locator(`[data-user-id="${id}"]`);
   await expect(access, `Development login for ${role} is available (start a seeded development server)`).toBeVisible();
   await access.click();
-  // Editors land on /redaktion on a fresh visit.
-  await page.waitForURL((url) => url.pathname === '/' || url.pathname === '/redaktion');
+  // Editors land on the Redaktion on a fresh visit: /redaktion redirects to the board or the contributions.
+  await page.waitForURL((url) => ['/', '/tickets', '/redaktion/beitraege'].includes(url.pathname));
   await expect(page.getByRole('main').getByRole('heading', { level: 1 })).toBeVisible();
+}
+
+// Where /redaktion leads: the board, or all contributions without PROJECT_MANAGEMENT (as in CI).
+const redaktionHome = /\/(tickets|redaktion\/beitraege)$/;
+
+async function openMenu(page: Page) {
+  // Not the close button, which is also named "Redaktionsmenü …".
+  await page.getByRole('button', { name: /^Redaktionsmenü(?!\s*schließen)/ }).click();
+  return page.getByRole('navigation', { name: 'Redaktionsmenü' });
 }
 
 test('student signs in, submits a contribution, and returns to the open ballots', async ({ page }) => {
@@ -36,26 +45,25 @@ test('student signs in, submits a contribution, and returns to the open ballots'
 
 test('back navigation restores the Schüler or Redaktion view of each page', async ({ page }) => {
   await signInAs(page, 'Redaktion');
-  await expect(page).toHaveURL(/\/redaktion$/);
-  await page
-    .getByRole('region', { name: 'Meine Abstimmungen' })
-    .getByRole('link', { name: 'Alle', exact: true })
-    .click();
+  await expect(page).toHaveURL(redaktionHome);
+  const root = page.locator('[data-workspace]:has(#inhalt)');
+  await (await openMenu(page)).locator('a[href="/sammlungen"]').first().click();
   await expect(page.getByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeVisible();
-  const account = page.getByRole('region', { name: 'Konto' });
-  await account.getByRole('button', { name: 'Schüler' }).click();
+  await (await openMenu(page)).getByRole('link', { name: 'Zur Schüleransicht' }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('heading', { level: 1, name: /^Hey / })).toBeVisible();
+  // /sammlungen redirects the Schüler view home, so this only holds if back restores the Redaktion view.
   await page.goBack();
   await expect(page).toHaveURL(/\/sammlungen$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeVisible();
-  await expect(account.getByRole('button', { name: 'Redaktion' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(root).toHaveAttribute('data-workspace', 'redaktion');
   await page.goBack();
-  await expect(page.getByRole('heading', { level: 1, name: 'Redaktion' })).toBeVisible();
+  await expect(page).toHaveURL(redaktionHome);
   await page.goForward();
+  await expect(page).toHaveURL(/\/sammlungen$/);
   await page.goForward();
   await expect(page.getByRole('heading', { level: 1, name: /^Hey / })).toBeVisible();
-  await expect(account.getByRole('button', { name: 'Schüler' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(root).toHaveAttribute('data-workspace', 'schueler');
 });
 
 test('student casts a ballot in the seeded open poll', async ({ page }) => {
@@ -87,7 +95,7 @@ test('editor reads and annotates an original, exports without approval, and sees
 
   await page.context().clearCookies();
   await signInAs(page, 'Redaktion');
-  await page.getByRole('link', { name: 'Alle Beiträge' }).click();
+  await (await openMenu(page)).getByRole('link', { name: /Alle Beiträge/ }).click();
   await expect(page).toHaveURL(/\/redaktion\/beitraege$/);
   await page.getByPlaceholder('Titel, Text, Name …').fill(title);
   const review = page.getByRole('link', { name: new RegExp(title) });
@@ -110,9 +118,11 @@ test('editor reads and annotates an original, exports without approval, and sees
   await expect(downloadPromise).resolves.toBeTruthy();
 
   await page.getByRole('link', { name: 'AbiZeitBetrug Startseite' }).click();
+  await expect(page).toHaveURL(redaktionHome);
+  await (await openMenu(page)).locator('a[href="/sammlungen"]').first().click();
   await page
-    .getByRole('region', { name: 'Meine Abstimmungen' })
-    .getByRole('link', { name: /Unser Abimotto/ })
+    .getByRole('main')
+    .getByRole('link', { name: /Unser Abimotto(?!:)/ })
     .click();
   await expect(page.getByRole('heading', { name: /Unser Abimotto/ })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Gesamtergebnisse' })).toBeVisible();

@@ -47,6 +47,34 @@ export const heading = 'text-xl font-extrabold tracking-tight';
 export const card = 'flex min-w-0 flex-col rounded-ui bg-white p-5 sm:p-6';
 export const notice = 'rounded-ui bg-soft px-4 py-3 text-sm';
 
+// Floating controls share one geometry so the corners stay concentric: 48px items, padding = gap = 6px,
+// outer radius = 24px item radius + 6px = 30px.
+export const roundButton =
+  'grid size-12 flex-none place-items-center rounded-full border border-black/10 transition-[translate,border-color,box-shadow] duration-100 hover:-translate-y-1 active:translate-y-0.5 active:shadow-none';
+// Colours follow the surrounding workspace; `workspace` pins one palette (corner, 27, ink, paper) regardless of the view.
+export function Mark({ className = 'size-8', workspace }: { className?: string; workspace?: View }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 40 40" className={`flex-none ${className}`} data-workspace={workspace}>
+      <g transform="rotate(-7 20 20)">
+        <path d="M5 4h30a2 2 0 0 1 2 2v28a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" className="fill-ink" />
+        <path d="M37 6v11H26a2 2 0 0 1-2-2V4h11a2 2 0 0 1 2 2z" className="fill-accent" />
+        <path d="M24 4v11a2 2 0 0 0 2 2h11" fill="none" strokeWidth="1.5" className="stroke-paper" />
+        <text
+          x="4.5"
+          y="31"
+          fontSize="21"
+          fontWeight="800"
+          letterSpacing="-1.5"
+          className="fill-pop"
+          style={{ fontFamily: 'inherit' }}
+        >
+          27
+        </text>
+        <rect x="6" y="9" width="13" height="2.4" rx="1.2" className="fill-paper" />
+      </g>
+    </svg>
+  );
+}
 export const Session = createContext<Me>(null!);
 export const useSession = () => useContext(Session);
 export function useData<T>(path: string, enabled = true) {
@@ -98,12 +126,6 @@ export function useView(): [View, (v: View) => void] {
 
 export const roleName = (role: User['role']) =>
   ({ student: 'Jahrgang', manager: 'Redaktion', admin: 'Administration' })[role];
-export function since(value: string | null | undefined) {
-  if (!value) return '';
-  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
-  return days <= 0 ? 'seit heute' : days === 1 ? 'seit gestern' : `seit ${days} Tagen`;
-}
-
 export function Failure({ error, retry }: { error: Error; retry?: () => void }) {
   const stale =
     error instanceof ApiError &&
