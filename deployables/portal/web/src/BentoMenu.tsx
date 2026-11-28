@@ -365,7 +365,7 @@ function Tasks({ tickets, areas, failed }: { tickets?: Ticket[]; areas?: Area[];
     const node = track.current!;
     setTimeout(() => (node.style.scrollSnapType = ''), 400);
   };
-  const card = 'flex flex-[0_0_88%] snap-start flex-col rounded-[18px] bg-soft px-3.5 py-3';
+  const card = 'flex min-w-0 flex-[0_0_88%] snap-start flex-col rounded-[18px] bg-soft px-3.5 py-3';
   return (
     <div
       role="group"
@@ -404,7 +404,8 @@ function Tasks({ tickets, areas, failed }: { tickets?: Ticket[]; areas?: Area[];
           onPointerLeave={release}
           // A drag ends in a click on a card; that must neither navigate nor close the menu.
           onClickCapture={(e) => {
-            if (!dragged.current) return;
+            // detail 0 is a keyboard activation: never part of a drag, even if the last one ended outside the row.
+            if (!dragged.current || e.detail === 0) return;
             dragged.current = false;
             e.preventDefault();
             e.stopPropagation();
@@ -433,7 +434,8 @@ function Tasks({ tickets, areas, failed }: { tickets?: Ticket[]; areas?: Area[];
       )}
       <div className="flex h-7 flex-none items-center justify-between gap-2 px-1">
         <span className="truncate text-[13px] font-bold">
-          Meine Aufgaben{tickets ? ` · ${tickets.length} offen` : ''}
+          {/* Narrow phones: the dots need the room. */}
+          <span className="max-[380px]:sr-only">Meine </span>Aufgaben{tickets ? ` · ${tickets.length} offen` : ''}
         </span>
         {names.length > 1 && (
           <span className="flex">
