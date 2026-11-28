@@ -169,11 +169,6 @@
       if (!c.caught && p > 0.84) { c.caught = true; UI.bounce(c.id); }
       return p >= 1;
     },
-    spawnFrom(c, host, H) {
-      const t = Drop.target(host, H);
-      c.x = t.x; c.y = t.y; c.scale = t.scale; c.rot = 0; c.opacity = 0;
-      c.vx = 0; c.vy = 0; c.vScale = 0; c.vRot = 0;
-    },
   };
 
   /* ─────────────────────────── Chrome (bars, menu, panel) ─────────────────────────── */
@@ -271,6 +266,14 @@
       </section>`;
     layer.append(panelRoot);
 
+    // "Ändern": the submitted poll opens as a card of its own above everything (it never goes back into
+    // the stack: a submitted answer can be changed, but not un-submitted).
+    const editRoot = document.createElement('div');
+    editRoot.className = 'edit-root';
+    editRoot.id = 'editRoot';
+    editRoot.innerHTML = '<div class="edit-scrim" id="editScrim"></div><div class="edit-host" id="editHost" role="dialog" aria-modal="true"></div>';
+    document.body.append(editRoot);
+
     const sammeln = $('sammeln');
     if (sammeln) {
       const tiles = [
@@ -294,6 +297,7 @@
     wireTop();
     wireDock();
     wirePanel();
+    wireEditor();
   }
 
   // Scroll-edge fades: a solid page-coloured layer shaped by an alpha mask that is rendered once to a tall
@@ -437,17 +441,9 @@
 
   let hasRendered = false;
   let renderedIds = new Set();
-  let leavingUntil = 0;
-  let refreshTimer = null;
 
   function refreshPanel() {
     if (!$('panelRoot').classList.contains('open')) return;
-    const wait = leavingUntil - performance.now();
-    if (wait > 0) {
-      clearTimeout(refreshTimer);
-      refreshTimer = setTimeout(refreshPanel, wait + 16);
-      return;
-    }
     const { done, closed } = opts.getLists();
     const body = $('panelBody');
     body.innerHTML = '';
@@ -464,14 +460,13 @@
         const row = document.createElement('div');
         row.className = 'lrow';
         const d = opts.describe(id);
+        row.dataset.id = id;
         row.innerHTML = `<span class="lrow-icon">${ICONS.checkSmall}</span><span class="lrow-text"><span class="lrow-title"></span><span class="lrow-sub"></span></span><button class="small-btn" type="button">Ändern</button>`;
         row.querySelector('.lrow-title').textContent = d.title;
         row.querySelector('.lrow-sub').textContent = d.detail;
         row.querySelector('button').addEventListener('click', (e) => {
           e.stopPropagation();
-          row.classList.add('leaving');
-          leavingUntil = performance.now() + 300;
-          opts.onRestore(id);
+          openEditor(id);
         });
         if (hasRendered && !renderedIds.has(id)) fresh.push(row);
         g.append(row);
@@ -499,6 +494,68 @@
       void row.offsetHeight;
       requestAnimationFrame(() => row.classList.remove('entering'));
     });
+  }
+
+  /* ─────────── "Ändern" modal ─────────── */
+  let editing = null; // { id, snap, root }
+  const isEditorOpen = () => !!editing;
+
+  function openEditor(id) {
+    const host = $('editHost');
+    closeMenu();
+    host.innerHTML = '';
+    const card = document.createElement('div');
+    card.className = 'card edit-card';
+    const root = Cards.render(id, { edit: true });
+    card.appendChild(root);
+    host.appendChild(card);
+    editing = { id, snap: Cards.snapshot(id), root };
+    root.querySelector('.q-close').addEventListener('click', cancelEditor);
+    root.querySelector('.card-cta').addEventListener('click', saveEditor);
+    const er = $('editRoot');
+    er.classList.add('open');
+    void er.offsetWidth;
+    er.classList.add('shown');
+  }
+
+  function closeEditor() {
+    const er = $('editRoot');
+    const id = editing && editing.id;
+    editing = null;
+    er.classList.remove('shown');
+    setTimeout(() => { if (!editing) { er.classList.remove('open'); $('editHost').innerHTML = ''; } }, 260);
+    return id;
+  }
+
+  function cancelEditor() {
+    if (!editing) return;
+    Cards.restore(editing.id, editing.snap);
+    closeEditor();
+  }
+
+  function saveEditor() {
+    if (!editing) return;
+    const { id, root } = editing;
+    if (!Cards.isValid(id)) { Cards.shake(root.parentElement.parentElement); return; }
+    if (!Cards.hasChanged(root, id)) { cancelEditor(); return; }
+    closeEditor();
+    refreshPanel();
+    // The row that changed acknowledges the save.
+    const row = $('panelBody').querySelector(`.lrow[data-id="${id}"]`);
+    if (row) { row.classList.remove('saved'); void row.offsetWidth; row.classList.add('saved'); }
+  }
+
+  function wireEditor() {
+    $('editScrim').addEventListener('click', cancelEditor);
+    document.addEventListener('keydown', (e) => {
+      if (!editing) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); cancelEditor(); return; }
+      if (e.target.closest('input, textarea')) return;
+      if (e.key === 'Enter') { e.preventDefault(); saveEditor(); }
+      else if (/^[1-9]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (Cards.pressDigit(editing.root, editing.id, Number(e.key) - 1)) e.preventDefault();
+      }
+    }, true);
   }
 
   function applyCapsule(s) {
@@ -533,7 +590,8 @@
     refreshPanel,
     openPanel,
     closePanel,
-    overlayOpen: () => isPanelOpen() || $('accountMenu').classList.contains('open'),
+    openEditor,
+    overlayOpen: () => isEditorOpen() || isPanelOpen() || $('accountMenu').classList.contains('open'),
   };
 
   const gesture = { moved: false };

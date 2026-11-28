@@ -304,24 +304,6 @@
       wakeLoop();
     }
 
-    function restoreCard(id) {
-      if (!state.done.includes(id)) return;
-      state.done = state.done.filter((x) => x !== id);
-      const n = state.open.length;
-      const at = n === 2 ? 1 : n ? currentIdx() : 0;
-      state.open.splice(at, 0, id);
-      state.pos = state.targetPos = at;
-      state.posVel = 0;
-      const c = ensureCard(id);
-      c.mode = 'ring';
-      Drop.spawnFrom(c, viewport, H);
-      c.el.style.pointerEvents = '';
-      UI.update(snapshot());
-      syncDom(false);
-      UI.refreshPanel();
-      wakeLoop();
-    }
-
     let rafId = 0, lastTs = 0;
     function wakeLoop() {
       if (!rafId) { lastTs = performance.now(); rafId = requestAnimationFrame(stepFrame); }
@@ -601,11 +583,6 @@
 
     document.addEventListener('keydown', (e) => {
       if (UI.overlayOpen() || e.key === 'Escape') return;
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        if (state.done.length) restoreCard(state.done[0]);
-        return;
-      }
       if (!state.open.length || e.target.closest('input, textarea')) return;
       if (/^[1-9]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const id = state.open[currentIdx()];
@@ -625,7 +602,6 @@
       brand: true,
       getLists: () => ({ done: state.done, closed: state.closed }),
       describe: Cards.describe,
-      onRestore: restoreCard,
       onSteckbrief: () => { state.steckbriefDone = !state.steckbriefDone; UI.update(snapshot()); },
     });
 

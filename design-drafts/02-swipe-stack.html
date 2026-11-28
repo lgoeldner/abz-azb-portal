@@ -288,21 +288,6 @@
       wakeLoop();
     }
 
-    function restoreCard(id) {
-      if (!state.done.includes(id)) return;
-      state.done = state.done.filter((x) => x !== id);
-      state.queue.unshift(id);
-      const c = ensureCard(id);
-      c.mode = 'stack';
-      Drop.spawnFrom(c, stage, H);
-      c.el.style.pointerEvents = '';
-      resetGesture();
-      UI.update(snapshot());
-      syncTargets();
-      UI.refreshPanel();
-      wakeLoop();
-    }
-
     let rafId = 0, lastTs = 0;
     function wakeLoop() {
       if (!rafId) { lastTs = performance.now(); rafId = requestAnimationFrame(stepFrame); }
@@ -525,11 +510,6 @@
 
     document.addEventListener('keydown', (e) => {
       if (UI.overlayOpen() || e.key === 'Escape') return;
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        if (state.done.length) restoreCard(state.done[0]);
-        return;
-      }
       if (!state.queue.length || e.target.closest('input, textarea')) return;
       const top = cards.get(state.queue[0]);
       if (/^[1-9]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -560,7 +540,6 @@
       brand: true,
       getLists: () => ({ done: state.done, closed: state.closed }),
       describe: Cards.describe,
-      onRestore: restoreCard,
       onSteckbrief: () => { state.steckbriefDone = !state.steckbriefDone; UI.update(snapshot()); },
     });
 

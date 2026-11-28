@@ -628,7 +628,7 @@ main {
   height: 0.5px;
   background: var(--sep);
 }
-.lrow.leaving, .lrow.entering { height: 0; opacity: 0; }
+.lrow.entering { height: 0; opacity: 0; }
 .lrow-icon {
   width: 28px; height: 28px;
   border-radius: 50%;
@@ -660,6 +660,32 @@ main {
 .small-btn:active { transform: scale(0.94); }
 .panel-empty { padding: 24px 16px 12px; text-align: center; color: var(--label-2); font-size: 15px; }
 
+/* ───────── "Ändern" modal: the submitted poll as a card of its own ───────── */
+.edit-root { position: fixed; inset: 0; z-index: 70; display: none; }
+.edit-root.open { display: grid; place-items: center; }
+.edit-scrim {
+  position: absolute; inset: 0;
+  background: rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transition: opacity 260ms ease;
+}
+.edit-root.shown .edit-scrim { opacity: 1; }
+.edit-host { position: relative; }
+.edit-card {
+  width: var(--col);
+  height: auto; /* hugs short polls; long ones (names) stop at the card height and scroll inside */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 24px 60px -18px rgba(0, 0, 0, 0.28);
+  transform: translateY(12px) scale(0.96);
+  opacity: 0;
+  transition: transform 380ms var(--ease-ios), opacity 180ms ease;
+}
+.edit-root.shown .edit-card { transform: none; opacity: 1; }
+.edit-card > .card-content { height: auto; max-height: var(--card-h); }
+.edit-card .q-body { flex: 0 1 auto; }
+.edit-card .q-person .q-body { flex: 1 1 auto; height: var(--card-h); }
+.lrow.saved { animation: saved 900ms ease; }
+@keyframes saved { 0%, 30% { background: var(--blue-soft); } 100% { background: transparent; } }
+
 /* ───────── Poll cards ───────── */
 .q { gap: 12px; }
 @media (min-width: 744px) { .q { gap: 16px; } }
@@ -683,6 +709,19 @@ main {
   text-align: center;
 }
 .q-count:empty { display: none; }
+/* Close button of the "Ändern" card: same concentric corner spot as the count. */
+.q-close {
+  float: right;
+  width: 28px; height: 28px;
+  margin: calc(var(--card-r) - 14px - var(--card-pad) - var(--text-top)) calc(var(--card-r) - 14px - var(--card-pad) - var(--text-inset)) 2px 10px;
+  border-radius: 50%;
+  background: var(--fill);
+  color: var(--label-2);
+  display: grid; place-items: center;
+  transition: transform 220ms var(--ease-out);
+}
+.q-close svg { width: 12px; height: 12px; }
+.q-close:active { transform: scale(0.9); }
 .q-title {
   margin: 0;
   font-size: 22px;

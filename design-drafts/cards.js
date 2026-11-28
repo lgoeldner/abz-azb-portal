@@ -113,7 +113,17 @@
       </label>`).join('')}</div>`;
   }
 
-  function render(id) {
+  // Normalised answer, to tell whether an edit changed anything.
+  function answerKey(id) {
+    const p = POLLS[id], a = get(id);
+    if (p.kind === 'words') return JSON.stringify(a.map((w) => w.trim()));
+    return JSON.stringify([...a].sort());
+  }
+  const snapshot = (id) => JSON.stringify(get(id));
+  const restore = (id, snap) => { answers[id] = JSON.parse(snap); };
+
+  // opts.edit: the card is shown in the "Ändern" modal (close button instead of the count, "Sichern").
+  function render(id, opts = {}) {
     const p = POLLS[id];
     const root = document.createElement('div');
     root.className = `card-content q q-${p.kind}`;
@@ -121,16 +131,17 @@
     root.dataset.id = id;
     root.innerHTML = `
       <header class="q-head">
-        <span class="q-count"></span>
+        ${opts.edit ? `<button type="button" class="q-close no-drag" aria-label="Abbrechen">${ICONS.xmark}</button>` : '<span class="q-count"></span>'}
         <h3 class="q-title">${esc(p.title)}</h3>
         <p class="q-meta"><span class="q-rule"></span><span class="q-sep">·</span><span class="q-due${soon}">${dueText(p)}</span></p>
       </header>
       <div class="q-body">${bodyHtml(p)}</div>
       <footer class="q-foot">
         <span class="q-due-foot${soon}">${ICONS.clock}${dueText(p)}</span>
-        <button type="button" class="card-cta">Abgeben</button>
+        <button type="button" class="card-cta">${opts.edit ? 'Sichern' : 'Abgeben'}</button>
       </footer>`;
     if (window.Theme && Theme.decorateCard) Theme.decorateCard(root, id, p);
+    root._initial = opts.edit ? answerKey(id) : null;
     wire(root, id);
     update(root, id);
     root.querySelectorAll('.scroll-fade').forEach((el) => { el._fade = scrollFade(el); });
@@ -222,7 +233,8 @@
   function update(root, id) {
     const p = POLLS[id], a = get(id);
     root.querySelector('.q-rule').textContent = ruleText(p, a);
-    root.querySelector('.card-cta').classList.toggle('off', !isValid(id));
+    const unchanged = root._initial != null && answerKey(id) === root._initial;
+    root.querySelector('.card-cta').classList.toggle('off', !isValid(id) || unchanged);
     const full = p.max > 1 && a.length >= p.max;
 
     if (p.kind === 'proposal') {
@@ -330,5 +342,6 @@
 
   const describe = (id) => ({ title: POLLS[id].title, detail: summary(id) || '–' });
 
-  window.Cards = { INITIAL, POLLS, render, isValid, describe, pressDigit, shake, blurInside, resetAnswers };
+  const hasChanged = (root, id) => root._initial != null && answerKey(id) !== root._initial;
+  window.Cards = { INITIAL, POLLS, render, isValid, hasChanged, describe, pressDigit, shake, blurInside, resetAnswers, snapshot, restore };
 })();
