@@ -634,7 +634,8 @@ describe('navigation by view', () => {
     const assigned = await screen.findByRole('region', { name: 'Meine Abstimmungen' });
     fireEvent.click(within(assigned).getByRole('link', { name: 'Alle' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeInTheDocument();
-    fireEvent.click(within(screen.getByRole('region', { name: 'Konto' })).getByRole('button', { name: 'Schüler' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Redaktionsmenü' }));
+    fireEvent.click(await screen.findByRole('link', { name: 'Zur Schüleransicht' }));
     expect(await screen.findByRole('heading', { level: 1, name: /^Hey / })).toBeInTheDocument();
     // /sammlungen redirects the Schüler view home, so this only holds if back restores the Redaktion view.
     fireEvent.click(screen.getByRole('button', { name: 'Zurück (Test)' }));

@@ -1,5 +1,5 @@
 import { ArrowRight, FileText, Hourglass, LogOut, Plus, Settings, UserCheck, Users, Vote } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   api,
@@ -269,7 +269,7 @@ function Logout({ compact = false }: { compact?: boolean }) {
         type="button"
         className={
           compact
-            ? `${roundButton} bg-red-100 text-red-700 [grid-area:logout] hover:border-red-700 hover:bg-red-600 hover:text-white hover:shadow-[0_4px_0_var(--color-red-700)] disabled:opacity-50`
+            ? `${roundButton} bg-red-100 text-red-700 hover:border-red-700 hover:bg-red-600 hover:text-white hover:shadow-[0_4px_0_var(--color-red-700)] disabled:opacity-50`
             : btn.text
         }
         aria-label={compact ? 'Abmelden' : undefined}
@@ -379,18 +379,12 @@ function Layout() {
         >
           Zum Inhalt
         </a>
-        {/* Phones: account left, menu and mode right in one row; below 360px the menu sits above the mode pill.
-            From 651px: the menu button sits above the account card's left edge. */}
+        {/* Phones: account left, menu right. From 651px the menu button sits above the account card's left edge. */}
         <div
-          className={`pointer-events-none fixed ${floatBottom} inset-x-4 z-40 flex items-end justify-between gap-1.5 *:pointer-events-auto min-[651px]:bottom-6 min-[651px]:left-6 min-[651px]:right-auto min-[651px]:w-[320px] min-[651px]:flex-col-reverse min-[651px]:items-stretch min-[651px]:gap-3`}
+          className={`pointer-events-none fixed ${floatBottom} inset-x-4 z-40 flex items-end justify-between gap-1.5 *:pointer-events-auto min-[651px]:bottom-6 min-[651px]:left-6 min-[651px]:right-auto min-[651px]:w-[320px] min-[651px]:flex-col-reverse min-[651px]:items-start min-[651px]:gap-3`}
         >
           <Dock />
-          {editorial(user) && (
-            <div className="pointer-events-none flex items-end gap-1.5 *:pointer-events-auto max-[360px]:flex-col min-[651px]:flex-col min-[651px]:items-start">
-              <BentoMenu container={root} />
-              <ModeFab />
-            </div>
-          )}
+          {editorial(user) && <BentoMenu container={root} />}
         </div>
         <div className="flex min-h-screen flex-col bg-paper pb-24 min-[651px]:pb-36">
           <main
@@ -432,154 +426,31 @@ function Layout() {
   );
 }
 
-// Account controls, rendered once and restyled by breakpoint: a bottom-left pill on phones
-// (avatar, settings, logout), a floating card on wider screens (mode switch and logout above, avatar, name, settings below).
+// Account controls: avatar, name (wider screens), settings and logout in one pill; a 320px card from 651px.
 function Dock() {
   const { user } = useSession();
   const location = useLocation();
-  const editor = editorial(user);
   return (
     // Pinned to the neutral Redaktion grey, so the olive Schüler pill never tints the floating controls.
     <section
       aria-label="Konto"
-      className={`flex items-center gap-1.5 rounded-[30px] bg-white p-1.5 shadow-lg ring-1 ring-black/5 [--color-pill:#e4e6e9] min-[651px]:grid min-[651px]:w-[320px] ${
-        editor
-          ? "min-[651px]:grid-cols-[auto_minmax(0,1fr)_auto] min-[651px]:[grid-template-areas:'switch_switch_logout'_'avatar_name_settings']"
-          : "min-[651px]:grid-cols-[auto_minmax(0,1fr)_auto_auto] min-[651px]:[grid-template-areas:'avatar_name_settings_logout']"
-      }`}
+      className="flex items-center gap-1.5 rounded-[30px] bg-white p-1.5 shadow-lg ring-1 ring-black/5 [--color-pill:#e4e6e9] min-[651px]:w-[320px]"
     >
-      {editor && (
-        <div className="[grid-area:switch] max-[651px]:hidden">
-          <ViewSwitch />
-        </div>
-      )}
-      {/* Decorative; dropped on narrow phones so account pill, menu button and mode pill fit in one row. */}
-      <Avatar
-        user={user}
-        className={`size-12 border-[3px] border-white text-lg ring-1 ring-black/10 [grid-area:avatar] max-[360px]:hidden ${editor ? 'max-[398px]:hidden' : ''}`}
-      />
-      <strong className="line-clamp-2 min-w-0 break-words px-1 text-[15px] font-semibold leading-tight [grid-area:name] max-[651px]:sr-only">
+      {/* Decorative */}
+      <Avatar user={user} className="size-12 border-[3px] border-white text-lg ring-1 ring-black/10" />
+      <strong className="line-clamp-2 min-w-0 break-words px-1 text-[15px] font-semibold leading-tight max-[651px]:sr-only min-[651px]:flex-1">
         {user.name}
       </strong>
       <Link
         to="/einstellungen"
         aria-label="Einstellungen"
         aria-current={location.pathname === '/einstellungen' ? 'page' : undefined}
-        className={`${roundButton} bg-pill [grid-area:settings] hover:border-ink hover:bg-gray-600 hover:text-white hover:shadow-[0_4px_0_var(--color-ink)]`}
+        className={`${roundButton} bg-pill hover:border-ink hover:bg-gray-600 hover:text-white hover:shadow-[0_4px_0_var(--color-ink)]`}
       >
         <Settings aria-hidden="true" className="size-6" />
       </Link>
       <Logout compact />
     </section>
-  );
-}
-
-function useSwitchView() {
-  const [, setView] = useWorkspaceView();
-  const navigate = useNavigate();
-  return (next: View) => {
-    setView(next);
-    navigate(next === 'redaktion' ? '/redaktion' : '/');
-  };
-}
-
-// Fixed colors per mode, so the selected pill previews the workspace it stands for.
-const modes = {
-  schueler: { label: 'Schüler', active: 'bg-[#15181f] text-[#c8f23c]' },
-  redaktion: { label: 'Redaktion', active: 'bg-[#1d5fbf] text-white' },
-};
-const motion = 'duration-200 ease-out motion-reduce:transition-none';
-// Text pill, 48px tall and as wide as the longer label, so the whole pill is the tap target.
-const modePill = 'flex h-12 w-full items-center justify-center rounded-full px-3 text-lg font-bold active:scale-95';
-
-// Phone mode switch: a pill naming the current mode that grows upward to offer the other one.
-function ModeFab() {
-  const [view] = useWorkspaceView();
-  const switchView = useSwitchView();
-  const [open, setOpen] = useState(false);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const other: View = view === 'redaktion' ? 'schueler' : 'redaktion';
-  // Document listeners, because iOS Safari does not focus tapped buttons, so blur alone would never close it.
-  useEffect(() => {
-    if (!open) return;
-    const outside = (e: PointerEvent) => {
-      if (!trigger.current?.parentElement?.contains(e.target as Node)) setOpen(false);
-    };
-    const escape = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      setOpen(false);
-      trigger.current?.focus();
-    };
-    document.addEventListener('pointerdown', outside);
-    document.addEventListener('keydown', escape);
-    return () => {
-      document.removeEventListener('pointerdown', outside);
-      document.removeEventListener('keydown', escape);
-    };
-  }, [open]);
-  return (
-    <div
-      className="grid rounded-[30px] bg-white p-1.5 text-[#15181f] shadow-lg min-[651px]:hidden"
-      onBlur={(e) => {
-        if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget)) setOpen(false);
-      }}
-    >
-      <div
-        inert={!open}
-        className={`grid transition-[grid-template-rows,opacity] ${motion} ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr] opacity-0'}`}
-      >
-        <div className="min-h-0 overflow-hidden">
-          <button
-            key={other}
-            type="button"
-            aria-label={`Zu ${modes[other].label} wechseln`}
-            className={`${modePill} mb-1.5 transition-[translate,scale] ${motion} hover:bg-[#15181f]/5 focus-visible:-outline-offset-2 ${open ? '' : 'translate-y-3'}`}
-            onClick={() => {
-              setOpen(false);
-              trigger.current?.focus();
-              switchView(other);
-            }}
-          >
-            {modes[other].label}
-          </button>
-        </div>
-      </div>
-      <button
-        ref={trigger}
-        type="button"
-        aria-label={`Ansicht: ${modes[view].label}`}
-        aria-expanded={open}
-        className={`${modePill} ${modes[view].active} transition-[scale,background-color,color] ${motion}`}
-        onClick={() => setOpen(!open)}
-      >
-        <span key={view} className={`transition-opacity ${motion} starting:opacity-0`}>
-          {modes[view].label}
-        </span>
-      </button>
-    </div>
-  );
-}
-
-// Wider-screen mode switch; 48px track with 4px padding, so the 40px segments stay concentric.
-function ViewSwitch() {
-  const [view] = useWorkspaceView();
-  const switchView = useSwitchView();
-  const seg = (mode: View) =>
-    `min-h-10 flex-1 rounded-full px-3 text-[17px] font-bold transition-[scale,background-color,color] ${motion} active:scale-95 ${view === mode ? modes[mode].active : 'text-ink hover:bg-white/60'}`;
-  return (
-    <div className="flex gap-0.5 rounded-full bg-pill p-1">
-      {(['schueler', 'redaktion'] as const).map((mode) => (
-        <button
-          key={mode}
-          type="button"
-          className={seg(mode)}
-          aria-pressed={view === mode}
-          onClick={() => switchView(mode)}
-        >
-          {modes[mode].label}
-        </button>
-      ))}
-    </div>
   );
 }
 
