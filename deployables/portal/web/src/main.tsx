@@ -4,7 +4,11 @@ import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import { App } from './App';
-import '@fontsource-variable/bricolage-grotesque/opsz.css';
+import '@fontsource-variable/figtree';
+import '@fontsource-variable/merriweather/opsz.css';
+import '@fontsource/instrument-serif/400.css';
+import '@fontsource/poppins/600.css';
+import '@fontsource/poppins/800.css';
 import './styles.css';
 // Vite dev serves index.html itself; Go adds data-env from ENV_LABEL everywhere else.
 if (import.meta.env.DEV && !document.documentElement.dataset.env) document.documentElement.dataset.env = 'dev';

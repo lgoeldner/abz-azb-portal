@@ -85,7 +85,7 @@ function Tiles({ docs }: { docs: Document[] }) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Link
           to="/dokumente/neu"
-          className={`${tile} items-center justify-center gap-2 border-2 border-dashed border-pill text-[15px] font-bold text-muted hover:border-accent hover:text-ink`}
+          className={`${tile} items-center justify-center gap-2 bg-pill text-[15px] font-bold text-muted hover:bg-pop hover:text-ink`}
         >
           <Plus aria-hidden="true" className="size-6" />
           Neues Dokument
@@ -384,9 +384,7 @@ export function DocumentPage() {
       ) : (
         <>
           <KindTag kind={d.kind} />
-          <h1 className="mt-3 break-words text-3xl font-extrabold leading-tight tracking-tighter sm:text-4xl">
-            {d.title}
-          </h1>
+          <h1 className="mt-3 break-words text-3xl leading-tight sm:text-4xl">{d.title}</h1>
           <p className="mt-2 text-sm text-muted">
             Zuletzt geändert von {d.updated_by.name} · {ago(d.updated_at)}
           </p>

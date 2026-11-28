@@ -47,7 +47,7 @@ export function PasskeyOffer() {
     });
   return (
     <section className={`${panel} mb-6 space-y-3`} aria-labelledby="passkey-offer">
-      <h2 id="passkey-offer" className="text-lg font-extrabold tracking-tight">
+      <h2 id="passkey-offer" className="text-lg font-bold tracking-tight">
         Schneller anmelden mit Passkey
       </h2>
       <p className="text-[15px] text-muted">
@@ -95,7 +95,7 @@ export function Passkeys() {
   return (
     <>
       <section className={`${panel} space-y-4`} aria-labelledby="passkey-list">
-        <h2 id="passkey-list" className="text-xl font-extrabold tracking-tight">
+        <h2 id="passkey-list" className="text-xl font-bold tracking-tight">
           Passkeys
         </h2>
         <p className="text-[15px] text-muted">

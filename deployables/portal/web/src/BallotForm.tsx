@@ -266,7 +266,7 @@ function WordsBallotForm({
               <span className="sr-only">, jeweils ein Wort mit Enter oder Komma hinzufügen</span>
               <input
                 id={`word-input-${poll.id}`}
-                className="mt-1.5 block min-h-12 w-full rounded-ui border-2 border-line bg-white px-4 py-2 text-[15px] font-normal text-ink placeholder:text-muted/70 focus:border-ink"
+                className="mt-1.5 block min-h-12 w-full rounded-ui border-2 border-line bg-white px-4 py-2 text-[15px] font-normal text-ink placeholder:text-muted focus:border-ink"
                 value={input}
                 maxLength={256}
                 disabled={readOnly || words.length >= poll.max_choices || action.busy}

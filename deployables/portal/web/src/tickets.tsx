@@ -1235,7 +1235,7 @@ function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) 
       </div>
       <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
+          <h1 className="text-3xl leading-tight sm:text-4xl">
             {ticket.title} <span className="font-semibold text-muted">#{ticket.number}</span>
           </h1>
           <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
@@ -1358,7 +1358,7 @@ function TicketView({ detail, areas }: { detail: TicketDetail; areas: Area[] }) 
               <button
                 type="button"
                 aria-expanded={allEvents}
-                className="mb-4 flex min-h-11 w-full items-center gap-2 rounded-lg border border-dashed border-line px-3 text-left text-sm text-muted transition-colors hover:bg-soft"
+                className="mb-4 flex min-h-11 w-full items-center gap-2 rounded-lg bg-soft px-3 text-left text-sm text-muted transition-colors hover:bg-pill"
                 onClick={() => setAllEvents(!allEvents)}
               >
                 <ChevronDown
@@ -1528,7 +1528,7 @@ function StatusStepper({ status, busy, onMove }: { status: Status; busy: boolean
 function Side({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div>
-      <dt className="text-xs font-extrabold uppercase tracking-wide text-muted">{title}</dt>
+      <dt className="text-xs font-bold text-muted">{title}</dt>
       <dd className="mt-1">{children}</dd>
     </div>
   );
@@ -1593,7 +1593,7 @@ function ReviewPanel({
   const mayVote = reviewing && (!isAssignee || selfApproval);
   return (
     <section aria-labelledby="review-heading" className="grid gap-3 rounded-ui bg-soft p-5 text-sm">
-      <h2 id="review-heading" className="flex items-center gap-2 text-base font-extrabold">
+      <h2 id="review-heading" className="flex items-center gap-2 text-base font-bold">
         <ClipboardCheck aria-hidden="true" className="size-5" /> Review
       </h2>
       {ticket.status === 'done' && (

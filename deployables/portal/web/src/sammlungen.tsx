@@ -180,7 +180,7 @@ export function Sammlungen() {
             </section>
           )}
           {ended.length > 0 && (
-            <details className="rounded-ui bg-white">
+            <details className="rounded-ui border border-line bg-white">
               <summary className="cursor-pointer px-5 py-4 text-[15px] font-semibold">
                 Beendete Abstimmungen ({ended.length})
               </summary>
@@ -215,7 +215,10 @@ function CollectionBadge({ collection: c }: { collection: Category }) {
 
 function Cards({ items }: { items: Category[] }) {
   return (
-    <ul className="collection-ledger divide-y divide-line rounded-ui bg-white" aria-label="Abstimmungen">
+    <ul
+      className="collection-ledger divide-y divide-line rounded-ui border border-line bg-white"
+      aria-label="Abstimmungen"
+    >
       {items.map((c) => (
         <li key={c.id}>
           <Link
@@ -571,7 +574,7 @@ export function SammlungForm({
                     <Minus aria-hidden="true" size={24} />
                   </button>
                   <input
-                    className="h-16 w-24 appearance-none [-moz-appearance:textfield] rounded-xl border border-transparent bg-transparent text-center text-4xl font-bold tabular-nums text-ink outline-none transition focus:border-ink focus:bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="h-16 w-24 appearance-none [-moz-appearance:textfield] rounded-xl border border-transparent bg-transparent text-center font-display text-4xl font-semibold tabular-nums text-ink outline-none transition focus:border-ink focus:bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     type="number"
                     name="max_choices"
                     id="max_choices"

@@ -25,7 +25,7 @@
   cursor: zoom-in;
   overflow: hidden;
   border-radius: 1.2rem;
-  background: var(--color-soft);
+  background: var(--color-photo);
   line-height: 0;
 }
 
@@ -152,7 +152,7 @@
   max-height: 20rem;
   object-fit: contain;
   border-radius: 0.7rem;
-  background: var(--color-soft);
+  background: var(--color-photo);
 }
 
 /* Trash icon floats on the photo's top-right corner (positioned against the figure). */
