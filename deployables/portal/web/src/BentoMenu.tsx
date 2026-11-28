@@ -1,6 +1,6 @@
 import { Drawer } from '@base-ui/react/drawer';
 import { ArrowRight, Grip, Plus, SquareKanban, Vote } from 'lucide-react';
-import { useRef, useState, type ReactNode, type PointerEvent } from 'react';
+import { useRef, useState, useSyncExternalStore, type ReactNode, type PointerEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type { components } from './generated/api';
 import { canEdit, type Area, type Category, type Document, type Submission, type Ticket, type User } from './api';
@@ -30,25 +30,37 @@ const wide = 'col-span-2';
 const small = 'items-center px-1 text-center';
 
 // Redaktionsmenü for editors in both views: a bento grid of figures and links.
-// Phones: the sheet is one native scroller with a see-through spacer on top, so a swipe up expands it to full screen
-// before the grid scrolls, and a swipe down at the top closes it. From 651px: a floating card with its own scroll.
+// Phones: a Base UI sheet with two snap points. Below full height the grid cannot scroll, so a swipe up expands
+// the sheet; at full height the grid scrolls and a swipe down from its top collapses or closes it.
+// From 651px: a floating card with its own scroll and no snap points.
+const phoneSnapPoints = [0.72, 1];
+const phoneQuery = '(max-width: 650px)'; // = Tailwind max-[651px]
+function usePhone() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia(phoneQuery);
+      query.addEventListener('change', onChange);
+      return () => query.removeEventListener('change', onChange);
+    },
+    () => window.matchMedia(phoneQuery).matches,
+    () => false,
+  );
+}
+
 export function BentoMenu({ container }: { container: HTMLElement | null }) {
   const session = useSession();
   const [, setView] = useWorkspaceView();
   const [open, setOpen] = useState(false);
-  const [full, setFull] = useState(false); // the phone sheet reached the top: square corners
+  const phone = usePhone();
   // Not gated on the open menu: the dot on the trigger needs it.
   const documents = useData<Document[]>('/documents', projectsEnabled(session));
   const unread = documents.data?.some((doc) => doc.unread);
-  const corners = full ? '' : 'max-[651px]:rounded-t-[30px]';
   return (
     <Drawer.Root
       open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (next) setFull(false);
-      }}
+      onOpenChange={setOpen}
       swipeDirection="down"
+      snapPoints={phone ? phoneSnapPoints : undefined}
     >
       <Drawer.Trigger className="relative flex-none rounded-[30px] bg-white p-1.5 text-ink shadow-lg">
         <span
@@ -74,19 +86,13 @@ export function BentoMenu({ container }: { container: HTMLElement | null }) {
               follow the Dock if it changes. */}
           <Drawer.Popup
             data-workspace="redaktion"
-            className="absolute inset-0 flex flex-col text-ink outline-none transition-[transform,opacity] duration-300 ease-out [transform:translateY(var(--drawer-swipe-movement-y,0px))] data-[swiping]:transition-none motion-reduce:transition-none max-[651px]:data-[ending-style]:[transform:translateY(100%)] max-[651px]:data-[starting-style]:[transform:translateY(100%)] min-[651px]:inset-auto min-[651px]:bottom-24 min-[651px]:left-6 min-[651px]:max-h-[calc(100dvh-120px)] min-[651px]:w-[600px] min-[651px]:max-w-[calc(100vw-48px)] min-[651px]:rounded-[30px] min-[651px]:bg-white min-[651px]:pb-[60px] min-[651px]:shadow-lg min-[651px]:data-[ending-style]:opacity-0 min-[651px]:data-[starting-style]:opacity-0 min-[651px]:data-[ending-style]:[transform:translateY(1rem)] min-[651px]:data-[starting-style]:[transform:translateY(1rem)]"
+            className="group absolute inset-0 flex flex-col text-ink outline-none transition-[transform,opacity] duration-300 ease-out [transform:translateY(calc(var(--drawer-snap-point-offset,0px)+var(--drawer-swipe-movement-y,0px)))] max-[651px]:rounded-t-[30px] max-[651px]:bg-white max-[651px]:shadow-[0_-6px_24px_rgba(0,0,0,.14),0_50dvh_0_white] max-[651px]:data-[expanded]:rounded-none data-[swiping]:transition-none motion-reduce:transition-none max-[651px]:data-[ending-style]:[transform:translateY(100%)] max-[651px]:data-[starting-style]:[transform:translateY(100%)] min-[651px]:inset-auto min-[651px]:bottom-24 min-[651px]:left-6 min-[651px]:max-h-[calc(100dvh-120px)] min-[651px]:w-[600px] min-[651px]:max-w-[calc(100vw-48px)] min-[651px]:rounded-[30px] min-[651px]:bg-white min-[651px]:pb-[60px] min-[651px]:shadow-lg min-[651px]:data-[ending-style]:opacity-0 min-[651px]:data-[starting-style]:opacity-0 min-[651px]:data-[ending-style]:[transform:translateY(1rem)] min-[651px]:data-[starting-style]:[transform:translateY(1rem)]"
           >
-            <div
-              className="min-h-0 flex-1 overflow-y-auto overscroll-none rounded-t-[inherit] [scrollbar-width:thin]"
-              onScroll={(e) => setFull(e.currentTarget.scrollTop >= e.currentTarget.firstElementChild!.clientHeight)}
-            >
-              {/* Phones: the page shows through here; tapping it closes like a backdrop. */}
-              <div aria-hidden="true" className="h-[28dvh] min-[651px]:hidden" onClick={() => setOpen(false)} />
-              {/* The solid offset shadow continues the sheet below its edge, so a rubber band never shows the page. */}
-              <div
-                className={`bg-white max-[651px]:min-h-dvh max-[651px]:pb-[env(safe-area-inset-bottom)] max-[651px]:shadow-[0_-6px_24px_rgba(0,0,0,.14),0_50dvh_0_white] ${corners}`}
-              >
-                <div className={`sticky top-0 z-10 bg-white px-3 pb-2 min-[651px]:pt-3 ${corners}`}>
+            {/* The solid offset shadow above continues the sheet below its edge, so an overshoot never shows the page.
+                Phones scroll only at full height: otherwise Base UI takes the swipe and moves the sheet. */}
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-t-[inherit] [scrollbar-width:thin] max-[651px]:overflow-hidden max-[651px]:group-data-[expanded]:overflow-y-auto">
+              <div className="bg-white max-[651px]:pb-[env(safe-area-inset-bottom)]">
+                <div className="sticky top-0 z-10 bg-white px-3 pb-2 min-[651px]:pt-3">
                   <Drawer.Close
                     aria-label="Menü schließen"
                     className="flex h-7 w-full items-center justify-center rounded-full min-[651px]:hidden"
