@@ -135,7 +135,7 @@ Replaces the Notion ticket workflow. Managers and admins only; students get 403 
 
 ## Project tools flag and shared documents
 
-- `PROJECT_MANAGEMENT=true` (env, global, default false; compose.dev.yaml and scripts/dev-backend.sh set true) enables the Redaktion project tools: ticket board, Bereiche, documents and the "Meine Aufgaben" home. When false every `/tickets*`, `/areas*`, `/admin/areas*` and `/documents*` route answers 404 (`projectRoute` in http.go), `GET /me` omits `project_management`, and the web app hides nav entries, home sections and routes. Data stays in the database.
+- `PROJECT_MANAGEMENT=true` (env, global, default false; compose.dev.yaml and scripts/dev-backend.sh set true) enables the Redaktion project tools: ticket board, Bereiche, documents and their tiles in the Redaktionsmenü. When false every `/tickets*`, `/areas*`, `/admin/areas*` and `/documents*` route answers 404 (`projectRoute` in http.go), `GET /me` omits `project_management`, and the web app hides menu tiles and routes. Data stays in the database.
 - Documents are shared Redaktion notes, no per-document ACL: every admitted manager and admin reads, creates and edits all of them; students and guests get 403. Never public, never student-visible.
 - Types: `Document {id,title,kind:'meeting'|'note',body(markdown),created_by,updated_by,version,created_at,updated_at,unread}`. Routes: GET|POST `/documents` `{title,kind,body}`; GET `/documents/{id}` (records the caller's view); PATCH `/documents/{id}` `{title,kind,body,version}`; DELETE `/documents/{id}` `{version}` (creator or admin). Stale version: 409.
 - Validation: title trimmed 1..200 runes, kind meeting|note, body <= 100000 characters.
