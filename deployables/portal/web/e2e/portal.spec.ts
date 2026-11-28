@@ -19,6 +19,9 @@ async function signInAs(page: Page, role: 'Jahrgang' | 'Redaktion' | 'Administra
   await expect(page.getByRole('main').getByRole('heading', { level: 1 })).toBeVisible();
 }
 
+// Where /redaktion leads: the board, or all contributions without PROJECT_MANAGEMENT (as in CI).
+const redaktionHome = /\/(tickets|redaktion\/beitraege)$/;
+
 async function openMenu(page: Page) {
   // Not the close button, which is also named "Redaktionsmenü …".
   await page.getByRole('button', { name: /^Redaktionsmenü(?!\s*schließen)/ }).click();
@@ -42,7 +45,7 @@ test('student signs in, submits a contribution, and returns to the open ballots'
 
 test('back navigation restores the Schüler or Redaktion view of each page', async ({ page }) => {
   await signInAs(page, 'Redaktion');
-  await expect(page).toHaveURL(/\/tickets$/);
+  await expect(page).toHaveURL(redaktionHome);
   const root = page.locator('[data-workspace]:has(#inhalt)');
   await (await openMenu(page)).locator('a[href="/sammlungen"]').first().click();
   await expect(page.getByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeVisible();
@@ -55,7 +58,7 @@ test('back navigation restores the Schüler or Redaktion view of each page', asy
   await expect(page.getByRole('heading', { level: 1, name: 'Abstimmungen' })).toBeVisible();
   await expect(root).toHaveAttribute('data-workspace', 'redaktion');
   await page.goBack();
-  await expect(page).toHaveURL(/\/tickets$/);
+  await expect(page).toHaveURL(redaktionHome);
   await page.goForward();
   await expect(page).toHaveURL(/\/sammlungen$/);
   await page.goForward();
@@ -115,7 +118,7 @@ test('editor reads and annotates an original, exports without approval, and sees
   await expect(downloadPromise).resolves.toBeTruthy();
 
   await page.getByRole('link', { name: 'AbiZeitBetrug Startseite' }).click();
-  await expect(page).toHaveURL(/\/tickets$/);
+  await expect(page).toHaveURL(redaktionHome);
   await (await openMenu(page)).locator('a[href="/sammlungen"]').first().click();
   await page
     .getByRole('main')
