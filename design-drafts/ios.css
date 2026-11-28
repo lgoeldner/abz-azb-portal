@@ -150,6 +150,42 @@ input:focus-visible { outline: none; }
 }
 .top-chrome.collapsed .inline-title { opacity: 1; transform: translate(-50%, -50%); }
 
+/* Two equally weighted modes (Schüler / Redaktion): the name moves left, the switch sits right. */
+.top-row.has-modes .brand { position: static; transform: none; pointer-events: none; }
+.top-row.has-modes { width: var(--col); margin-left: auto; margin-right: auto; padding: 0; } /* aligned with the cards below */
+.mode-seg {
+  position: relative;
+  margin-left: auto;
+  height: 40px;
+  padding: 3px;
+  border-radius: 20px;
+  display: flex;
+  pointer-events: auto;
+}
+.mode-seg > button {
+  position: relative;
+  z-index: 1;
+  min-width: 92px;
+  padding: 0 14px;
+  border-radius: 17px; /* 20 − 3 */
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  color: var(--label-2);
+  transition: color 200ms ease;
+}
+.mode-seg > button[aria-selected="true"] { color: var(--label); }
+.mode-thumb {
+  position: absolute;
+  top: 3px; bottom: 3px; left: 3px;
+  width: calc(50% - 3px);
+  border-radius: 17px;
+  background: var(--fill);
+  transition: transform 380ms var(--ease-ios);
+}
+.mode-seg.second .mode-thumb { transform: translateX(100%); }
+@media (max-width: 380px) { .mode-seg > button { min-width: 0; padding: 0 11px; } }
+
 /* Home: the app's name lives in the bar (there is nothing else up there). */
 .brand {
   position: absolute;
@@ -677,7 +713,7 @@ main {
   height: 0.5px;
   background: var(--sep);
 }
-.lrow.entering { height: 0; opacity: 0; }
+.lrow.leaving, .lrow.entering { height: 0; opacity: 0; }
 .lrow-icon {
   width: 28px; height: 28px;
   border-radius: 50%;
@@ -687,7 +723,8 @@ main {
   flex-shrink: 0;
 }
 .lrow-icon svg { width: 14px; height: 14px; }
-.lrow-icon.closed { background: var(--fill); color: var(--label-2); }
+.lrow-icon.closed, .lrow-icon.wait { background: var(--fill); color: var(--label-2); }
+.lrow-icon.wait svg { width: 15px; height: 15px; }
 .lrow-icon.closed svg { width: 12px; height: 12px; }
 .lrow-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .lrow-title, .lrow-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -813,6 +850,61 @@ main {
   .carousel.is-dragging .paddle, .carousel.is-scrubbing .paddle { opacity: 0 !important; transform: scale(0.9) !important; pointer-events: none; }
   .paddle:active { transform: scale(0.92) !important; }
 }
+
+/* ───────── Card stack (stack.js) ───────── */
+.stack {
+  --card-w: var(--col);
+  position: relative;
+  width: var(--card-w);
+  height: calc(var(--card-h) + 22px);
+  margin: 0 auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+@media (min-width: 744px) {
+  .stack { height: calc(var(--card-h) + 26px); }
+}
+
+.stack-card {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: var(--card-h);
+  will-change: transform, opacity;
+}
+.stack-card .card { position: relative; }
+.stack-card .card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgb(118, 118, 128);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 260ms ease;
+}
+.stack-card[data-depth="1"] .card::after { opacity: 0.035; }
+.stack-card[data-depth="2"] .card::after,
+.stack-card[data-depth="3"] .card::after { opacity: 0.07; }
+.stack-card[data-depth="1"] .card-content { opacity: var(--reveal, 0); transition-duration: 120ms; }
+.stack-card[data-depth="1"] .card::after { opacity: calc(0.035 * (1 - var(--reveal, 0))); }
+.stack-card[data-depth="2"] .card-content,
+.stack-card[data-depth="3"] .card-content { opacity: 0; }
+.stack-card[data-depth="1"] .card-content,
+.stack-card[data-depth="2"] .card-content,
+.stack-card[data-depth="3"] .card-content { pointer-events: none; }
+.stack .commit-pill { z-index: 35; }
+.stack-card.enter-late .card-content { transition: opacity 260ms ease 140ms; }
+.stack .commit-pill.completing { z-index: 45; }
+.stack-card.is-top { cursor: grab; }
+.stack-card.is-top.dragging { cursor: grabbing; }
+.stack-card.is-behind { cursor: pointer; }
+
+/* The deck (carousel or stack) sits right under the bar (10 + 44px). */
+.deck { margin-top: calc(66px + env(safe-area-inset-top)); }
+@media (min-width: 744px) { .deck { margin-top: calc(74px + env(safe-area-inset-top)); } }
+.mode-pane[hidden] { display: none; }
 
 /* ───────── Poll cards ───────── */
 .q { gap: 12px; }

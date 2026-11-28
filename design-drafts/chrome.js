@@ -187,11 +187,15 @@
     top.id = 'topChrome';
     top.innerHTML = `
       <div class="edge-top"><div class="pblur"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
-      <div class="top-row">
+      <div class="top-row${o.modes ? ' has-modes' : ''}">
         ${o.backHref ? `<a class="back-btn glass" href="${o.backHref}" aria-label="Zurück">${ICONS.back}</a>` : ''}
         ${o.brand
           ? `<span class="brand">${ICONS.mark}<span class="brand-word">AbiZeit<span>Betrug</span></span></span>`
           : `<span class="inline-title">${o.title}</span>`}
+        ${o.modes ? `<div class="mode-seg glass" role="tablist" aria-label="Bereich" id="modeSeg">
+          <span class="mode-thumb"></span>
+          ${o.modes.map((m) => `<button type="button" role="tab" data-mode="${m.id}" aria-selected="${m.id === o.mode}">${m.label}</button>`).join('')}
+        </div>` : ''}
       </div>`;
     document.body.prepend(top);
     const tint = document.createElement('div');
@@ -298,6 +302,20 @@
         </div>`;
     }
 
+    if (o.modes) {
+      const seg = $('modeSeg');
+      const mark = (id) => {
+        seg.querySelectorAll('[data-mode]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === id)));
+        seg.classList.toggle('second', id === o.modes[1].id);
+      };
+      mark(o.mode);
+      seg.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-mode]');
+        if (!b || b.getAttribute('aria-selected') === 'true') return;
+        mark(b.dataset.mode);
+        o.onMode(b.dataset.mode);
+      });
+    }
     if (window.Theme && Theme.mount) Theme.mount();
     wireTop();
     wireDock();
@@ -486,49 +504,36 @@
 
   function refreshPanel() {
     if (!$('panelRoot').classList.contains('open')) return;
-    const { done, closed } = opts.getLists();
     const body = $('panelBody');
     body.innerHTML = '';
     const fresh = [];
+    const ids = [];
     const mkLabel = (t) => { const el = document.createElement('div'); el.className = 'group-label'; el.textContent = t; return el; };
     const mkGroup = () => { const el = document.createElement('div'); el.className = 'group'; return el; };
-
-    if (!done.length && !closed.length) {
-      body.innerHTML = '<div class="panel-empty">Noch nichts abgegeben.</div>';
-    }
-    if (done.length) {
+    const groups = panelGroups().filter((g) => g.rows.length);
+    if (!groups.length) body.innerHTML = `<div class="panel-empty">${opts.panelEmpty || 'Noch nichts abgegeben.'}</div>`;
+    const ICON = { check: ICONS.checkSmall, lock: ICONS.lock, clock: ICONS.clock };
+    groups.forEach((grp) => {
       const g = mkGroup();
-      done.forEach((id) => {
+      grp.rows.forEach((r) => {
         const row = document.createElement('div');
-        row.className = 'lrow';
-        const d = opts.describe(id);
-        row.dataset.id = id;
-        row.innerHTML = `<span class="lrow-icon">${ICONS.checkSmall}</span><span class="lrow-text"><span class="lrow-title"></span><span class="lrow-sub"></span></span><button class="small-btn" type="button">Ändern</button>`;
-        row.querySelector('.lrow-title').textContent = d.title;
-        row.querySelector('.lrow-sub').textContent = d.detail;
-        row.querySelector('button').addEventListener('click', (e) => {
-          e.stopPropagation();
-          openEditor(id);
-        });
-        if (hasRendered && !renderedIds.has(id)) fresh.push(row);
+        row.className = 'lrow' + (r.icon === 'lock' ? ' muted' : '');
+        row.dataset.id = r.id;
+        row.innerHTML = `<span class="lrow-icon${r.icon === 'check' ? '' : ' ' + (r.icon === 'lock' ? 'closed' : 'wait')}">${ICON[r.icon]}</span><span class="lrow-text"><span class="lrow-title"></span><span class="lrow-sub"></span></span>${r.action ? '<button class="small-btn" type="button"></button>' : ''}`;
+        row.querySelector('.lrow-title').textContent = r.title;
+        row.querySelector('.lrow-sub').textContent = r.detail;
+        if (r.action) {
+          const b = row.querySelector('button');
+          b.textContent = r.action.label;
+          b.addEventListener('click', (e) => { e.stopPropagation(); r.action.fn(r.id, row); });
+        }
+        if (hasRendered && !renderedIds.has(r.id)) fresh.push(row);
+        ids.push(r.id);
         g.append(row);
       });
-      body.append(mkLabel('Noch änderbar'), g);
-    }
-    if (closed.length) {
-      const g = mkGroup();
-      closed.forEach((id) => {
-        const row = document.createElement('div');
-        row.className = 'lrow muted';
-        const d = opts.describe(id);
-        row.innerHTML = `<span class="lrow-icon closed">${ICONS.lock}</span><span class="lrow-text"><span class="lrow-title"></span><span class="lrow-sub"></span></span>`;
-        row.querySelector('.lrow-title').textContent = d.title;
-        row.querySelector('.lrow-sub').textContent = d.detail;
-        g.append(row);
-      });
-      body.append(mkLabel('Beendet'), g);
-    }
-    renderedIds = new Set([...done, ...closed]);
+      body.append(mkLabel(grp.label), g);
+    });
+    renderedIds = new Set(ids);
     hasRendered = true;
     requestAnimationFrame(() => panelFade());
     fresh.forEach((row) => {
@@ -536,6 +541,28 @@
       void row.offsetHeight;
       requestAnimationFrame(() => row.classList.remove('entering'));
     });
+  }
+
+  // Student default: what you submitted (still changeable) and what has closed.
+  function panelGroups() {
+    if (opts.panelGroups) return opts.panelGroups();
+    const { done, closed } = opts.getLists();
+    const row = (id, icon, action) => Object.assign({ id, icon, action }, (({ title, detail }) => ({ title, detail }))(opts.describe(id)));
+    return [
+      { label: 'Noch änderbar', rows: done.map((id) => row(id, 'check', { label: 'Ändern', fn: openEditor })) },
+      { label: 'Beendet', rows: closed.map((id) => row(id, 'lock')) },
+    ];
+  }
+
+  // Switch what the bar's capsule and its list are about (Schüler: Abgegeben, Redaktion: Erledigt).
+  function configure(o) {
+    if (isPanelOpen()) closePanel();
+    closeMenu();
+    Object.assign(opts, { panelGroups: null, panelEmpty: null, themed: true }, o);
+    const t = document.querySelector('#abgBtn .cap-title');
+    if (t && o.capTitle) t.textContent = o.capTitle;
+    if (o.panelTitle) $('panelTitle').textContent = o.panelTitle;
+    hasRendered = false;
   }
 
   /* ─────────── "Ändern" modal ─────────── */
@@ -627,7 +654,7 @@
   }
 
   function applyCapsule(s) {
-    if (window.Theme && Theme.capsule && Theme.capsule(s, opts.getLists(), $('ring'), $('capSub'))) return;
+    if (opts.themed !== false && window.Theme && Theme.capsule && Theme.capsule(s, opts.getLists(), $('ring'), $('capSub'))) return;
     const total = s.open + s.done;
     const frac = total ? s.done / total : 1;
     $('ringFill').style.strokeDashoffset = (RING_C * (1 - frac)).toFixed(2);
@@ -650,12 +677,13 @@
     bounce(id) {
       if (pendingCapsule) { applyCapsule(pendingCapsule); pendingCapsule = null; }
       const cap = $('abgBtn');
-      if (id && window.Theme && Theme.onCatch) Theme.onCatch(id, cap.getBoundingClientRect());
+      if (id && opts.themed !== false && window.Theme && Theme.onCatch) Theme.onCatch(id, cap.getBoundingClientRect());
       cap.classList.remove('catch');
       void cap.offsetWidth;
       cap.classList.add('catch');
     },
     refreshPanel,
+    configure,
     openPanel,
     closePanel,
     openEditor,

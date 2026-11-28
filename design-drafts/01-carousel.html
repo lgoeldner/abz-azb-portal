@@ -9,85 +9,23 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&display=swap" />
   <link rel="stylesheet" href="./ios.css" />
+  <link rel="stylesheet" href="./redaktion.css" />
   <link rel="stylesheet" href="./themes.css" />
   <script src="./themes.js"></script>
   <style>
-    /* Narrower column on phones so the neighbours can peek in; the tiles align with the centre card. */
+    /* Narrower column on phones so the neighbours can peek in; everything below aligns with the centre card. */
     :root { --col: min(640px, calc(100vw - 60px)); }
-    /* The bar (10 + 44px) holds the app name; the cards start right under it. */
-    #carousel { margin-top: calc(66px + env(safe-area-inset-top)); }
-    @media (min-width: 744px) { #carousel { margin-top: calc(74px + env(safe-area-inset-top)); } }
   </style>
 </head>
 <body>
-  <main>
-    <div id="carousel"></div>
-
-    <div class="page">
-      <section class="section" id="sammeln"></section>
-    </div>
-  </main>
+  <main></main>
 
   <script src="./chrome.js"></script>
   <script src="./carousel.js"></script>
   <script src="./cards.js"></script>
-  <script>
-    const { $, UI, ICONS, Carousel } = window.P;
-    const { INITIAL } = window.Cards;
-    const state = { steckbriefDone: false, done: [...INITIAL.done], closed: [...INITIAL.closed] };
-    let car = null;
-    const snapshot = () => ({
-      open: car ? car.ids().length : INITIAL.open.length,
-      done: state.done.length, closed: state.closed.length, steckbriefDone: state.steckbriefDone,
-    });
-
-    // Submit: the card flies into the Abgegeben capsule.
-    function commit(id, fromSwipe) {
-      const el = car.cardEl(id);
-      if (!el) return;
-      if (!Cards.isValid(id)) { Cards.shake(el); return; }
-      Cards.blurInside(el);
-      if (!car.leave(id, 'drop', fromSwipe)) return;
-      state.done.unshift(id);
-      UI.update(snapshot(), { defer: true });
-      UI.refreshPanel();
-    }
-
-    UI.mount({
-      brand: true,
-      getLists: () => ({ done: state.done, closed: state.closed }),
-      describe: Cards.describe,
-      onSteckbrief: () => { state.steckbriefDone = !state.steckbriefDone; UI.update(snapshot()); },
-    });
-
-    car = Carousel($('carousel'), {
-      ids: INITIAL.open,
-      render(id) {
-        const root = Cards.render(id);
-        root.querySelector('.card-cta').addEventListener('click', (e) => { e.stopPropagation(); commit(id, false); });
-        return root;
-      },
-      label: (id) => Cards.POLLS[id].title,
-      pull: { canCommit: Cards.isValid, onCommit: commit, onRefuse: (id, el) => Cards.shake(el) },
-      emptyHTML: () => (window.Theme && Theme.emptyHTML && Theme.emptyHTML()) || `<div class="empty-icon">${ICONS.check.replace('width="24" height="24"', 'width="30" height="30"')}</div><div class="empty-title">Alles abgegeben</div><div class="empty-sub">Du kannst Antworten ändern, solange die Umfrage läuft.</div>`,
-    });
-    UI.update(snapshot());
-
-    document.addEventListener('keydown', (e) => {
-      if (UI.overlayOpen() || e.key === 'Escape') return;
-      const id = car.currentId();
-      if (!id || e.target.closest('input, textarea')) return;
-      if (/^[1-9]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        if (Cards.pressDigit(car.cardEl(id).querySelector('.q'), id, Number(e.key) - 1)) e.preventDefault();
-        return;
-      }
-      if (e.key === 'ArrowRight') { e.preventDefault(); car.nudge(1); }
-      else if (e.key === 'ArrowLeft') { e.preventDefault(); car.nudge(-1); }
-      else if (e.key === 'ArrowDown' || (e.key === 'Enter' && (!e.target.closest('button, a') || e.target.closest('.q .row')))) {
-        e.preventDefault();
-        commit(id, false);
-      }
-    });
-  </script>
+  <script src="./tickets.js"></script>
+  <script src="./redaktion.js"></script>
+  <script src="./app.js"></script>
+  <script>App.start('carousel');</script>
 </body>
 </html>

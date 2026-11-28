@@ -16,8 +16,10 @@ mechanics and visual directions before anything is built in the real portal.
 | `index.html` | Entry page linking the drafts and visual styles |
 | `01-carousel.html` | Card carousel (swipe/scrub/arrows, pull down to submit) |
 | `02-swipe-stack.html` | Card stack (swipe either way to skip, pull down to submit) |
-| `03-redaktion.html`, `redaktion.js`, `redaktion.css` | Redaktion page: to-do carousel, poll list, drafts (`?seite=entwuerfe`), bar variants (`?leiste=suche|profil`) |
-| `carousel.js` | The card carousel component shared by 01 and 03 |
+| `carousel.js`, `stack.js` | The two card decks (carousel, swipe-away stack) as shared components |
+| `app.js` | Home screen with the Schüler / Redaktion mode switch, used by 01 and 02 |
+| `tickets.js`, `redaktion.js`, `redaktion.css` | Redaktion mode: ticket cards, poll list, contributions, admin rows |
+| `entwuerfe.html` | Poll drafts page, pushed from the Redaktion mode |
 | `ios.css`, `chrome.js`, `cards.js` | Shared look, floating bars/menus and placeholder poll cards |
 | `themes.css`, `themes.js` | Style variants: Basis, Jahrbuch, Abiball, Knast (only via `?v=` links on the index page) |
 

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#F2F2F7" />
+  <title>Entwürfe</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&display=swap" />
+  <link rel="stylesheet" href="./ios.css" />
+  <link rel="stylesheet" href="./redaktion.css" />
+</head>
+<body>
+  <main>
+    <header class="page hero"><h1 class="large-title">Entwürfe</h1></header>
+    <div class="page rd" id="drafts"></div>
+  </main>
+
+  <script src="./chrome.js"></script>
+  <script src="./cards.js"></script>
+  <script src="./tickets.js"></script>
+  <script src="./redaktion.js"></script>
+  <script>
+    // A page pushed from the Redaktion mode: back returns there.
+    const from = new URLSearchParams(location.search).get('von') === '01' ? '01-carousel.html' : '02-swipe-stack.html';
+    const R = { done: [...Tickets.INITIAL.done] };
+    P.UI.mount({
+      title: 'Entwürfe',
+      backHref: `./${from}?modus=redaktion`,
+      getLists: () => ({ done: R.done, closed: [] }),
+      describe: Cards.describe,
+    });
+    P.UI.configure({
+      capTitle: 'Erledigt', panelTitle: 'Erledigt', themed: false, panelEmpty: 'Noch nichts erledigt.',
+      getLists: () => ({ done: R.done, closed: [] }),
+      panelGroups: () => Tickets.groups(R.done, null),
+    });
+    P.UI.update({ open: Tickets.INITIAL.open.length, done: R.done.length, closed: 0, steckbriefDone: false });
+    const host = document.getElementById('drafts');
+    Redaktion.renderDrafts(host);
+    Redaktion.wire(host);
+  </script>
+</body>
+</html>

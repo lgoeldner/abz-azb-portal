@@ -512,6 +512,7 @@
       leave,
       insert,
       refresh: () => { syncDom(false); wakeLoop(); },
+      resize: () => { measure(); syncDom(true); wakeLoop(); },
     };
   }
 

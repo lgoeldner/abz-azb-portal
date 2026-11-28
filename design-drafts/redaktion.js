@@ -1,21 +1,9 @@
 'use strict';
-/* Redaktion page (draft). "Für dich" is a carousel of plain instructions: each card says what to do,
-   why, and what happens when you press the button. Umfragen is one list ordered by end date (finished
-   at the top, running at the bottom) with drafts on their own page (?seite=entwuerfe).
-   The bar can be tried in three versions (?leiste=abgegeben|suche|profil). Placeholder data only. */
+/* Redaktion mode, everything below the ticket deck: all polls in one list (finished at the top,
+   running at the bottom, x/y participation, results in a modal), drafts on their own page,
+   contributions, and the admin tools. Placeholder data only. */
 (function () {
-  const { $, ICONS, UI, Carousel } = window.P;
-  const params = new URLSearchParams(location.search);
-  const PAGE = params.get('seite') === 'entwuerfe' ? 'entwuerfe' : 'start';
-  const BAR = ['abgegeben', 'suche', 'profil'].includes(params.get('leiste')) ? params.get('leiste') : 'abgegeben';
-  const link = (extra = {}) => {
-    const u = new URLSearchParams();
-    if (BAR !== 'abgegeben') u.set('leiste', BAR);
-    Object.entries(extra).forEach(([k, v]) => u.set(k, v));
-    const q = u.toString();
-    return './03-redaktion.html' + (q ? '?' + q : '');
-  };
-
+  const { ICONS, UI } = window.P;
   const S = (inner, size, extra = '') =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" ${extra}>${inner}</svg>`;
   const I = {
@@ -27,45 +15,10 @@
     mail: S('<rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="m4.5 7.5 7.5 5.5 7.5-5.5"/>', 22, 'stroke-width="1.8"'),
     log: S('<circle cx="12" cy="12" r="8.25"/><path d="M12 7.5V12l3 1.8"/>', 22, 'stroke-width="1.8"'),
     draft: S('<path d="M14.5 5.5 18.5 9.5M4.5 19.5l1-4.2L15.8 5a1.9 1.9 0 0 1 2.7 0l.5.5a1.9 1.9 0 0 1 0 2.7L8.7 18.5z"/>', 22, 'stroke-width="1.8"'),
+    board: S('<rect x="3.75" y="4.75" width="16.5" height="14.5" rx="2.5"/><path d="M9.25 4.75v14.5M14.75 4.75v14.5"/>', 22, 'stroke-width="1.8"'),
     plus: S('<path d="M12 5.5v13M5.5 12h13"/>', 15, 'stroke-width="2.4"'),
   };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-
-  /* ───────── placeholder data ───────── */
-  const PEOPLE = { lena: 'Lena Fischer', mia: 'Mia Weber', jonas: 'Jonas Hartmann', paul: 'Paul Meyer', sophie: 'Sophie Schmitt' };
-  const first = (k) => PEOPLE[k].split(' ')[0];
-  const initials = (k) => PEOPLE[k].split(' ').map((w) => w[0]).join('');
-  const ALL_TICKETS = 23;
-
-  // What each open ticket asks of you, in words: what to do, why, and what the button does.
-  const TODOS = [
-    {
-      id: 't14', title: 'Interview mit der Schulleitung überarbeiten', meta: 'Texte · Artikel, ca. 2 Seiten',
-      from: 'lena', say: 'wünscht sich Änderungen', when: 'vor 2 Std.', text: 'Einleitung kürzen und die Zitate noch mal gegenchecken.',
-      next: 'Wenn du fertig bist, geht der Text wieder an Lena.', cta: 'Überarbeitet', toast: 'Der Text ist wieder bei Lena.', passTo: 'lena',
-    },
-    {
-      id: 't21', title: 'Layout Seite 12–13 prüfen', meta: 'Layout · Doppelseite Kursfahrten',
-      from: 'mia', say: 'bittet dich um Freigabe', when: 'vor 5 Std.', text: 'Die Doppelseite ist fertig, die Bildrechte sind geklärt.',
-      next: 'Passt alles, gibst du sie frei. Wenn nicht, schreib Mia, was fehlt.', cta: 'Freigeben', alt: 'Änderungen wünschen', toast: 'Du hast die Doppelseite freigegeben.',
-    },
-    {
-      id: 't9', title: 'Lehrerzitate sortieren', meta: 'Texte · Aufgabe',
-      goal: 'Doppelte raus, dann nach Fach sortieren.',
-      next: 'Wenn du fertig bist, prüft Lena das Ergebnis.', cta: 'Fertig', toast: 'Lena prüft jetzt die Lehrerzitate.', passTo: 'lena',
-    },
-    {
-      id: 't17', title: 'Rückblick Skifahrt schreiben', meta: 'Texte · Artikel, ca. 3 Seiten', with: 'jonas',
-      goal: 'Ein erster Entwurf mit Bildunterschriften.',
-      next: 'Du schreibst ihn zusammen mit Jonas. Danach prüft Lena.', cta: 'Fertig', toast: 'Lena prüft jetzt den Rückblick.', passTo: 'lena',
-    },
-    {
-      id: 't25', title: 'Fotos der Mottowoche aussortieren', meta: 'Fotos · kleine Aufgabe',
-      goal: 'Pro Tag die zehn besten Fotos markieren.',
-      next: 'Kleine Aufgabe: du kannst sie selbst abschließen.', cta: 'Erledigt', toast: 'Fotos aussortiert und abgeschlossen.',
-    },
-  ];
-  const byId = (id) => TODOS.find((t) => t.id === id);
 
   const ELIGIBLE = 26;
   const KINDS = {
@@ -73,7 +26,7 @@
     proposal: { label: 'Vorschlagswahl', icon: I.list },
     words: { label: 'Wortwolke', icon: I.words },
   };
-  // end: days from today (negative = ended). results: [answer, votes]; for people and words the top entries.
+  // end: days from today (negative = ended). Ordered by end date: finished first, running last.
   const POLLS = [
     { t: 'Ziel der Abifahrt', k: 'proposal', end: -41, date: '18. Okt.', v: 26, results: [['Mallorca', 14], ['Prag', 7], ['Amsterdam', 5]] },
     { t: 'Beste Erinnerung aus der 11. Klasse', k: 'proposal', end: -25, date: '3. Nov.', v: 24, results: [['Skifahrt im Februar', 15], ['Sommerfest auf dem Pausenhof', 9]] },
@@ -90,62 +43,6 @@
     { t: 'Song für den Einzug beim Abiball', k: 'proposal', edited: 'gestern', rule: 'Eine Antwort', options: ['Mr. Brightside', 'Don’t Stop Me Now', 'Wonderwall', 'Atemlos'] },
   ];
 
-  /* ───────── Für dich: one card per thing to do ───────── */
-  function todoCard(id) {
-    const t = byId(id);
-    const root = document.createElement('div');
-    root.className = 'card-content q tq';
-    root.innerHTML = `
-      <header class="q-head">
-        <h3 class="q-title">${esc(t.title)}</h3>
-        <p class="q-meta">${esc(t.meta)}</p>
-      </header>
-      <div class="q-body">
-        <div class="grp tq-box">
-          ${t.from
-            ? `<div class="tq-from"><span class="av">${initials(t.from)}</span><span class="tq-who"><b>${first(t.from)}</b> ${t.say}</span><span class="tq-when">${t.when}</span></div>
-               <p class="tq-text">„${esc(t.text)}“</p>`
-            : `<div class="tq-from"><span class="tq-who"><b>Ziel</b></span>${t.with ? `<span class="tq-when">mit ${first(t.with)}</span>` : ''}</div>
-               <p class="tq-text">${esc(t.goal)}</p>`}
-        </div>
-        <p class="tq-next">${esc(t.next)}</p>
-      </div>
-      <footer class="q-foot">
-        <button type="button" class="tq-alt" data-alt>${t.alt || 'Details'}</button>
-        <button type="button" class="card-cta">${t.cta}</button>
-      </footer>`;
-    root.querySelector('.card-cta').addEventListener('click', (e) => { e.stopPropagation(); finish(id); });
-    root.querySelector('[data-alt]').addEventListener('click', (e) => {
-      e.stopPropagation();
-      UI.toast(t.alt ? 'Hier öffnet sich das Ticket, um Mia zu schreiben.' : 'Hier öffnet sich das Ticket mit Verlauf und Kommentaren.');
-    });
-    return root;
-  }
-
-  let car = null;
-  const waiting = [{ title: 'Sponsoren anschreiben', who: 'sophie' }];
-  function finish(id) {
-    const t = byId(id);
-    const at = car.ids().indexOf(id);
-    if (!car.leave(id, 'fade')) return;
-    if (t.passTo) waiting.push({ title: t.title, who: t.passTo });
-    updateCounts();
-    UI.toast(t.toast, 'Widerrufen', () => {
-      if (t.passTo) waiting.splice(waiting.findIndex((w) => w.title === t.title), 1);
-      car.insert(id, at);
-      updateCounts();
-    });
-  }
-
-  function updateCounts() {
-    const n = car.ids().length;
-    $('todoCount').textContent = n === 0 ? 'Nichts zu tun' : n === 1 ? '1 Aufgabe' : `${n} Aufgaben`;
-    $('waitSub').textContent = waiting.length === 1
-      ? `„${waiting[0].title}“ liegt gerade bei ${first(waiting[0].who)}.`
-      : `${waiting.length} deiner Tickets liegen gerade bei anderen.`;
-  }
-
-  /* ───────── Umfragen ───────── */
   const leader = (p) => {
     const top = p.results.filter(([a]) => a !== 'Weitere')[0];
     return `${p.end < 0 ? 'Gewonnen' : 'Vorne'}: ${p.k === 'words' ? `„${top[0]}“` : top[0]}`;
@@ -181,7 +78,7 @@
     return root;
   }
 
-  function draftModal(d, i) {
+  function draftModal(d, i, onPublished) {
     const root = document.createElement('div');
     root.className = 'card-content q';
     root.innerHTML = `
@@ -202,14 +99,13 @@
     root.querySelector('[data-publish]').addEventListener('click', () => {
       UI.closeModal();
       const [gone] = DRAFTS.splice(i, 1);
-      renderDrafts();
+      onPublished();
       UI.toast(`„${gone.t}“ ist jetzt für alle sichtbar.`);
     });
     return root;
   }
 
-  /* ───────── page ───────── */
-  const sammeln = () => `
+  const tiles = () => `
     <div class="tiles">${[
       ['Fotos', 'photo', 'var(--blue)', 128],
       ['Zitate', 'quote', 'var(--orange)', 46],
@@ -226,28 +122,19 @@
   const navRow = (icon, label, value, href = '#') => `
     <a class="irow vrow" href="${href}"${href === '#' ? ' data-dead' : ''}><span class="picon">${icon}</span><span class="v-label">${label}</span>${value}${I.chevR}</a>`;
 
-  function renderStart() {
-    $('rd').innerHTML = `
-      <section class="rd-sec">
-        <div class="rd-head"><h2 class="section-title">Für dich</h2><span class="rd-count" id="todoCount"></span></div>
-        <div id="todos" class="todos"></div>
-        <div class="ig after-car">
-          <a class="irow vrow" href="#" data-dead>
-            <span class="p-main"><span class="v-label">Alle Tickets</span><span class="p-sub" id="waitSub"></span></span>
-            <span class="nav-val">${ALL_TICKETS}</span>${I.chevR}
-          </a>
-        </div>
-      </section>
+  // Everything below the deck. draftsHref: the drafts page (with a way back to this mode).
+  function sectionsHTML(draftsHref) {
+    return `
+      <div class="ig after-deck">${navRow(I.board, 'Alle Tickets', '<span class="nav-val">23</span>')}</div>
       <section class="rd-sec">
         <div class="rd-head"><h2 class="section-title">Umfragen</h2>
           <button class="small-btn head-btn" type="button" data-new>${I.plus}Neue Umfrage</button></div>
-        <div class="ig" id="pollList">${POLLS.map(pollRow).join('')}</div>
-        <p class="rd-foot" id="pollNone" hidden>Keine Umfrage gefunden.</p>
-        <div class="ig after-list">${navRow(I.draft, 'Entwürfe', `<span class="nav-val">${DRAFTS.length}</span>`, link({ seite: 'entwuerfe' }))}</div>
+        <div class="ig">${POLLS.map(pollRow).join('')}</div>
+        <div class="ig after-list">${navRow(I.draft, 'Entwürfe', `<span class="nav-val">${DRAFTS.length}</span>`, draftsHref)}</div>
       </section>
       <section class="rd-sec">
-        <div class="rd-head"><h2 class="section-title">Sammeln</h2></div>
-        ${sammeln()}
+        <div class="rd-head"><h2 class="section-title">Beiträge</h2></div>
+        ${tiles()}
       </section>
       <section class="rd-sec">
         <div class="rd-head"><h2 class="section-title">Verwaltung</h2></div>
@@ -257,18 +144,10 @@
           ${navRow(I.log, 'Protokoll', '')}
         </div>
       </section>`;
-
-    car = Carousel($('todos'), {
-      ids: TODOS.map((t) => t.id),
-      render: todoCard,
-      label: (id) => byId(id).title,
-      emptyHTML: () => `<div class="empty-icon">${ICONS.check.replace('width="24" height="24"', 'width="30" height="30"')}</div><div class="empty-title">Nichts zu tun</div><div class="empty-sub">Sobald dir jemand etwas zuweist oder um Freigabe bittet, steht es hier.</div>`,
-    });
-    updateCounts();
   }
 
-  function renderDrafts() {
-    $('rd').innerHTML = DRAFTS.length
+  function renderDrafts(host) {
+    host.innerHTML = DRAFTS.length
       ? `<section class="rd-sec"><div class="ig">${DRAFTS.map((d, i) => `
           <button class="irow prow" type="button" data-draft="${i}">
             <span class="picon">${KINDS[d.k].icon}</span>
@@ -279,51 +158,18 @@
       : '<section class="rd-sec"><p class="rd-foot">Keine Entwürfe.</p></section>';
   }
 
-  function search(qs) {
-    const list = $('pollList');
-    if (!list) return;
-    const q = qs.trim().toLocaleLowerCase('de');
-    let shown = 0;
-    list.querySelectorAll('.prow').forEach((r) => {
-      const hit = !q || POLLS[Number(r.dataset.poll)].t.toLocaleLowerCase('de').includes(q);
-      r.hidden = !hit;
-      if (hit) shown++;
+  // One delegated handler for both the mode and the drafts page.
+  function wire(draftsHost) {
+    document.addEventListener('click', (e) => {
+      const pr = e.target.closest('[data-poll]');
+      if (pr) { UI.showModal(resultsModal(POLLS[Number(pr.dataset.poll)])); return; }
+      const dr = e.target.closest('[data-draft]');
+      if (dr) { const i = Number(dr.dataset.draft); UI.showModal(draftModal(DRAFTS[i], i, () => renderDrafts(draftsHost))); return; }
+      if (e.target.closest('[data-new]')) { UI.toast('Hier öffnet sich eine neue, leere Umfrage.'); return; }
+      if (e.target.closest('[data-ticket-more]')) { UI.toast('Hier öffnet sich das Ticket mit Kommentaren und Verlauf.'); return; }
+      if (e.target.closest('[data-dead]')) e.preventDefault();
     });
-    list.hidden = shown === 0;
-    $('pollNone').hidden = shown !== 0;
   }
 
-  document.addEventListener('click', (e) => {
-    const pr = e.target.closest('[data-poll]');
-    if (pr) { UI.showModal(resultsModal(POLLS[Number(pr.dataset.poll)])); return; }
-    const dr = e.target.closest('[data-draft]');
-    if (dr) { const i = Number(dr.dataset.draft); UI.showModal(draftModal(DRAFTS[i], i)); return; }
-    if (e.target.closest('[data-new]')) { UI.toast('Hier öffnet sich eine neue, leere Umfrage.'); return; }
-    if (e.target.closest('[data-dead]')) e.preventDefault();
-  });
-  document.addEventListener('keydown', (e) => {
-    if (!car || UI.overlayOpen() || e.target.closest('input, textarea')) return;
-    if (e.key === 'ArrowRight') car.nudge(1);
-    else if (e.key === 'ArrowLeft') car.nudge(-1);
-  });
-
-  // Bar: the same Abgegeben capsule as on the home screen, a search field, or just the account button.
-  const C = window.Cards;
-  const lists = { done: [...C.INITIAL.done], closed: [...C.INITIAL.closed] };
-  let steckbriefDone = false;
-  const snapshot = () => ({ open: C.INITIAL.open.length, done: lists.done.length, closed: lists.closed.length, steckbriefDone });
-  document.querySelector('.large-title').textContent = PAGE === 'entwuerfe' ? 'Entwürfe' : 'Redaktion';
-  document.title = PAGE === 'entwuerfe' ? '03 · Entwürfe' : '03 · Redaktion';
-  UI.mount({
-    title: PAGE === 'entwuerfe' ? 'Entwürfe' : 'Redaktion',
-    backHref: PAGE === 'entwuerfe' ? link() : './02-swipe-stack.html',
-    capsule: BAR === 'suche' ? 'suche' : BAR === 'profil' ? 'none' : undefined,
-    searchPlaceholder: 'Umfragen suchen',
-    onSearch: search,
-    getLists: () => lists,
-    describe: C.describe,
-    onSteckbrief: () => { steckbriefDone = !steckbriefDone; UI.update(snapshot()); },
-  });
-  if (BAR === 'abgegeben') UI.update(snapshot());
-  if (PAGE === 'entwuerfe') renderDrafts(); else renderStart();
+  window.Redaktion = { sectionsHTML, renderDrafts, wire };
 })();
