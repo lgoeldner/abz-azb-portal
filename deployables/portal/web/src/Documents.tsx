@@ -64,7 +64,7 @@ function DocTile({ doc }: { doc: Document }) {
           </span>
         )}
       </span>
-      <span className="mt-3 break-words text-base font-extrabold leading-snug">{doc.title}</span>
+      <span className="mt-3 break-words text-base font-bold leading-snug">{doc.title}</span>
       <span className="mt-1.5 line-clamp-3 break-words text-sm text-muted">{excerpt(doc.body)}</span>
       <span className="mt-auto pt-3 text-[13px] text-muted">
         {doc.updated_by.name} · {ago(doc.updated_at)}
