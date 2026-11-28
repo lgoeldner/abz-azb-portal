@@ -53,7 +53,7 @@ The owner can change these after viewing the preview.
 1. `/redaktion` stays as the editors' entry URL and redirects (replace) to `/tickets`, or to `/redaktion/beitraege` without project management. Fresh editor visits and the brand link keep working through it.
 2. **Nächstes Treffen is left out.** The portal stores no meetings. Adding it later needs a migration, API route, contract regeneration, permission tests and a backup/restore check.
 3. Dropped with the dashboard: per-kind class widgets, "Gesammelte Beiträge" list, the admissions name list. Their pages stay reachable through the tiles.
-4. StudentHome keeps "Zum Redaktionsbereich" and "Neue Abstimmung".
+4. StudentHome keeps "Neue Abstimmung"; "Zum Redaktionsbereich" is gone. In the Redaktion view a floating back button (chevron, sticky top left of the page, the brand moves right of it) leads to `/`, and a hint at the Grip says the editor is in the Redaktion until dismissed (previews: on every visit, for now).
 
 ## Steps (one commit each, `make check` passes after each)
 

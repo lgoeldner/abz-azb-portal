@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Me, Ticket } from './api';
@@ -91,6 +91,7 @@ const tile = (menu: HTMLElement, href: string) =>
   within(menu)
     .getAllByRole('link')
     .find((link) => link.getAttribute('href') === href)!;
+const back = 'Zurück zur Schüleransicht';
 const workspace = () => document.querySelector('#inhalt')!.closest('[data-workspace]');
 
 describe('Redaktionsmenü', () => {
@@ -101,6 +102,8 @@ describe('Redaktionsmenü', () => {
     await screen.findByRole('heading', { level: 1, name: /^Hey .*erledigt/ });
     expect(screen.getByRole('region', { name: 'Konto' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Redaktionsmenü/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: back })).toBeNull();
+    expect(screen.queryByRole('note')).toBeNull();
     expect(requests.filter((url) => /^\/(admin|tickets|areas|documents)/.test(url))).toEqual([]);
   });
 
@@ -212,6 +215,35 @@ describe('Redaktionsmenü', () => {
     expect(await screen.findByRole('heading', { level: 1, name: /^Hey / })).toBeInTheDocument();
     expect(workspace()).toHaveAttribute('data-workspace', 'schueler');
     await waitFor(() => expect(screen.queryByRole('navigation', { name: 'Redaktionsmenü' })).toBeNull());
+  });
+
+  it('leads back to the student view with the floating back button', async () => {
+    mount(manager);
+    fireEvent.click(await screen.findByRole('link', { name: back }));
+    expect(await screen.findByRole('heading', { level: 1, name: /^Hey / })).toBeInTheDocument();
+    expect(workspace()).toHaveAttribute('data-workspace', 'schueler');
+    expect(screen.queryByRole('link', { name: back })).toBeNull();
+    expect(screen.queryByRole('note')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Zum Redaktionsbereich/ })).toBeNull();
+  });
+
+  it.each([
+    [undefined, false],
+    ['preview', true],
+  ])('shows the dismissed hint again on a later visit only in previews (env %s)', async (env, again) => {
+    if (env) document.documentElement.dataset.env = env;
+    try {
+      mount(manager);
+      expect(await screen.findByRole('note')).toHaveTextContent('Du bist in der Redaktion.');
+      fireEvent.click(screen.getByRole('button', { name: 'Verstanden' }));
+      expect(screen.queryByRole('note')).toBeNull();
+      cleanup();
+      mount(manager);
+      await screen.findByRole('link', { name: back });
+      expect(screen.queryByRole('note') !== null).toBe(again);
+    } finally {
+      delete document.documentElement.dataset.env;
+    }
   });
 
   it('keeps the grid when one request fails', async () => {

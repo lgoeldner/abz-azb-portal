@@ -1,4 +1,4 @@
-import { LogOut, Plus, Settings } from 'lucide-react';
+import { ChevronLeft, LogOut, Plus, Settings } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -374,17 +374,38 @@ function Layout() {
           className={`pointer-events-none fixed ${floatBottom} inset-x-4 z-40 flex items-end justify-between gap-1.5 *:pointer-events-auto min-[651px]:bottom-6 min-[651px]:left-6 min-[651px]:right-auto min-[651px]:w-[320px] min-[651px]:flex-col-reverse min-[651px]:items-start min-[651px]:gap-3`}
         >
           <Dock />
-          {editorial(user) && <BentoMenu container={root} />}
+          {editorial(user) && (
+            <div className="relative">
+              <BentoMenu container={root} />
+              {view === 'redaktion' && <RedaktionHint />}
+            </div>
+          )}
         </div>
         <div className="flex min-h-screen flex-col bg-paper pb-24 min-[651px]:pb-36">
           <main
             id="inhalt"
             className={`mx-auto w-full flex-1 px-4 py-6 sm:px-8 sm:py-8 ${location.pathname === '/tickets' ? 'max-w-[96rem]' : 'max-w-5xl'}`}
           >
+            {/* iOS-style back button: top left of the page column, stays while scrolling; the brand moves over. */}
+            {view === 'redaktion' && (
+              <div className="sticky top-[calc(env(safe-area-inset-top,0px)+0.75rem)] z-30 h-0">
+                <Link
+                  to="/"
+                  aria-label="Zurück zur Schüleransicht"
+                  className="block w-fit rounded-[30px] bg-white p-1.5 text-ink shadow-lg ring-1 ring-black/5"
+                >
+                  <span
+                    className={`${roundButton} bg-[#e4e6e9] hover:border-ink hover:bg-gray-600 hover:text-white hover:shadow-[0_4px_0_var(--color-ink)]`}
+                  >
+                    <ChevronLeft aria-hidden="true" className="size-6" />
+                  </span>
+                </Link>
+              </div>
+            )}
             <Link
               to={view === 'redaktion' ? '/redaktion' : '/'}
               aria-label="AbiZeitBetrug Startseite"
-              className="mb-8 inline-flex rounded-full"
+              className={`mb-8 inline-flex rounded-full ${view === 'redaktion' ? 'ml-[72px] h-[60px] items-center' : ''}`}
             >
               <Brand />
             </Link>
@@ -413,6 +434,52 @@ function Layout() {
         </div>
       </div>
     </WorkspaceView.Provider>
+  );
+}
+
+const hintKey = 'redaktion-hint-seen';
+
+// Points editors in the Redaktion at the menu button, until dismissed once per browser.
+function RedaktionHint() {
+  const [open, setOpen] = useState(() => {
+    // ponytail: previews show it on every visit for now; drop this line once the hint is approved.
+    if (document.documentElement.dataset.env === 'preview') return true;
+    try {
+      return !localStorage.getItem(hintKey);
+    } catch {
+      return true;
+    }
+  });
+  if (!open) return null;
+  return (
+    // Click-through except for its button, so it never blocks the page under it.
+    <div
+      role="note"
+      className="pointer-events-none absolute bottom-full right-0 mb-3 w-60 rounded-[20px] bg-ink px-4 py-3 text-sm text-white shadow-lg min-[651px]:bottom-0 min-[651px]:left-full min-[651px]:right-auto min-[651px]:mb-0 min-[651px]:ml-3"
+    >
+      <span
+        aria-hidden="true"
+        className="absolute -bottom-1 right-6 size-3 rotate-45 bg-ink min-[651px]:-left-1 min-[651px]:bottom-6 min-[651px]:right-auto"
+      />
+      <p>
+        <strong className="block">Du bist in der Redaktion.</strong>
+        Über diesen Menüknopf erreichst du alle Redaktionswerkzeuge.
+      </p>
+      <button
+        type="button"
+        className="pointer-events-auto mt-2 rounded-full bg-white px-4 py-1.5 font-bold text-ink"
+        onClick={() => {
+          setOpen(false);
+          try {
+            localStorage.setItem(hintKey, '1');
+          } catch {
+            /* private mode */
+          }
+        }}
+      >
+        Verstanden
+      </button>
+    </div>
   );
 }
 
@@ -498,16 +565,7 @@ function StudentHome() {
       : `Hey ${first}.`;
   return (
     <>
-      <PageHead
-        title={title}
-        action={
-          editorial(user) && (
-            <button type="button" className={btn.redaktion} onClick={() => toRedaktion('/redaktion')}>
-              Zum Redaktionsbereich <Arrow />
-            </button>
-          )
-        }
-      >
+      <PageHead title={title}>
         {waiting.length > 0
           ? 'Deine Stimme und deine Geschichten machen unsere Abizeitung.'
           : 'Vielleicht fällt dir noch eine Geschichte ein, die in die Abizeitung gehört.'}
