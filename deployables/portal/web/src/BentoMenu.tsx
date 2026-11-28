@@ -103,7 +103,8 @@ export function BentoMenu({ container }: { container: HTMLElement | null }) {
                   className="px-3 pb-6 pt-1 min-[651px]:pb-3"
                   onClick={(e) => {
                     const link = (e.target as Element).closest('a');
-                    if (!link) return;
+                    // A modified click opens a new tab: this one keeps its view and menu.
+                    if (!link || e.metaKey || e.ctrlKey || e.shiftKey) return;
                     // Also opened from the Schüler view; Abstimmungen pages would redirect students away.
                     // The home link is the way back to the Schüler view.
                     if (link.getAttribute('href') !== '/') setView('redaktion');
@@ -273,7 +274,8 @@ function Bento() {
           <ArrowRight aria-hidden="true" className="size-5 shrink-0" />
         </Tile>
         {mine?.canReview && (
-          <Tile to="/tickets" className={wide}>
+          // The oldest waiting ticket: voting on it moves the tile on to the next, as the board has no such filter.
+          <Tile to={mine.waiting[0] ? `/tickets/${mine.waiting[0].id}` : '/tickets'} className={wide}>
             <Stat
               value={`${mine.waiting.length} ${mine.waiting.length === 1 ? 'wartet' : 'warten'}`}
               label="auf deine Freigabe"

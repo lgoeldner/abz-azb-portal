@@ -44,6 +44,7 @@ interface Options {
   projects?: boolean;
   tickets?: Ticket[];
   documents?: unknown[];
+  areas?: unknown[];
   fail?: string;
 }
 // Mounts the whole app and records every API path it reads.
@@ -58,7 +59,7 @@ function mount(user: Me['user'], { path = '/sammlungen', projects = true, ...dat
       requests.push(url);
       if (url === data.fail) return Response.json({ error: { code: 'internal', message: 'Kaputt.' } }, { status: 500 });
       if (url === '/tickets') return Response.json(data.tickets ?? []);
-      if (url === '/areas') return Response.json(areas);
+      if (url === '/areas') return Response.json(data.areas ?? areas);
       if (url === '/documents') return Response.json(data.documents ?? []);
       if (url === '/admin/users') return Response.json([user]);
       if (url === '/admin/email/status') return Response.json({ usage: { used: 3 }, policy: { daily_limit: 100 } });
@@ -165,6 +166,22 @@ describe('Redaktionsmenü', () => {
     const carousel = within(await openMenu()).getByRole('group', { name: 'Meine Aufgaben' });
     expect(await within(carousel).findByRole('link', { name: 'Zum Board' })).toHaveAttribute('href', '/tickets');
     expect(hrefs(carousel).filter((href) => href.startsWith('/tickets/'))).toHaveLength(6);
+  });
+
+  it('leads a reviewer to the ticket that has waited longest', async () => {
+    const review = { assignees: [other], status: 'review' as const };
+    mount(
+      { ...manager, id: 'rev-1' },
+      {
+        areas: [{ ...areas[0]!, reviewers: [{ id: 'rev-1', name: 'Rita' }] }],
+        tickets: [
+          ticket('newer', { ...review, updated_at: '2026-10-05T10:00:00Z' }),
+          ticket('older', { ...review, updated_at: '2026-10-03T10:00:00Z' }),
+        ],
+      },
+    );
+    const link = await within(await openMenu()).findByRole('link', { name: /2 warten\s*auf deine Freigabe/ });
+    expect(link).toHaveAttribute('href', '/tickets/older');
   });
 
   it('says when nothing is assigned', async () => {
