@@ -498,18 +498,20 @@ main {
 .dock-capsule > *, .dock-circle > * { transition: opacity 200ms ease; }
 .dock-capsule.muted > *, .dock-circle.muted > * { opacity: 0.3; }
 
-/* "Neu" capsule (Redaktion) and its menu */
-.new-disc {
-  width: 32px; height: 32px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  display: grid; place-items: center;
-  background: var(--blue);
-  color: #fff;
+/* Other capsules: a search field (iOS 26 puts search in the bottom bar), or none */
+.cap-search { gap: 8px; padding: 0 18px 0 17px; color: var(--label-2); cursor: text; }
+.cap-search svg { width: 17px; height: 17px; }
+.cap-search input {
+  flex: 1; min-width: 0;
+  height: 100%;
+  border: 0; background: none;
+  font: inherit; font-size: 17px; letter-spacing: -0.02em;
+  color: var(--label);
+  -webkit-appearance: none; appearance: none;
 }
-.new-disc svg { width: 16px; height: 16px; }
-.menu-new { transform-origin: calc((100% - 62px) / 2) calc(100% + 37px); /* the capsule's centre */ }
-.mi-note { font-size: 15px; color: var(--label-2); }
+.cap-search input::placeholder { color: var(--label-2); }
+.cap-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.dock-row.solo { justify-content: flex-end; }
 
 /* Undo toast: on the floating layer, right above the bar */
 .toast {
@@ -732,6 +734,85 @@ main {
 .edit-card .q-person .q-body { flex: 1 1 auto; height: var(--card-h); }
 .lrow.saved { animation: saved 900ms ease; }
 @keyframes saved { 0%, 30% { background: var(--blue-soft); } 100% { background: transparent; } }
+
+/* ───────── Card carousel (carousel.js) ───────── */
+.carousel {
+  --card-w: var(--col);
+  position: relative;
+  overflow-x: clip;
+  overflow-y: visible;
+}
+.sizer { position: absolute; width: var(--card-w); height: var(--card-h); visibility: hidden; pointer-events: none; }
+.ring-viewport {
+  position: relative;
+  height: var(--card-h);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+}
+.ring-viewport.dragging { cursor: grabbing; }
+.ring-card {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: var(--card-w);
+  height: var(--card-h);
+  margin-left: calc(var(--card-w) / -2);
+  will-change: transform, opacity;
+}
+.ring-card:not(.is-center) { cursor: pointer; }
+.ring-card:not(.is-center) .card-content { pointer-events: none; } /* a tap brings it to the centre */
+.ring-card .card-cta { opacity: var(--focus, 1); }
+
+/* Page control: tap a dot or drag across the row to scrub (like iOS). */
+.dots {
+  width: fit-content;
+  margin: 6px auto 0;
+  padding: 10px 12px;
+  border-radius: 999px;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  touch-action: none;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background-color 200ms ease, transform 300ms var(--ease-out);
+}
+.dots:empty { display: none; }
+.dots.scrub { background: var(--fill); transform: scale(1.12); }
+.dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: rgba(60, 60, 67, 0.22);
+  transition: background-color 180ms ease;
+}
+.dot.active { background: var(--label); }
+
+/* Hover paddles (mouse/trackpad only) instead of hijacking the vertical wheel. */
+.paddle {
+  position: absolute;
+  top: calc(var(--card-h) / 2 - 22px);
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  display: none;
+  place-items: center;
+  color: var(--label);
+  z-index: 150;
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 180ms ease, transform 260ms var(--ease-out);
+}
+.paddle svg { width: 18px; height: 18px; }
+.paddle.prev { left: calc(50% - var(--card-w) / 2 - 58px); }
+.paddle.next { right: calc(50% - var(--card-w) / 2 - 58px); }
+@media (hover: hover) and (pointer: fine) and (min-width: 744px) {
+  .paddle { display: grid; }
+  .carousel:hover .paddle:not(.off) { opacity: 1; transform: none; }
+  .carousel.is-dragging .paddle, .carousel.is-scrubbing .paddle { opacity: 0 !important; transform: scale(0.9) !important; pointer-events: none; }
+  .paddle:active { transform: scale(0.92) !important; }
+}
 
 /* ───────── Poll cards ───────── */
 .q { gap: 12px; }

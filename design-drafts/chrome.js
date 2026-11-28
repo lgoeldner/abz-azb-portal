@@ -180,25 +180,6 @@
   let pendingCapsule = null;
   const RING_C = 2 * Math.PI * 14.5;
 
-  // Redaktion: the bar's capsule becomes the page's main action. It opens a menu of what you can create,
-  // as wide as the bar, growing out of the capsule (same material and motion as the account menu).
-  function newCapsule(items) {
-    return `
-        <button class="dock-capsule cap-new" id="abgBtn" type="button" aria-haspopup="menu" aria-expanded="false">
-          <span class="new-disc">${ICONS.plus}</span>
-          <span class="cap-text">
-            <span class="cap-title">Neu</span>
-            <span class="cap-sub">${items.map((i) => i.label).join(', ').replace(/, ([^,]*)$/, ' oder $1')}</span>
-          </span>
-          <span class="cap-chev">${ICONS.chevUp}</span>
-        </button>
-        <div class="menu menu-new" id="newMenu" role="menu">
-          ${items.map((i) => `<button class="menu-item" type="button" role="menuitem" data-close-new>
-            <span class="mi-icon">${ICONS[i.icon]}</span><span class="mi-label">${i.label}</span><span class="mi-note">${i.note || ''}</span>
-          </button>`).join('')}
-        </div>`;
-  }
-
   function mount(o) {
     opts = o;
     const top = document.createElement('div');
@@ -224,7 +205,8 @@
     dock.className = 'dock';
     dock.setAttribute('aria-label', 'Leiste');
     dock.innerHTML = `
-      <div class="dock-row">${o.newMenu ? newCapsule(o.newMenu) : `
+      <div class="dock-row${o.capsule === 'none' ? ' solo' : ''}">${o.capsule === 'none' ? '' : o.capsule === 'suche' ? `
+        <label class="dock-capsule cap-search" id="abgBtn">${ICONS.search}<input type="search" id="dockSearch" placeholder="${o.searchPlaceholder || 'Suchen'}" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-label="${o.searchPlaceholder || 'Suchen'}" /></label>` : `
         <button class="dock-capsule" id="abgBtn" type="button" aria-haspopup="dialog" aria-expanded="false">
           <span class="ring" id="ring">
             <svg class="ring-svg" viewBox="0 0 36 36" fill="none">
@@ -369,7 +351,7 @@
   // While one popup is open, the other button in the bar is muted (that is how you see where it came from).
   function setMenu(open) {
     $('accountMenu').classList.toggle('open', open);
-    $('abgBtn').classList.toggle('muted', open);
+    if ($('abgBtn')) $('abgBtn').classList.toggle('muted', open);
   }
   function closeMenu() { setMenu(false); }
   function wireDock() {
@@ -385,7 +367,16 @@
       if (menu.classList.contains('open') && !e.target.closest('.menu-anchor')) closeMenu();
     }, true);
 
-    if (opts.newMenu) { wireNewMenu(); return; }
+    // Other capsules (Redaktion): a search field, or none at all.
+    if (opts.capsule === 'suche' || opts.capsule === 'none') {
+      const input = $('dockSearch');
+      if (input) {
+        input.addEventListener('input', () => opts.onSearch && opts.onSearch(input.value));
+        input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { input.value = ''; input.blur(); opts.onSearch && opts.onSearch(''); } });
+      }
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+      return;
+    }
 
     // Tap toggles the list; swiping up on the capsule opens it (like the mini player).
     const cap = $('abgBtn');
@@ -407,28 +398,6 @@
       if (isPanelOpen()) closePanel();
       closeMenu();
     });
-  }
-
-  function setNewMenu(open) {
-    const m = $('newMenu');
-    if (!m) return;
-    m.classList.toggle('open', open);
-    $('abgBtn').setAttribute('aria-expanded', String(open));
-    $('accountBtn').classList.toggle('muted', open);
-  }
-  function wireNewMenu() {
-    const m = $('newMenu');
-    $('abgBtn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      closeMenu();
-      setNewMenu(!m.classList.contains('open'));
-    });
-    $('accountBtn').addEventListener('click', () => setNewMenu(false));
-    m.querySelectorAll('[data-close-new]').forEach((b) => b.addEventListener('click', () => setNewMenu(false)));
-    document.addEventListener('pointerdown', (e) => {
-      if (m.classList.contains('open') && !e.target.closest('#newMenu, #abgBtn')) setNewMenu(false);
-    }, true);
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { setNewMenu(false); closeMenu(); } });
   }
 
   /* Toast with an undo action: a white capsule on the floating layer, right above the bar. */
@@ -618,9 +587,35 @@
     if (row) { row.classList.remove('saved'); void row.offsetWidth; row.classList.add('saved'); }
   }
 
+  // Any card-shaped content as a modal (poll results, draft preview). Same overlay as "Ändern".
+  let modalOpen = false;
+  function showModal(content) {
+    const host = $('editHost');
+    closeMenu();
+    host.innerHTML = '';
+    const card = document.createElement('div');
+    card.className = 'card edit-card';
+    card.appendChild(content);
+    host.appendChild(card);
+    modalOpen = true;
+    content.querySelectorAll('[data-modal-close]').forEach((b) => b.addEventListener('click', closeModal));
+    const er = $('editRoot');
+    er.classList.add('open');
+    void er.offsetWidth;
+    er.classList.add('shown');
+  }
+  function closeModal() {
+    if (!modalOpen) return;
+    modalOpen = false;
+    const er = $('editRoot');
+    er.classList.remove('shown');
+    setTimeout(() => { if (!editing && !modalOpen) { er.classList.remove('open'); $('editHost').innerHTML = ''; } }, 260);
+  }
+
   function wireEditor() {
-    $('editScrim').addEventListener('click', cancelEditor);
+    $('editScrim').addEventListener('click', () => { if (modalOpen) closeModal(); else cancelEditor(); });
     document.addEventListener('keydown', (e) => {
+      if (modalOpen && e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeModal(); return; }
       if (!editing) return;
       if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); cancelEditor(); return; }
       if (e.target.closest('input, textarea')) return;
@@ -665,8 +660,9 @@
     closePanel,
     openEditor,
     toast,
-    overlayOpen: () => isEditorOpen() || isPanelOpen() || $('accountMenu').classList.contains('open')
-      || !!($('newMenu') && $('newMenu').classList.contains('open')),
+    showModal,
+    closeModal,
+    overlayOpen: () => modalOpen || isEditorOpen() || isPanelOpen() || $('accountMenu').classList.contains('open'),
   };
 
   const gesture = { moved: false };
