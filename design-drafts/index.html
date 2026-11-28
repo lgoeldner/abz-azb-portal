@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#F2F2F7" />
+  <title>Konzepte · AbiZeitBetrug</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&display=swap" />
+  <link rel="stylesheet" href="./ios.css" />
+  <style>
+    .index { --col: min(560px, calc(100vw - 40px)); padding-bottom: 64px; }
+    .index .hero { padding-top: calc(52px + env(safe-area-inset-top)); }
+    .ix-group {
+      margin-top: 20px;
+      background: var(--surface);
+      border-radius: 22px;
+      overflow: hidden;
+    }
+    .ix-row {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 11px 16px 11px 12px;
+      transition: background-color 90ms ease;
+    }
+    .ix-row:hover { background: rgba(120, 120, 128, 0.06); }
+    .ix-row:active { background: rgba(120, 120, 128, 0.14); }
+    .ix-row + .ix-row::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 64px; right: 0;
+      height: 0.5px;
+      background: var(--sep);
+    }
+    .ix-icon {
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      background: var(--c);
+      color: #fff;
+      display: grid; place-items: center;
+      flex-shrink: 0;
+    }
+    .ix-text { flex: 1; min-width: 0; }
+    .ix-title, .ix-desc { display: block; }
+    .ix-title { font-size: 17px; line-height: 22px; font-weight: 600; letter-spacing: -0.02em; }
+    .ix-desc { margin-top: 1px; font-size: 15px; line-height: 20px; color: var(--label-2); letter-spacing: -0.01em; }
+    .ix-chev { color: var(--label-3); }
+.ix-draft { margin: 10px 0 0; font-size: 13px; line-height: 18px; color: var(--label-2); }
+    .ix-label { margin: 32px 16px 8px; font-size: 20px; line-height: 25px; font-weight: 700; letter-spacing: -0.022em; }
+    .ix-letter { font-size: 19px; font-weight: 700; color: #fff; }
+    .ix-foot {
+      margin: 8px 16px 0;
+      font-size: 13px;
+      line-height: 18px;
+      color: var(--label-2);
+    }
+  </style>
+</head>
+<body>
+  <main class="page index">
+    <header class="hero">
+      <h1 class="large-title">Konzepte</h1>
+      <p class="hero-sub">Zwei Varianten für die Umfragekarten</p>
+      <p class="ix-draft">Nur Design-Entwürfe: nicht funktionsfähig, keine echten Daten, nichts wird gespeichert.</p>
+    </header>
+
+    <nav class="ix-group">
+      <a class="ix-row" href="./01-carousel.html">
+        <span class="ix-icon" style="--c: var(--blue)">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="5" width="10" height="14" rx="2.5" fill="currentColor" stroke="none"/><path d="M3.25 8v8M20.75 8v8"/></svg>
+        </span>
+        <span class="ix-text">
+          <span class="ix-title">Karussell</span>
+          <span class="ix-desc">Endlos blättern, Nachbarn blenden mit der Position aus.</span>
+        </span>
+        <svg class="ix-chev" width="9" height="15" viewBox="0 0 9 15" fill="none"><path d="M1.5 1.5 7.5 7.5l-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+      <a class="ix-row" href="./02-swipe-stack.html">
+        <span class="ix-icon" style="--c: var(--indigo)">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4.5" y="9" width="15" height="11" rx="2.5" fill="currentColor" stroke="none"/><path d="M6.5 6h11M8.5 3h7"/></svg>
+        </span>
+        <span class="ix-text">
+          <span class="ix-title">Stapel</span>
+          <span class="ix-desc">Zur Seite wischen überspringt, nach unten ziehen gibt ab.</span>
+        </span>
+        <svg class="ix-chev" width="9" height="15" viewBox="0 0 9 15" fill="none"><path d="M1.5 1.5 7.5 7.5l-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+    </nav>
+    <p class="ix-foot">Beide unterstützen Ziehen, Tippen auf Nachbarkarten, Trackpad, Pfeiltasten, Enter und ⌘Z.</p>
+
+    <h2 class="ix-label">Stile</h2>
+    <nav class="ix-group">
+      <a class="ix-row" href="./02-swipe-stack.html?v=basis">
+        <span class="ix-icon" style="--c: #8E8E93"><b class="ix-letter">B</b></span>
+        <span class="ix-text"><span class="ix-title">Basis</span><span class="ix-desc">Neutral und systemnah: die Grundlage.</span></span>
+        <svg class="ix-chev" width="9" height="15" viewBox="0 0 9 15" fill="none"><path d="M1.5 1.5 7.5 7.5l-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+      <a class="ix-row" href="./02-swipe-stack.html?v=jahrbuch">
+        <span class="ix-icon" style="--c: #D7432C"><b class="ix-letter">J</b></span>
+        <span class="ix-text"><span class="ix-title">Jahrbuch</span><span class="ix-desc">Papier, Serifen, Kuli-Haken, roter Stempel.</span></span>
+        <svg class="ix-chev" width="9" height="15" viewBox="0 0 9 15" fill="none"><path d="M1.5 1.5 7.5 7.5l-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+      <a class="ix-row" href="./02-swipe-stack.html?v=abiball">
+        <span class="ix-icon" style="--c: #7A5AF8"><b class="ix-letter">A</b></span>
+        <span class="ix-text"><span class="ix-title">Abiball</span><span class="ix-desc">Jede Frage in eigener Farbe, Konfetti, Sticker.</span></span>
+        <svg class="ix-chev" width="9" height="15" viewBox="0 0 9 15" fill="none"><path d="M1.5 1.5 7.5 7.5l-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+      <a class="ix-row" href="./02-swipe-stack.html?v=knast">
+        <span class="ix-icon" style="--c: #FF5A1F"><b class="ix-letter">K</b></span>
+        <span class="ix-text"><span class="ix-title">Knast</span><span class="ix-desc">13 Jahre abgesessen: Akten, Strichliste, Freigang.</span></span>
+        <svg class="ix-chev" width="9" height="15" viewBox="0 0 9 15" fill="none"><path d="M1.5 1.5 7.5 7.5l-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+    </nav>
+    <p class="ix-foot">Der Stil gilt für beide Konzepte und lässt sich oben rechts über die Palette wechseln.</p>
+  </main>
+</body>
+</html>

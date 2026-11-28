@@ -30,6 +30,7 @@ jobs:
         run: |
           npm ci
           npm run build:preview
+          cp -r ../../../design-drafts dist/design-drafts
           touch dist/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
