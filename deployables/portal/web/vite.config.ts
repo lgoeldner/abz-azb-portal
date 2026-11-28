@@ -1,8 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-export default defineConfig(({ mode }) => ({
-  base: mode === 'preview' ? (process.env.VITE_BASE ?? './') : '/',
+export default defineConfig({
   plugins: [react(), tailwindcss()],
   optimizeDeps: {
     include: [
@@ -26,4 +25,4 @@ export default defineConfig(({ mode }) => ({
     include: ['src/**/*.test.{ts,tsx}'],
     restoreMocks: true,
   },
-}));
+});

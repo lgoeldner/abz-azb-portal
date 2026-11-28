@@ -1,6 +1,5 @@
 'use strict';
-/* Poll card content shared by both prototypes: proposal (single/multi), person pick, words.
-   Data mirrors the portal's poll kinds (see deployables/portal/web/src/preview-mock.ts). */
+/* Poll card content shared by both prototypes: proposal (single/multi), person pick, words. */
 (function () {
   const { ICONS, gesture, scrollFade } = window.P;
 

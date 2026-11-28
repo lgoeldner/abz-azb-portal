@@ -21,5 +21,4 @@ mechanics and visual directions before anything is built in the real portal.
 | `ios.css`, `chrome.js`, `cards.js` | Shared look, floating bars/menus and placeholder poll cards |
 | `themes.css`, `themes.js` | Style variants: Basis, Jahrbuch, Abiball, Knast (only via `?v=` links on the index page) |
 
-Open `index.html` directly in a browser, or see `/design-drafts/` on the Pages preview
-(copied in by `.github/workflows/pages-preview.yml`).
+Open `index.html` directly in a browser.

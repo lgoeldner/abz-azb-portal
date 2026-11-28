@@ -63,9 +63,7 @@ export function StudentShell() {
     setMenuOpen(false);
     void logoutAction.run(async () => {
       await api('/auth/logout', json('POST'));
-      if (import.meta.env.VITE_PREVIEW_MOCK !== 'true') {
-        window.location.assign('/');
-      }
+      window.location.assign('/');
     });
   };
 
