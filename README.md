@@ -1,66 +1,88 @@
 # AbiZeitBetrug
 
-A private, German-language collection and editorial portal for a school yearbook (Abizeitung). Students submit text and photos, editors review them by category, and admins manage access and polls.
+A German-language web portal for a school graduating class. It collects polls, texts and photos for the yearbook (*Abizeitung*) and gives the editorial team tools to run the project.
 
-This repository contains the portal's source code only. It holds no real school data.
+Built with **Go, PostgreSQL, React and TypeScript**, deployed with Docker Compose. This repository holds source code only, no real school data.
 
-## Features
+## What it does
 
-- **Students:** submit categorized text and photos, track and edit their own contributions, vote in polls.
-- **Managers:** read all categories, edit and review the ones they are assigned, view aggregate poll results, export material.
-- **Admins:** manage admission, roles, categories and category grants; audit named ballots and administrative events; check backup freshness; manage email quota and inspect delivery audits.
-- **Exports:** per-category ZIP with CSV, original photos and a manifest.
+**Polls and contributions**
 
-Uploads are private and immutable, and removal is soft deletion. There are no public uploads, and no submitted content is sent to an AI service.
+- Polls with proposed options, polls that pick people from the class roster, and word polls with a word cloud for editors.
+- Text, quote, photo and profile-page (*Steckbrief*) submissions with revision history.
+- Deadlines, a draft/open/closed lifecycle and email reminders.
 
-## Stack
+**Editorial and project tools**
 
-React, TypeScript and Vite in `deployables/portal/web/`; Go (`net/http`) and PostgreSQL in `deployables/portal/server/`; Caddy and Docker Compose for deployment. Go serves the production frontend and enforces application rules. The maintained Better Auth dependency runs in `deployables/auth/`, sharing PostgreSQL UUID users and owning real/development sessions. Brevo delivers login links and opt-in reminders.
+- Review and annotate submissions, request corrections, moderate poll words without overwriting the originals.
+- Export a collection as ZIP with CSV, original photos and a manifest.
+- Project workspace (behind a feature flag): Kanban board with review and approval rules, shared Markdown documents.
 
-The API is described by [`docs/openapi.json`](docs/openapi.json), which is generated from the Go route table (`apiRoutes` in `http.go`) and request/response types, and which in turn generates the frontend types. See also [`docs/implementation-contract.md`](docs/implementation-contract.md).
+**Administration**
 
-```sh
-node scripts/check-contract.mjs --write  # regenerate openapi.json and TS types after editing routes or Go types
-node scripts/check-contract.mjs          # fail when generated files are stale
+- Roles and per-category permissions, activity log, backup status.
+- Email quota management and masked delivery history.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    B["Browser<br/>React SPA"] -->|HTTPS| C[Caddy]
+    C --> P["Go server<br/>API + static frontend"]
+    P -->|login, sessions| A["Auth service<br/>Node, Better Auth"]
+    P --> DB[(PostgreSQL)]
+    A --> DB
+    P --> F[("Uploads<br/>disk or S3")]
+    P --> M["Brevo<br/>email"]
+    A -->|login mail| P
+    R[Reminder worker] --> DB
+    R --> M
+    K["Backup sidecar<br/>Restic"] -.-> DB
+    K -.-> F
 ```
+
+| Layer | Technology |
+| --- | --- |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS, TanStack Query, Base UI |
+| Backend | Go (`net/http`), pgx, PostgreSQL 18 with SQL migrations |
+| Authentication | Better Auth: email magic links, passkeys (WebAuthn), optional Google sign-in |
+| Operations | Docker Compose, Caddy, Ansible, GitHub Actions, GHCR, Restic |
+
+## Engineering highlights
+
+- **One source of truth for the API.** The OpenAPI spec is generated from the Go route table and types, and the TypeScript types are generated from the spec. CI rejects stale files, and a test rejects API routes that bypass the table.
+- **Permissions tested as a matrix.** Every API route in the contract is tested for session, admission, CSRF protection and role.
+- **Data integrity under concurrency.** Row locks, advisory locks and `SKIP LOCKED` job claiming, with database triggers guarding identity and erasure rules.
+- **Privacy by design.** Consent gate, GDPR erasure command, named ballots visible to admins only, no public uploads, no AI processing of contributions, self-hosted fonts.
+- **Security hardening.** `__Host-` cookies, Content Security Policy, closed sign-up, and dependency vulnerability audits (`govulncheck`, `npm audit`) in CI.
+- **Tested recovery.** A CI job runs a backup and restore drill in throwaway containers.
+- **Preview environments.** Pull requests can get isolated, resource-limited deployments that expire automatically.
+- **Testing.** Go tests with the race detector against a real PostgreSQL, Vitest component tests, Playwright browser journeys including responsive layout checks.
+
+As of November 2026, the portal's Go server and web frontend are about 19,000 lines of code, plus 12,500 lines of tests.
 
 ## Run locally
 
-Requires a Docker engine. Optional host development also requires Go and Node/npm.
+Requires Docker.
 
 ```sh
-make doctor   # optional: check Docker and host development tools
-make dev      # build/start containers, wait until ready, then exit
-make dev:auth # same, but the real Better Auth container and Brevo replace the mock login
-make down     # stop all development containers (keeps data)
+make dev    # build and start the stack with demo data and a mock login
+make down   # stop it, keeping data
 ```
 
-`make env` creates missing `.env*` files from their `.dist` templates and never overwrites existing ones. Review the generated defaults.
-
-- Development login: `/auth/login` on the portal opens a lightweight UUID account picker backed by the same seeded PostgreSQL user records. The Node mock service is available locally on port 3000; no YAML roster maintenance is needed.
-- Portal and API behind Caddy: `PUBLIC_URL` from `.env.dev`, by default [https://localhost](https://localhost) (internal CA, so the browser warns). OrbStack users may set `PUBLIC_URL`/`PUBLIC_HOST` to `caddy.abizeitung-portal.orb.local`.
-
-For host development, run `make dev:backend` and `make dev:frontend` in separate terminals. These stay in the foreground: the API uses `localhost:8080`, and Vite starts at `localhost:5173` with automatic free-port fallback. The default container stack runs Vite with hot reload on that URL after `make dev` exits. Source edits update the page automatically; rerun `make dev` after dependency or Go changes. The production image serves built frontend files from Go.
-
-Never keep real data on a publicly reachable development host, and never run `down -v` on a database you need.
-
-## Tests
+The portal runs at <https://localhost> by default. The certificate is locally issued, so the browser warns. `make dev:auth` swaps the mock login for the real auth service and needs Brevo credentials in `.env.dev`.
 
 ```sh
-make check
+make check                      # tests and static checks; needs Go and Node
+bash scripts/test-recovery.sh   # backup/restore drill
 ```
 
-Database integration tests need `TEST_DATABASE_URL` pointing to a **disposable** PostgreSQL database; without it they skip. Set `TEST_DATABASE_DISPOSABLE=YES` to include the Better Auth isolated-schema integration suite.
+Database tests are skipped unless `TEST_DATABASE_URL` is set. Point it only at a **disposable** PostgreSQL database.
 
-```sh
-TEST_DATABASE_URL='postgres://portal:portal-dev@localhost:5432/portal_test?sslmode=disable' TEST_DATABASE_DISPOSABLE=YES make check
-cd deployables/portal/web && npm run test:e2e
-bash scripts/test-recovery.sh   # backup/restore against throwaway containers
-```
+## Documentation
 
-## Production
-
-Production uses allowlisted Better Auth magic links and refuses mock login. Provision the shared roster through CSV CLI or documented PostgreSQL functions; there is no second user directory. Configure a verified Brevo sender and disabled tracking before real delivery. Admins manage local budgets and inspect masked delivery history under **Verwaltung → E-Mail**. Reminders are opt-in and disabled initially. See [`docs/auth-email-operations.md`](docs/auth-email-operations.md) for setup/provisioning and [`ops/README.md`](ops/README.md) for encrypted database/files backup and safe restore. Explicit legacy OIDC remains available for a tested real-provider rollback.
-
-## Design
-use the taste skill direction in the repo to keep a consistent, user friendly UX
+- [Repository map](docs/repo-map.md): where everything lives
+- [API contract and permissions](docs/implementation-contract.md) and [OpenAPI spec](docs/openapi.json)
+- [UI style guide](docs/style-guide.md)
+- [Authentication and email operations](docs/auth-email-operations.md)
+- [Backup, restore and deployment](ops/README.md) and [Ansible setup](ops/ansible/README.md)
